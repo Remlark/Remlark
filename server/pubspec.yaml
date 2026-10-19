@@ -1,0 +1,20 @@
+name: remlark_sync_server
+description: Remlark 同步服务端（保存客户端端到端加密后的主机数据）
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.9.0
+dependencies:
+  args: ^2.7.0
+  crypto: ^3.0.7
+  drift: ^2.35.2
+  path: ^1.9.1
+  shelf: ^1.4.3
+  shelf_router: ^1.1.5
+  sqlite3: ^3.7.1
+dev_dependencies:
+  build_runner: ^2.16.2
+  drift_dev: ^2.35.1
+  http: ^1.6.0
+  test: ^1.33.0

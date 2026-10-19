@@ -1,0 +1,212 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:dartssh2/dartssh2.dart';
+import 'package:xterm/xterm.dart';
+
+import '../sftp/sftp_service.dart';
+import '../sftp/transfer_manager.dart';
+import '../ssh/ssh_connector.dart';
+import '../ssh/ssh_interaction.dart';
+import '../workspace/workspace_tab.dart';
+
+/// SSH 终端会话：持有连接、shell、xterm 终端模型与 SFTP 传输
+class TerminalSession extends WorkspaceTab {
+  TerminalSession(super.host, this._connector, this._interaction) {
+    terminal.onOutput = _handleInput;
+    terminal.onResize = (w, h, pw, ph) {
+      _cols = w;
+      _rows = h;
+      _shell?.resizeTerminal(w, h, pw, ph);
+    };
+    terminal.onTitleChange = (t) {
+      _remoteTitle = t;
+      notifyListeners();
+    };
+  }
+
+  final SshConnector _connector;
+  final SshInteraction _interaction;
+
+  /// xterm 终端模型
+  final Terminal terminal = Terminal(maxLines: 20000);
+
+  /// 选区控制器（复制使用）
+  final TerminalController controller = TerminalController();
+
+  SshConnection? _conn;
+  SSHSession? _shell;
+  SftpService? _sftp;
+  TransferManager? _transfers;
+  StreamSubscription<String>? _stdoutSub;
+  int _cols = 80;
+  int _rows = 24;
+  String? _remoteTitle;
+
+  /// 广播回调：用户在本终端输入时，由工作区转发给其他选中的会话
+  void Function(TerminalSession from, String data)? onUserInput;
+
+  /// SFTP 上次浏览的目录（拖拽 / 粘贴上传的默认目标）
+  String? lastRemoteDir;
+
+  /// 当前 SSH 连接
+  SshConnection? get connection => _conn;
+
+  @override
+  String get title => host.name;
+
+  /// 远程设置的终端标题
+  String? get remoteTitle => _remoteTitle;
+
+  /// SFTP 服务（连接后可用）
+  SftpService? get sftp => _sftp;
+
+  /// 传输管理器（连接后可用）
+  TransferManager? get transfers => _transfers;
+
+  /// 建立连接并打开 shell
+  Future<void> connect() async {
+    setState(SessionState.connecting);
+    try {
+      final conn = await _connector.connect(host, _ProgressInteraction(this, _interaction));
+      _conn = conn;
+      final shell = await conn.client.shell(
+        pty: SSHPtyConfig(type: 'xterm-256color', width: _cols, height: _rows),
+      );
+      _shell = shell;
+      _sftp = SftpService(conn.client);
+      _transfers?.dispose();
+      _transfers = TransferManager(_sftp!);
+      _stdoutSub = const Utf8Decoder(allowMalformed: true).bind(_mergeOutput(shell)).listen(terminal.write);
+      shell.done.then((_) => _onClosed(null));
+      conn.client.done.then((_) => _onClosed(null), onError: (Object e) => _onClosed('$e'));
+      progress = null;
+      setState(SessionState.connected);
+      unawaited(_connector.detectOs(conn).catchError((_) => null));
+    } on ConnectCancelled {
+      progress = null;
+      setState(SessionState.failed, error: 'cancelled');
+    } catch (e) {
+      progress = null;
+      terminal.write('\r\n\x1b[31m$e\x1b[0m\r\n');
+      setState(SessionState.failed, error: '$e');
+    }
+  }
+
+  /// 合并 stdout 与 stderr
+  Stream<Uint8List> _mergeOutput(SSHSession s) {
+    final c = StreamController<Uint8List>();
+    var open = 2;
+    void done() {
+      if (--open == 0) c.close();
+    }
+
+    s.stdout.listen(c.add, onDone: done, onError: (_) => done());
+    s.stderr.listen(c.add, onDone: done, onError: (_) => done());
+    return c.stream;
+  }
+
+  void _onClosed(String? reason) {
+    if (state == SessionState.disconnected) return;
+    if (state != SessionState.connected) return;
+    terminal.write('\r\n\x1b[33m[disconnected]\x1b[0m\r\n');
+    setState(SessionState.disconnected, error: reason);
+  }
+
+  /// 终端用户输入：发往 shell，并触发广播
+  void _handleInput(String data) {
+    sendRaw(data);
+    onUserInput?.call(this, data);
+  }
+
+  /// 向 shell 发送原始数据（快捷指令、广播、AI 命令均使用）
+  void sendRaw(String data) {
+    final shell = _shell;
+    if (shell == null || state != SessionState.connected) return;
+    shell.write(Uint8List.fromList(utf8.encode(data)));
+  }
+
+  /// 以粘贴方式输入文本（支持 bracketed paste）
+  void pasteText(String text) {
+    terminal.paste(text);
+  }
+
+  /// 当前选中的文本
+  String? selectedText() {
+    final sel = controller.selection;
+    if (sel == null) return null;
+    final t = terminal.buffer.getText(sel);
+    return t.isEmpty ? null : t;
+  }
+
+  /// 终端最近 [lines] 行文本（供 AI 作为上下文）
+  String recentText({int lines = 80}) {
+    final buf = terminal.buffer;
+    final total = buf.lines.length;
+    final start = total - lines < 0 ? 0 : total - lines;
+    final sb = StringBuffer();
+    for (var i = start; i < total; i++) {
+      sb.writeln(buf.lines[i].getText().trimRight());
+    }
+    return sb.toString().trim();
+  }
+
+  /// 通知 UI 刷新
+  void refresh() => notifyListeners();
+
+  @override
+  Future<void> reconnect() async {
+    _teardown();
+    terminal.write('\r\n\x1b[36m[reconnecting...]\x1b[0m\r\n');
+    await connect();
+  }
+
+  void _teardown() {
+    _stdoutSub?.cancel();
+    _stdoutSub = null;
+    _shell?.close();
+    _shell = null;
+    _sftp?.close();
+    _sftp = null;
+    _conn?.close();
+    _conn = null;
+  }
+
+  @override
+  Future<void> close() async {
+    state = SessionState.disconnected;
+    _teardown();
+    _transfers?.dispose();
+    _transfers = null;
+  }
+}
+
+/// 包装交互接口，把连接进度写入会话
+class _ProgressInteraction extends SshInteraction {
+  _ProgressInteraction(this._session, this._inner);
+
+  final TerminalSession _session;
+  final SshInteraction _inner;
+
+  @override
+  void onProgress(String message) {
+    _session.progress = message;
+    _session.terminal.write('\x1b[90m→ $message\x1b[0m\r\n');
+    _session.refresh();
+  }
+
+  @override
+  Future<PasswordInput?> askPassword(host, {String? error}) => _inner.askPassword(host, error: error);
+
+  @override
+  Future<String?> askPassphrase(host, {String? error}) => _inner.askPassphrase(host, error: error);
+
+  @override
+  Future<bool> confirmHostKeyChanged(host, String keyType, String oldFingerprint, String newFingerprint) =>
+      _inner.confirmHostKeyChanged(host, keyType, oldFingerprint, newFingerprint);
+
+  @override
+  Future<List<String>?> keyboardInteractive(host, SSHUserInfoRequest request) =>
+      _inner.keyboardInteractive(host, request);
+}

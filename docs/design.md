@@ -30,3 +30,44 @@
 -  支持将文件拖进rdp窗口进行传输
 -  支持保存密码，直接免密登录
 -  其他必要的功能需要帮我补充添加一下
+
+# 实现设计（开发补充）
+
+## 架构
+- Flutter 桌面应用，状态管理使用 provider + ChangeNotifier，依赖集中在 `lib/app/app_services.dart`。
+- 数据库使用 drift ORM（SQLite），所有表的查询列都建立了索引；密码、私钥、API Key 用本地主密钥（应用数据目录下 `master.key`，权限 600）做 AES-256-GCM 加密后存储。
+- 模块划分见 `docs/design-steps.md`。跨平台差异通过接口隔离：`RdpLauncher`（Windows / FreeRDP 两个实现）、`SshInteraction`（连接过程中的用户交互）、`AiAgent`（各类 Agent）、`SnippetAction`（快捷指令动作）。
+
+## SSH 登录流程
+1. 解析跳板链（检测循环与缺失），第一跳使用自身代理配置（没有则使用目标主机的代理），后续每一跳通过上一跳的 `direct-tcpip` 通道连接。
+2. 每一跳独立认证：
+   - 密码认证：有保存的密码直接使用；没有则弹出密码框（可勾选“记住密码”）；密码错误时再次弹框并提示“密码错误”，最多 5 次；登录成功且勾选记住时才保存。
+   - 密钥认证：加载密钥（加密私钥未保存口令时弹框输入口令，口令错误可重试）；服务器拒绝密钥时自动回退为密码输入，并提示“服务器拒绝了密钥”。
+   - keyboard-interactive：提示为密码且已知密码时自动应答，否则逐项弹框。
+3. 主机指纹：首次连接自动记录（accept-new），之后指纹变化时弹出警告，由用户决定是否信任。
+4. 连接成功后后台执行 `uname` + `/etc/os-release` 探测系统，写入主机信息，卡片显示对应系统图标。
+
+## 同步协议
+- 服务端（`server/`，Dart shelf + drift）按访问令牌划分数据空间，存储 `(uuid, updatedAt, deleted, payload)`；payload 为客户端用“同步口令”经 PBKDF2 派生密钥后 AES-GCM 加密的密文，服务端无法解密；建议通过 `--cert/--key` 或反向代理启用 HTTPS。
+- 客户端主机有 `syncEnabled` 与 `syncedAt`：`syncedAt == updatedAt` 为“已同步”，否则为“待同步”，未参与同步为“仅本地”。
+- 同步：本地新则上传（服务器上更新时返回 409，改为拉取），服务器新则下载；服务器有而本地没有的主机自动拉取；从服务器删除后留下删除标记，其他客户端将其改为“仅本地”。
+- 支持自动同步间隔与手动同步；未配置同步服务器不影响任何功能。
+
+## AI Agent
+- `AiAgent.send()` 返回事件流：文本增量、推理增量、token 用量、外部会话 id、错误。UI 只依赖事件流。
+- DeepSeek Harness CLI：`dsh --profile headless --json [--session-id <id>]`，问题经 stdin 传入，解析 NDJSON 事件；上下文由 dsh 会话续接。
+- OpenAI 兼容 API（默认 DeepSeek API）：SSE 流式，`stream_options.include_usage` 获取用量。
+- 速度 = 输出 token / (结束时间 − 首个 token 时间)，不包含首字前等待；同时显示输入、输出、上下文 token 与首字延迟。Agent 未上报用量时按字符估算并以“≈”标注。
+- 每次请求写入 token 明细（按日期键索引），统计页按今日 / 本周 / 本月汇总，并按模型、按 Agent 聚合；聊天记录可查看、续聊、删除。
+
+## 远程桌面
+- RDP：内嵌 FreeRDP 3（native/rdp，静态链接 OpenSSL，C 胶水库经 Dart FFI 调用，画面在应用内标签页渲染）。
+  - 登录：保存的密码直接登录；未保存则弹框（可记住）；用户名或密码错误时重新弹框。
+  - 证书：首次连接记录 SHA-256 指纹，之后指纹变化时警告并由用户决定是否信任。
+  - 显示：GDI 合成 BGRA 画面；未设置固定分辨率时，远程分辨率随窗口大小动态调整（Display Control 通道）。
+  - 剪贴板：文本双向；本地复制的文件 / 目录可在远程粘贴（远程按需读取内容）；远程复制的文件下载到本地后写入系统剪贴板，可在本地粘贴。
+  - 文件拖拽：拖入 RDP 画面的文件放入共享文件夹（远程 \\tsclient\Remlark），同时写入远程剪贴板，可直接在远程粘贴。
+  - 支持 HTTP / SOCKS5 出口代理；macOS 上 Command 键映射为 Ctrl，工具栏提供 Ctrl+Alt+Del 与 Windows 键。
+- VNC：内置 RFB 3.3/3.7/3.8 客户端（None / VNC 认证，Raw、CopyRect、ZRLE 编码，DesktopSize），键鼠转发，剪贴板双向同步，拖拽文件经关联 SSH 主机上传。
+- VNC 与 RDP 共用 RemoteScreen 渲染组件（会话实现 RemoteDisplay 接口）。
+- 远程桌面会话不提供 AI Agent 功能。

@@ -1,0 +1,4 @@
+# 同步服务端为纯 Dart 包，使用默认分析规则
+analyzer:
+  language:
+    strict-casts: false
