@@ -117,11 +117,14 @@ class _RdpViewState extends State<RdpView> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Row(
         children: [
-          Text(
-            '${s.host.endpoint}${connected ? '  ${s.frameWidth}×${s.frameHeight}' : ''}',
-            style: Theme.of(context).textTheme.labelMedium,
+          Expanded(
+            child: Text(
+              '${s.host.endpoint}${connected ? '  ${s.frameWidth}×${s.frameHeight}' : ''}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
           ),
-          const Spacer(),
           TextButton.icon(
             icon: const Icon(Icons.keyboard, size: 16),
             label: const Text('Ctrl+Alt+Del'),

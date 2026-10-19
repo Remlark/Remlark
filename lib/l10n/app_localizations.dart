@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'strings_en.dart';
@@ -37,7 +38,8 @@ class _SDelegate extends LocalizationsDelegate<S> {
   bool isSupported(Locale locale) => ['zh', 'en'].contains(locale.languageCode);
 
   @override
-  Future<S> load(Locale locale) async => S(locale);
+  // 同步加载，避免首帧空白
+  Future<S> load(Locale locale) => SynchronousFuture(S(locale));
 
   @override
   bool shouldReload(covariant LocalizationsDelegate<S> old) => false;

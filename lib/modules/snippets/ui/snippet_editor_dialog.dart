@@ -33,10 +33,14 @@ class _SnippetEditorDialogState extends State<SnippetEditorDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             DropdownButtonFormField<SnippetKind>(
+              isExpanded: true,
               initialValue: _kind,
               decoration: InputDecoration(labelText: context.tr('snippet.kind')),
               items: [
-                DropdownMenuItem(value: SnippetKind.text, child: Text(context.tr('snippet.kind.text'))),
+                DropdownMenuItem(
+                  value: SnippetKind.text,
+                  child: Text(context.tr('snippet.kind.text'), overflow: TextOverflow.ellipsis),
+                ),
                 if (PlatformUtils.isUnixDesktop || _kind == SnippetKind.installSystemKey)
                   DropdownMenuItem(
                     value: SnippetKind.installSystemKey,

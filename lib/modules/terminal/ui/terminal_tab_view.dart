@@ -60,16 +60,17 @@ class _TerminalTabViewState extends State<TerminalTabView> {
                   selected: _panel == SidePanel.ai,
                   onPressed: () => _toggle(SidePanel.ai),
                 ),
-                const Spacer(),
-                if (s.host.osName != null)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Text(
-                      s.host.osName!,
-                      style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.outline),
-                    ),
+                const SizedBox(width: 8),
+                // 系统与地址信息过长时省略，避免挤压工具按钮
+                Expanded(
+                  child: Text(
+                    [if (s.host.osName != null) s.host.osName!, s.host.endpoint].join('  ·  '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.outline),
                   ),
-                Text(s.host.endpoint, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.outline)),
+                ),
                 IconButton(
                   tooltip: context.tr('terminal.reconnect'),
                   visualDensity: VisualDensity.compact,
@@ -81,27 +82,35 @@ class _TerminalTabViewState extends State<TerminalTabView> {
           ),
           const Divider(height: 1),
           Expanded(
-            child: Row(
-              children: [
-                Expanded(child: TerminalPane(session: s)),
-                if (_panel != SidePanel.none) ...[
-                  // 可拖动的分隔条，调整侧边面板宽度
-                  MouseRegion(
-                    cursor: SystemMouseCursors.resizeColumn,
-                    child: GestureDetector(
-                      onHorizontalDragUpdate: (d) =>
-                          setState(() => s.uiState['panelWidth'] = (_panelWidth - d.delta.dx).clamp(280.0, 900.0)),
-                      child: Container(width: 5, color: theme.dividerColor),
-                    ),
-                  ),
-                  SizedBox(
-                    width: _panelWidth,
-                    child: _panel == SidePanel.sftp
-                        ? SftpPanel(key: ValueKey('sftp-${s.id}-${s.sftp.hashCode}'), session: s)
-                        : ChatPanel(key: ValueKey('ai-${s.id}'), session: s),
-                  ),
-                ],
-              ],
+            // 侧边面板宽度受可用宽度限制，保证终端至少保留 320 像素
+            child: LayoutBuilder(
+              builder: (context, box) {
+                final maxPanel = (box.maxWidth - 320 - 5).clamp(240.0, 900.0);
+                final panelWidth = _panelWidth.clamp(240.0, maxPanel);
+                return Row(
+                  children: [
+                    Expanded(child: TerminalPane(session: s)),
+                    if (_panel != SidePanel.none) ...[
+                      // 可拖动的分隔条，调整侧边面板宽度
+                      MouseRegion(
+                        cursor: SystemMouseCursors.resizeColumn,
+                        child: GestureDetector(
+                          onHorizontalDragUpdate: (d) => setState(
+                            () => s.uiState['panelWidth'] = (panelWidth - d.delta.dx).clamp(240.0, maxPanel),
+                          ),
+                          child: Container(width: 5, color: theme.dividerColor),
+                        ),
+                      ),
+                      SizedBox(
+                        width: panelWidth,
+                        child: _panel == SidePanel.sftp
+                            ? SftpPanel(key: ValueKey('sftp-${s.id}-${s.sftp.hashCode}'), session: s)
+                            : ChatPanel(key: ValueKey('ai-${s.id}'), session: s),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
           ),
         ],

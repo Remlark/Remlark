@@ -43,82 +43,130 @@ class _Toolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.watch<HostsController>();
     final sync = context.watch<SyncService>();
+    final search = TextField(
+      decoration: InputDecoration(prefixIcon: const Icon(Icons.search, size: 18), hintText: context.tr('host.search')),
+      onChanged: c.setSearch,
+    );
+    final filter = SegmentedButton<ProtocolFilter>(
+      showSelectedIcon: false,
+      segments: [
+        ButtonSegment(value: ProtocolFilter.all, label: Text(context.tr('common.all'))),
+        const ButtonSegment(value: ProtocolFilter.ssh, label: Text('SSH')),
+        const ButtonSegment(value: ProtocolFilter.rdp, label: Text('RDP')),
+        const ButtonSegment(value: ProtocolFilter.vnc, label: Text('VNC')),
+      ],
+      selected: {c.protocolFilter},
+      onSelectionChanged: (s) => c.setProtocolFilter(s.first),
+    );
+    final actions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (sync.config.isConfigured) _SyncButton(sync: sync),
+        const SizedBox(width: 8),
+        _NewHostButton(groupUuid: c.selectedGroup),
+      ],
+    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 280,
-            child: TextField(
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search, size: 18),
-                hintText: context.tr('host.search'),
-              ),
-              onChanged: c.setSearch,
-            ),
-          ),
-          const SizedBox(width: 12),
-          SegmentedButton<ProtocolFilter>(
-            showSelectedIcon: false,
-            segments: [
-              ButtonSegment(value: ProtocolFilter.all, label: Text(context.tr('common.all'))),
-              const ButtonSegment(value: ProtocolFilter.ssh, label: Text('SSH')),
-              const ButtonSegment(value: ProtocolFilter.rdp, label: Text('RDP')),
-              const ButtonSegment(value: ProtocolFilter.vnc, label: Text('VNC')),
-            ],
-            selected: {c.protocolFilter},
-            onSelectionChanged: (s) => c.setProtocolFilter(s.first),
-          ),
-          const Spacer(),
-          if (sync.config.isConfigured)
-            Tooltip(
-              message: sync.lastError != null
-                  ? context.tr(sync.lastError!)
-                  : sync.config.lastSyncAt == null
-                  ? context.tr('sync.never')
-                  : context.tr('sync.last', {
-                      'time': FormatUtils.dateTime(DateTime.fromMillisecondsSinceEpoch(sync.config.lastSyncAt!)),
-                    }),
-              child: IconButton(
-                onPressed: sync.syncing
-                    ? null
-                    : () async {
-                        try {
-                          final r = await sync.syncNow();
-                          if (context.mounted) {
-                            UiUtils.toast(context.tr('sync.done', {'pushed': r.pushed, 'pulled': r.pulled}));
-                          }
-                        } catch (e) {
-                          if (context.mounted) UiUtils.toast(context.tr(sync.lastError ?? '$e'), error: true);
-                        }
-                      },
-                icon: sync.syncing
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : Icon(Icons.sync, color: sync.lastError != null ? Colors.red : null),
-              ),
-            ),
-          const SizedBox(width: 8),
-          MenuAnchor(
-            builder: (ctx, ctrl, _) => FilledButton.icon(
-              onPressed: () => ctrl.isOpen ? ctrl.close() : ctrl.open(),
-              icon: const Icon(Icons.add, size: 18),
-              label: Text(context.tr('host.new')),
-            ),
-            menuChildren: [
-              for (final p in HostProtocol.values)
-                MenuItemButton(
-                  leadingIcon: Icon(switch (p) {
-                    HostProtocol.ssh => Icons.terminal,
-                    HostProtocol.rdp => Icons.window,
-                    HostProtocol.vnc => Icons.desktop_windows_outlined,
-                  }, size: 18),
-                  onPressed: () => HostEditorDialog.show(context, protocol: p, groupUuid: c.selectedGroup),
-                  child: Text(p.name.toUpperCase()),
+      // 宽度不足时协议筛选换到第二行，搜索框随宽度伸缩，避免溢出
+      child: LayoutBuilder(
+        builder: (context, box) {
+          if (box.maxWidth >= 760) {
+            return Row(
+              children: [
+                Flexible(
+                  child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 320), child: search),
                 ),
+                const SizedBox(width: 12),
+                filter,
+                const Spacer(),
+                actions,
+              ],
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: search),
+                  const SizedBox(width: 8),
+                  actions,
+                ],
+              ),
+              const SizedBox(height: 10),
+              filter,
             ],
-          ),
-        ],
+          );
+        },
       ),
+    );
+  }
+}
+
+/// 立即同步按钮（显示上次同步时间或错误）
+class _SyncButton extends StatelessWidget {
+  const _SyncButton({required this.sync});
+
+  final SyncService sync;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: sync.lastError != null
+          ? context.tr(sync.lastError!)
+          : sync.config.lastSyncAt == null
+          ? context.tr('sync.never')
+          : context.tr('sync.last', {
+              'time': FormatUtils.dateTime(DateTime.fromMillisecondsSinceEpoch(sync.config.lastSyncAt!)),
+            }),
+      child: IconButton(
+        onPressed: sync.syncing
+            ? null
+            : () async {
+                try {
+                  final r = await sync.syncNow();
+                  if (context.mounted) {
+                    UiUtils.toast(context.tr('sync.done', {'pushed': r.pushed, 'pulled': r.pulled}));
+                  }
+                } catch (e) {
+                  if (context.mounted) UiUtils.toast(context.tr(sync.lastError ?? '$e'), error: true);
+                }
+              },
+        icon: sync.syncing
+            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+            : Icon(Icons.sync, color: sync.lastError != null ? Colors.red : null),
+      ),
+    );
+  }
+}
+
+/// 新建主机按钮（选择协议）
+class _NewHostButton extends StatelessWidget {
+  const _NewHostButton({this.groupUuid});
+
+  final String? groupUuid;
+
+  @override
+  Widget build(BuildContext context) {
+    return MenuAnchor(
+      builder: (ctx, ctrl, _) => FilledButton.icon(
+        onPressed: () => ctrl.isOpen ? ctrl.close() : ctrl.open(),
+        icon: const Icon(Icons.add, size: 18),
+        label: Text(context.tr('host.new')),
+      ),
+      menuChildren: [
+        for (final p in HostProtocol.values)
+          MenuItemButton(
+            leadingIcon: Icon(switch (p) {
+              HostProtocol.ssh => Icons.terminal,
+              HostProtocol.rdp => Icons.window,
+              HostProtocol.vnc => Icons.desktop_windows_outlined,
+            }, size: 18),
+            onPressed: () => HostEditorDialog.show(context, protocol: p, groupUuid: groupUuid),
+            child: Text(p.name.toUpperCase()),
+          ),
+      ],
     );
   }
 }

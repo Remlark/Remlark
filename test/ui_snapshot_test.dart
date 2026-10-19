@@ -5,7 +5,6 @@ import 'dart:ui' as ui;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:remlark/app/app.dart';
 import 'package:remlark/app/app_services.dart';
@@ -19,18 +18,7 @@ import 'package:remlark/utils/secret_store.dart';
 import 'package:remlark/utils/ui_utils.dart';
 import 'package:provider/provider.dart';
 
-const _materialIcons = '/usr/local/share/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf';
-const _font = '/System/Library/Fonts/Supplemental/Arial Unicode.ttf';
-
-Future<void> _loadFonts() async {
-  for (final family in ['Roboto', '.SF UI Text', '.SF UI Display', '.AppleSystemUIFont', 'monospace', 'Menlo']) {
-    final l = FontLoader(family)..addFont(Future.value(ByteData.sublistView(File(_font).readAsBytesSync())));
-    await l.load();
-  }
-  final icons = FontLoader('MaterialIcons')
-    ..addFont(Future.value(ByteData.sublistView(File(_materialIcons).readAsBytesSync())));
-  await icons.load();
-}
+import 'helpers/test_fonts.dart';
 
 Future<void> _shot(WidgetTester tester, String name) async {
   await tester.pumpAndSettle(const Duration(milliseconds: 300));
@@ -45,7 +33,7 @@ void main() {
   final dir = Platform.environment['SNAPSHOT_DIR'];
   testWidgets('页面快照', (tester) async {
     if (dir == null) return;
-    await tester.runAsync(_loadFonts);
+    await tester.runAsync(loadTestFonts);
     SecretStore.initForTest(CryptoUtils.randomBytes(32));
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1;

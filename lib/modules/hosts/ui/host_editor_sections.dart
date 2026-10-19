@@ -134,10 +134,15 @@ class _SshAuthSectionState extends State<SshAuthSection> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: _keys.any((k) => k.uuid == f.keyUuid) ? f.keyUuid : null,
                   decoration: InputDecoration(labelText: context.tr('auth.key.select')),
                   items: [
-                    for (final k in _keys) DropdownMenuItem(value: k.uuid, child: Text('${k.name}  (${k.keyType})')),
+                    for (final k in _keys)
+                      DropdownMenuItem(
+                        value: k.uuid,
+                        child: Text('${k.name}  (${k.keyType})', overflow: TextOverflow.ellipsis),
+                      ),
                   ],
                   onChanged: (v) => f.update(() => f.keyUuid = v),
                 ),
@@ -423,14 +428,22 @@ class VncSection extends StatelessWidget {
           children: [
             Expanded(
               child: DropdownButtonFormField<String?>(
+                isExpanded: true,
                 initialValue: ssh.any((h) => h.uuid == f.transferHost) ? f.transferHost : null,
                 decoration: InputDecoration(
                   labelText: context.tr('vnc.transfer_host'),
                   helperText: context.tr('vnc.transfer_host.helper'),
                 ),
                 items: [
-                  DropdownMenuItem(value: null, child: Text(context.tr('common.none'))),
-                  for (final h in ssh) DropdownMenuItem(value: h.uuid, child: Text('${h.name}  ${h.endpoint}')),
+                  DropdownMenuItem(
+                    value: null,
+                    child: Text(context.tr('common.none'), overflow: TextOverflow.ellipsis),
+                  ),
+                  for (final h in ssh)
+                    DropdownMenuItem(
+                      value: h.uuid,
+                      child: Text('${h.name}  ${h.endpoint}', overflow: TextOverflow.ellipsis),
+                    ),
                 ],
                 onChanged: (v) => f.update(() => f.transferHost = v),
               ),

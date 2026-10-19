@@ -45,14 +45,19 @@ static void my_application_activate(GApplication* application) {
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "remlark");
+    gtk_header_bar_set_title(header_bar, "Remlark");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
-    gtk_window_set_title(window, "remlark");
+    gtk_window_set_title(window, "Remlark");
   }
 
-  gtk_window_set_default_size(window, 1280, 720);
+  // 窗口尺寸：默认 1280x820，最小 960x640（与 lib/app/window_config.dart 保持一致）
+  gtk_window_set_default_size(window, 1280, 820);
+  GdkGeometry geometry;
+  geometry.min_width = 960;
+  geometry.min_height = 640;
+  gtk_window_set_geometry_hints(window, nullptr, &geometry, GDK_HINT_MIN_SIZE);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(

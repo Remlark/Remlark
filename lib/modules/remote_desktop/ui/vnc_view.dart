@@ -90,11 +90,14 @@ class _VncViewState extends State<VncView> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Row(
         children: [
-          Text(
-            c == null ? s.host.endpoint : '${c.desktopName}  ${c.width}×${c.height}',
-            style: Theme.of(context).textTheme.labelMedium,
+          Expanded(
+            child: Text(
+              c == null ? s.host.endpoint : '${c.desktopName}  ${c.width}×${c.height}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
           ),
-          const Spacer(),
           TextButton.icon(
             icon: const Icon(Icons.keyboard, size: 16),
             label: const Text('Ctrl+Alt+Del'),

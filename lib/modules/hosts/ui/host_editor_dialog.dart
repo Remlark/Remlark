@@ -107,11 +107,19 @@ class _HostEditorDialogState extends State<HostEditorDialog> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButtonFormField<String?>(
+                          isExpanded: true,
                           initialValue: groups.any((g) => g.uuid == f.groupUuid) ? f.groupUuid : null,
                           decoration: InputDecoration(labelText: context.tr('group.title')),
                           items: [
-                            DropdownMenuItem(value: null, child: Text(context.tr('group.none'))),
-                            for (final g in groups) DropdownMenuItem(value: g.uuid, child: Text(g.name)),
+                            DropdownMenuItem(
+                              value: null,
+                              child: Text(context.tr('group.none'), overflow: TextOverflow.ellipsis),
+                            ),
+                            for (final g in groups)
+                              DropdownMenuItem(
+                                value: g.uuid,
+                                child: Text(g.name, overflow: TextOverflow.ellipsis),
+                              ),
                           ],
                           onChanged: (v) => f.update(() => f.groupUuid = v),
                         ),
