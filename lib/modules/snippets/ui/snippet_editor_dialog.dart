@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../ui_kit/app_dialog.dart';
+import '../../../ui_kit/app_menu.dart';
 import '../../../ui_kit/panel.dart';
 import '../../../utils/id_utils.dart';
 import '../../../utils/platform_utils.dart';
@@ -37,19 +38,12 @@ class _SnippetEditorDialogState extends State<SnippetEditorDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             FieldLabel(context.tr('snippet.kind')),
-            DropdownButtonFormField<SnippetKind>(
-              isExpanded: true,
-              initialValue: _kind,
+            AppDropdown<SnippetKind>(
+              value: _kind,
               items: [
-                DropdownMenuItem(
-                  value: SnippetKind.text,
-                  child: Text(context.tr('snippet.kind.text'), overflow: TextOverflow.ellipsis),
-                ),
+                AppMenuItem(value: SnippetKind.text, label: context.tr('snippet.kind.text')),
                 if (PlatformUtils.isUnixDesktop || _kind == SnippetKind.installSystemKey)
-                  DropdownMenuItem(
-                    value: SnippetKind.installSystemKey,
-                    child: Text(context.tr('snippet.kind.install_key')),
-                  ),
+                  AppMenuItem(value: SnippetKind.installSystemKey, label: context.tr('snippet.kind.install_key')),
               ],
               onChanged: (v) => setState(() => _kind = v ?? SnippetKind.text),
             ),

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../app/theme/app_palette.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../ui_kit/app_dialog.dart';
+import '../../../ui_kit/app_menu.dart';
 import '../../../ui_kit/nav_tile.dart';
 import '../../../ui_kit/panel.dart';
 import '../../../utils/ui_utils.dart';
@@ -264,19 +265,12 @@ class _HostEditorDialogState extends State<HostEditorDialog> {
             Expanded(
               child: field(
                 context.tr('group.title'),
-                DropdownButtonFormField<String?>(
-                  isExpanded: true,
-                  initialValue: groups.any((g) => g.uuid == f.groupUuid) ? f.groupUuid : null,
+                AppDropdown<String?>(
+                  // 分组已被删除时按“无分组”显示
+                  value: groups.any((g) => g.uuid == f.groupUuid) ? f.groupUuid : null,
                   items: [
-                    DropdownMenuItem(
-                      value: null,
-                      child: Text(context.tr('group.none'), overflow: TextOverflow.ellipsis),
-                    ),
-                    for (final g in groups)
-                      DropdownMenuItem(
-                        value: g.uuid,
-                        child: Text(g.name, overflow: TextOverflow.ellipsis),
-                      ),
+                    AppMenuItem(value: null, label: context.tr('group.none')),
+                    for (final g in groups) AppMenuItem(value: g.uuid, label: g.name),
                   ],
                   onChanged: (v) => f.update(() => f.groupUuid = v),
                 ),

@@ -10,6 +10,7 @@ import '../vnc_ssh_config.dart';
 import 'os_icon.dart';
 import 'protocol_tag.dart';
 import 'sync_badge.dart';
+import '../../../ui_kit/app_menu.dart';
 
 /// 主机卡片操作
 enum HostAction { connect, connectSsh, connectVnc, edit, duplicate, toggleSync, delete }
@@ -252,45 +253,28 @@ class _ConnectButton extends StatelessWidget {
 
 /// 主机操作菜单（卡片、列表行、最近连接共用）
 Future<void> showHostMenu(BuildContext context, HostEntry h, Offset pos, void Function(HostAction) onAction) async {
-  final p = context.palette;
-  Widget item(IconData icon, String key, {bool danger = false}) {
-    final color = danger ? p.danger : p.text;
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: danger ? p.danger : p.textMuted),
-        const SizedBox(width: 12),
-        Text(context.tr(key), style: TextStyle(color: color)),
-      ],
-    );
-  }
+  AppMenuItem<HostAction> item(HostAction value, IconData icon, String key, {bool danger = false}) =>
+      AppMenuItem(value: value, icon: icon, label: context.tr(key), danger: danger);
 
-  final r = await showMenu<HostAction>(
-    context: context,
-    position: RelativeRect.fromLTRB(pos.dx, pos.dy, pos.dx + 1, pos.dy + 1),
-    items: [
-      if (h.vncSsh != null) ...[
-        PopupMenuItem(value: HostAction.connectSsh, child: item(Icons.terminal, 'host.connect.ssh')),
-        PopupMenuItem(value: HostAction.connectVnc, child: item(Icons.desktop_windows_outlined, 'host.connect.vnc')),
-      ] else
-        PopupMenuItem(
-          value: HostAction.connect,
-          child: item(
-            h.protocol == HostProtocol.ssh ? Icons.terminal_rounded : Icons.desktop_windows_outlined,
-            'host.connect.${h.protocol.name}',
-          ),
-        ),
-      PopupMenuItem(value: HostAction.edit, child: item(Icons.edit_outlined, 'common.edit')),
-      PopupMenuItem(value: HostAction.duplicate, child: item(Icons.copy_outlined, 'common.duplicate')),
-      PopupMenuItem(
-        value: HostAction.toggleSync,
-        child: item(
-          h.syncEnabled ? Icons.cloud_off_outlined : Icons.cloud_upload_outlined,
-          h.syncEnabled ? 'sync.remove' : 'sync.add',
-        ),
+  final r = await AppMenu.showAt<HostAction>(context, pos, [
+    if (h.vncSsh != null) ...[
+      item(HostAction.connectSsh, Icons.terminal, 'host.connect.ssh'),
+      item(HostAction.connectVnc, Icons.desktop_windows_outlined, 'host.connect.vnc'),
+    ] else
+      item(
+        HostAction.connect,
+        h.protocol == HostProtocol.ssh ? Icons.terminal_rounded : Icons.desktop_windows_outlined,
+        'host.connect.${h.protocol.name}',
       ),
-      const PopupMenuDivider(),
-      PopupMenuItem(value: HostAction.delete, child: item(Icons.delete_outline, 'common.delete', danger: true)),
-    ],
-  );
+    item(HostAction.edit, Icons.edit_outlined, 'common.edit'),
+    item(HostAction.duplicate, Icons.copy_outlined, 'common.duplicate'),
+    item(
+      HostAction.toggleSync,
+      h.syncEnabled ? Icons.cloud_off_outlined : Icons.cloud_upload_outlined,
+      h.syncEnabled ? 'sync.remove' : 'sync.add',
+    ),
+    const AppMenuDivider(),
+    item(HostAction.delete, Icons.delete_outline, 'common.delete', danger: true),
+  ]);
   if (r != null) onAction(r);
 }

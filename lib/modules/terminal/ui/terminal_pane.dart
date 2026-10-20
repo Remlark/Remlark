@@ -18,6 +18,7 @@ import '../../workspace/workspace_tab.dart';
 import '../terminal_session.dart';
 import 'terminal_themes.dart';
 import 'upload_helper.dart';
+import '../../../ui_kit/app_menu.dart';
 
 /// 终端面板：xterm 视图 + 拖拽上传 + 右键菜单（复制 / 粘贴：文本输入、文件上传）
 /// + 快捷键复制粘贴 + 连接状态遮罩
@@ -146,36 +147,23 @@ class _TerminalPaneState extends State<TerminalPane> {
       hasText = await Clipboard.hasStrings();
     } catch (_) {}
     if (!mounted) return;
-    final p = context.palette;
     final connected = s.state == SessionState.connected;
-    // 菜单项：文字 + 右侧快捷键提示
-    PopupMenuItem<String> item(String value, String text, String shortcut, bool enabled) => PopupMenuItem(
-      value: value,
-      enabled: enabled,
-      height: 36,
-      child: Row(
-        children: [
-          Expanded(child: Text(text)),
-          const SizedBox(width: 24),
-          Text(shortcut, style: TextStyle(fontSize: 12, color: p.textFaint)),
-        ],
+    final r = await AppMenu.showAt<String>(context, pos, [
+      AppMenuItem(
+        value: 'copy',
+        label: context.tr('common.copy'),
+        shortcut: _isApple ? '⌘C' : 'Ctrl+Shift+C',
+        enabled: selected != null,
       ),
-    );
-    final r = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(pos.dx, pos.dy, pos.dx + 1, pos.dy + 1),
-      items: [
-        item('copy', context.tr('common.copy'), _isApple ? '⌘C' : 'Ctrl+Shift+C', selected != null),
-        item(
-          'paste',
-          files.isNotEmpty
-              ? context.tr('terminal.menu.paste_upload', {'count': files.length})
-              : context.tr('terminal.menu.paste'),
-          _isApple ? '⌘V' : 'Ctrl+Shift+V',
-          connected && (files.isNotEmpty || hasText),
-        ),
-      ],
-    );
+      AppMenuItem(
+        value: 'paste',
+        label: files.isNotEmpty
+            ? context.tr('terminal.menu.paste_upload', {'count': files.length})
+            : context.tr('terminal.menu.paste'),
+        shortcut: _isApple ? '⌘V' : 'Ctrl+Shift+V',
+        enabled: connected && (files.isNotEmpty || hasText),
+      ),
+    ]);
     if (!mounted) return;
     switch (r) {
       case 'copy':

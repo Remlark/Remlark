@@ -63,7 +63,5 @@ class SnippetRepository {
         SnippetEntry(uuid: IdUtils.newId(), name: installKeyName, kind: SnippetKind.installSystemKey, sortOrder: 0),
       );
     }
-    await save(SnippetEntry(uuid: IdUtils.newId(), name: 'df -h', content: 'df -h', sortOrder: 1));
-    await save(SnippetEntry(uuid: IdUtils.newId(), name: 'top', content: 'top', sortOrder: 2));
   }
 }

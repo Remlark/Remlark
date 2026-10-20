@@ -27,7 +27,14 @@ class WorkspaceController extends ChangeNotifier {
   List<WorkspaceTab> get gridSessions => [
     for (final id in gridIds) ...gridCandidates.where((t) => t.id == id),
   ];
-  bool get showingGrid => gridEnabled && focusedGridId == null;
+
+  /// 当前是否以网格展示：广播期间固定为网格，与用户选择的布局无关
+  bool get showingGrid =>
+      broadcast || (gridEnabled && focusedGridId == null);
+
+  /// 当前网格中展示的会话：广播时为广播目标，否则为普通网格选择
+  List<WorkspaceTab> get displayedGridSessions =>
+      broadcast ? broadcastSessions : gridSessions;
 
   /// 应用网格选择；广播时禁止更改布局，过滤已关闭或不支持的会话。
   bool showGrid([Iterable<String>? ids]) {
@@ -72,22 +79,21 @@ class WorkspaceController extends ChangeNotifier {
   }
 
   /// 标签栏切换：网格内只改变输入焦点，网格外的标签临时全页展示。
+  /// 广播期间布局锁定为广播目标网格，只能在目标之间切换输入焦点。
   void selectTab(String id) {
     if (!tabs.any((t) => t.id == id)) return;
-    if (broadcast &&
-        gridEnabled &&
-        (focusedGridId != null ? focusedGridId != id : !gridIds.contains(id))) {
+    if (broadcast) {
+      if (broadcastIds.contains(id)) activate(id);
       return;
     }
-    if (!broadcast &&
-        gridEnabled &&
+    if (gridEnabled &&
         (focusedGridId != null || !gridIds.contains(id))) {
       focusedGridId = id;
     }
     activate(id);
   }
 
-  /// 广播模式只同步选中 SSH 的输入，不改变当前布局。
+  /// 广播模式：同步选中 SSH 的输入，期间以网格展示广播目标；原布局保留，停止后恢复。
   bool broadcast = false;
 
   /// 广播分组内的终端 id（独立于网格选择）
@@ -115,7 +121,8 @@ class WorkspaceController extends ChangeNotifier {
   /// 添加标签并激活
   void add(WorkspaceTab tab) {
     tabs.add(tab);
-    if (!broadcast || !gridEnabled) {
+    // 广播期间布局锁定，新会话在后台打开，不打断广播网格
+    if (!broadcast) {
       activeId = tab.id;
       if (gridEnabled) {
         if ((tab is TerminalSession || tab is RemoteDisplay) &&
@@ -164,9 +171,12 @@ class WorkspaceController extends ChangeNotifier {
     if (broadcastIds.isEmpty) broadcast = false;
     tab.removeListener(notifyListeners);
     if (activeId == tab.id) {
-      activeId = showingGrid && gridIds.isNotEmpty
-          ? gridIds.first
+      final visible = displayedGridSessions;
+      activeId = showingGrid && visible.isNotEmpty
+          ? visible.first.id
           : (tabs.isEmpty ? null : tabs.last.id);
+    } else if (!broadcast) {
+      _ensureActiveVisible();
     }
     if (tabs.isEmpty) broadcast = false;
     notifyListeners();
@@ -198,7 +208,7 @@ class WorkspaceController extends ChangeNotifier {
     final at = tabs.indexOf(session);
     tabs.insert(at < 0 ? tabs.length : at + 1, tab);
     tab.addListener(notifyListeners);
-    if (!broadcast || !gridEnabled) {
+    if (!broadcast) {
       activeId = tab.id;
       if (gridEnabled) focusedGridId = tab.id;
     }
@@ -206,7 +216,8 @@ class WorkspaceController extends ChangeNotifier {
     return tab;
   }
 
-  /// 开启或更新广播目标，只接受 SSH；不改变布局或自动吸收新会话。
+  /// 开启或更新广播目标，只接受 SSH；不自动吸收新会话。
+  /// 广播期间以网格展示目标，不修改用户保存的布局选择。
   bool startBroadcast({Iterable<String>? ids}) {
     final valid = terminals.map((t) => t.id).toSet();
     final selected = (ids ?? valid)
@@ -219,15 +230,24 @@ class WorkspaceController extends ChangeNotifier {
       ..clear()
       ..addAll(selected);
     broadcast = true;
+    if (!broadcastIds.contains(activeId)) activeId = broadcastIds.first;
     notifyListeners();
     return true;
   }
 
-  /// 关闭广播，保留现有布局与焦点
+  /// 关闭广播，恢复广播前的布局
   void stopBroadcast() {
     broadcast = false;
     broadcastIds.clear();
+    _ensureActiveVisible();
     notifyListeners();
+  }
+
+  /// 恢复布局后当前会话可能不在网格内，此时切到网格第一个，避免焦点落在隐藏会话上
+  void _ensureActiveVisible() {
+    if (showingGrid && gridIds.isNotEmpty && !gridIds.contains(activeId)) {
+      activeId = gridIds.first;
+    }
   }
 
   /// 把终端加入广播分组；分组已满时返回 false
@@ -243,7 +263,12 @@ class WorkspaceController extends ChangeNotifier {
   /// 把终端移出广播分组（会话保持打开，可在标签页中继续使用）
   void removeFromBroadcast(String id) {
     if (broadcastIds.remove(id)) {
-      if (broadcastIds.isEmpty) broadcast = false;
+      if (broadcastIds.isEmpty) {
+        broadcast = false;
+        _ensureActiveVisible();
+      } else if (activeId == id) {
+        activeId = broadcastIds.first;
+      }
       notifyListeners();
     }
   }

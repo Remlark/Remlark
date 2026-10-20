@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../app/theme/app_palette.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../ui_kit/buttons.dart';
 import '../../../ui_kit/nav_tile.dart';
@@ -9,6 +8,7 @@ import '../../../utils/id_utils.dart';
 import '../../../utils/ui_utils.dart';
 import '../host_model.dart';
 import '../hosts_controller.dart';
+import '../../../ui_kit/app_menu.dart';
 
 /// 主机分组二级导航：全部主机 / 各分组 / 未分组，支持新建；分组右键重命名、删除
 class GroupPanel extends StatelessWidget {
@@ -53,18 +53,10 @@ class GroupPanel extends StatelessWidget {
   }
 
   Future<void> _menu(BuildContext context, Offset pos, GroupEntry g, HostsController c) async {
-    final p = context.palette;
-    final r = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(pos.dx, pos.dy, pos.dx + 1, pos.dy + 1),
-      items: [
-        PopupMenuItem(value: 'rename', child: Text(context.tr('common.rename'))),
-        PopupMenuItem(
-          value: 'delete',
-          child: Text(context.tr('common.delete'), style: TextStyle(color: p.danger)),
-        ),
-      ],
-    );
+    final r = await AppMenu.showAt<String>(context, pos, [
+      AppMenuItem(value: 'rename', label: context.tr('common.rename')),
+      AppMenuItem(value: 'delete', label: context.tr('common.delete'), danger: true),
+    ]);
     if (!context.mounted) return;
     if (r == 'rename') {
       final name = await UiUtils.prompt(

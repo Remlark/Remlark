@@ -14,6 +14,7 @@ import '../../../ui_kit/tags.dart';
 import '../../../utils/format_utils.dart';
 import '../../../utils/ui_utils.dart';
 import '../key_model.dart';
+import '../key_repository.dart';
 import '../key_utils.dart';
 import 'key_dialogs.dart';
 
@@ -29,15 +30,24 @@ class _KeysPageState extends State<KeysPage> {
   List<KeyEntry> _keys = [];
   final Map<String, String> _fingerprints = {};
   String? _selected;
+  late final KeyRepository _repo;
 
   @override
   void initState() {
     super.initState();
+    // 页面常驻（IndexedStack），其他位置（如主机编辑器、同步、导入）增删密钥时也要刷新
+    _repo = context.read<AppServices>().keyRepo..addListener(_load);
     _load();
   }
 
+  @override
+  void dispose() {
+    _repo.removeListener(_load);
+    super.dispose();
+  }
+
   Future<void> _load() async {
-    final keys = await context.read<AppServices>().keyRepo.list();
+    final keys = await _repo.list();
     for (final k in keys) {
       _fingerprints[k.uuid] ??= await KeyUtils.fingerprint(k.publicKey);
     }
@@ -61,8 +71,7 @@ class _KeysPageState extends State<KeysPage> {
       danger: true,
     );
     if (!ok || !mounted) return;
-    await context.read<AppServices>().keyRepo.delete(k.uuid);
-    _load();
+    await _repo.delete(k.uuid);
   }
 
   /// 密钥类型简称：ssh-ed25519 → ED25519

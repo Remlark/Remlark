@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../app/theme/app_palette.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../ui_kit/app_menu.dart';
 import '../../../ui_kit/buttons.dart';
 import '../workspace_controller.dart';
 import 'session_selection_dialog.dart';
@@ -51,30 +52,25 @@ class WorkspaceActions extends StatelessWidget {
             margin: const EdgeInsets.symmetric(horizontal: 12),
           ),
         ],
-        if (w.gridEnabled && w.focusedGridId != null)
+        // 广播期间固定为网格，布局入口显示为网格并禁用
+        if (!w.broadcast && w.gridEnabled && w.focusedGridId != null)
           ToolButton(
             compact: true,
             icon: Icons.grid_view_rounded,
             label: context.tr('workspace.grid.return'),
-            tooltip: context.tr(
-              w.broadcast ? 'workspace.layout.locked' : 'workspace.grid.return',
-            ),
-            onPressed: w.broadcast ? null : w.returnToGrid,
+            tooltip: context.tr('workspace.grid.return'),
+            onPressed: w.returnToGrid,
           )
         else
-          MenuAnchor(
-            style: MenuStyle(
-              elevation: const WidgetStatePropertyAll(0),
-              side: WidgetStatePropertyAll(BorderSide(color: p.borderStrong)),
-            ),
-            builder: (ctx, menu, _) => ToolButton(
+          AppMenuAnchor<void>(
+            builder: (ctx, open) => ToolButton(
               key: const ValueKey('workspace-layout'),
               compact: true,
-              icon: w.gridEnabled
+              icon: w.broadcast || w.gridEnabled
                   ? Icons.grid_view_rounded
                   : Icons.crop_square_rounded,
               label: context.tr(
-                w.gridEnabled
+                w.broadcast || w.gridEnabled
                     ? 'workspace.layout.grid'
                     : 'workspace.layout.single',
               ),
@@ -85,30 +81,27 @@ class WorkspaceActions extends StatelessWidget {
                     ? 'workspace.layout.locked'
                     : 'workspace.layout.menu',
               ),
-              onPressed: w.broadcast
-                  ? null
-                  : () => menu.isOpen ? menu.close() : menu.open(),
+              onPressed: w.broadcast ? null : open,
             ),
-            menuChildren: [
-              MenuItemButton(
-                leadingIcon: const Icon(Icons.crop_square_rounded, size: 18),
-                onPressed: w.broadcast ? null : w.showSingle,
-                child: Text(context.tr('workspace.layout.single')),
+            items: (ctx) => [
+              AppMenuItem(
+                icon: Icons.crop_square_rounded,
+                label: context.tr('workspace.layout.single'),
+                enabled: !w.broadcast,
+                onTap: w.showSingle,
               ),
-              MenuItemButton(
-                leadingIcon: const Icon(Icons.grid_view_rounded, size: 18),
-                onPressed: w.broadcast || w.gridCandidates.isEmpty
-                    ? null
-                    : () => w.showGrid(),
-                child: Text(context.tr('workspace.layout.grid')),
+              AppMenuItem(
+                icon: Icons.grid_view_rounded,
+                label: context.tr('workspace.layout.grid'),
+                enabled: !w.broadcast && w.gridCandidates.isNotEmpty,
+                onTap: () => w.showGrid(),
               ),
-              const Divider(height: 1),
-              MenuItemButton(
-                leadingIcon: const Icon(Icons.checklist_rounded, size: 18),
-                onPressed: w.broadcast || w.gridCandidates.isEmpty
-                    ? null
-                    : () => SessionSelectionDialog.show(context, w),
-                child: Text(context.tr('workspace.grid.choose')),
+              const AppMenuDivider(),
+              AppMenuItem(
+                icon: Icons.checklist_rounded,
+                label: context.tr('workspace.grid.choose'),
+                enabled: !w.broadcast && w.gridCandidates.isNotEmpty,
+                onTap: () => SessionSelectionDialog.show(context, w),
               ),
             ],
           ),

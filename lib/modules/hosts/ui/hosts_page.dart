@@ -19,6 +19,7 @@ import 'host_editor_dialog.dart';
 import 'os_icon.dart';
 import 'protocol_tag.dart';
 import 'sync_badge.dart';
+import '../../../ui_kit/app_menu.dart';
 
 /// 主机页：页头（新建主机）+ 工具栏（搜索、协议筛选、视图切换）+ 分组导航 + 主机卡片 / 列表
 class HostsPage extends StatelessWidget {
@@ -111,25 +112,25 @@ class _NewHostButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MenuAnchor(
-      alignmentOffset: const Offset(0, 6),
-      builder: (ctx, ctrl, _) => FilledButton.icon(
-        onPressed: () => ctrl.isOpen ? ctrl.close() : ctrl.open(),
+    return AppMenuAnchor<HostProtocol>(
+      builder: (ctx, open) => FilledButton.icon(
+        onPressed: open,
         icon: const Icon(Icons.add, size: 18),
         label: Text(context.tr('host.new')),
       ),
-      menuChildren: [
+      items: (ctx) => [
         for (final p in HostProtocol.values)
-          MenuItemButton(
-            leadingIcon: Icon(switch (p) {
+          AppMenuItem(
+            value: p,
+            icon: switch (p) {
               HostProtocol.ssh => Icons.terminal,
               HostProtocol.rdp => Icons.window,
               HostProtocol.vnc => Icons.desktop_windows_outlined,
-            }, size: 18),
-            onPressed: () => HostEditorDialog.show(context, protocol: p, groupUuid: groupUuid),
-            child: Text(context.tr('host.new.${p.name}')),
+            },
+            label: context.tr('host.new.${p.name}'),
           ),
       ],
+      onSelected: (p) => HostEditorDialog.show(context, protocol: p, groupUuid: groupUuid),
     );
   }
 }

@@ -11,6 +11,7 @@ import '../../keys/ui/key_dialogs.dart';
 import '../host_model.dart';
 import '../hosts_controller.dart';
 import 'host_form.dart';
+import '../../../ui_kit/app_menu.dart';
 
 /// 编辑分区标题
 class SectionTitle extends StatelessWidget {
@@ -130,16 +131,9 @@ class _SshAuthSectionState extends State<SshAuthSection> {
           Row(
             children: [
               Expanded(
-                child: DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  initialValue: _keys.any((k) => k.uuid == f.keyUuid) ? f.keyUuid : null,
-                  items: [
-                    for (final k in _keys)
-                      DropdownMenuItem(
-                        value: k.uuid,
-                        child: Text('${k.name}  (${k.keyType})', overflow: TextOverflow.ellipsis),
-                      ),
-                  ],
+                child: AppDropdown<String>(
+                  value: f.keyUuid,
+                  items: [for (final k in _keys) AppMenuItem(value: k.uuid, label: '${k.name}  (${k.keyType})')],
                   onChanged: (v) => f.update(() => f.keyUuid = v),
                 ),
               ),
@@ -259,19 +253,16 @@ class JumpChainSection extends StatelessWidget {
             },
           ),
         if (candidates.isNotEmpty)
-          MenuAnchor(
-            builder: (ctx, ctrl, _) => TextButton.icon(
+          AppMenuAnchor<String>(
+            builder: (ctx, open) => TextButton.icon(
               icon: const Icon(Icons.add, size: 16),
               label: Text(context.tr('host.jump.add')),
-              onPressed: () => ctrl.isOpen ? ctrl.close() : ctrl.open(),
+              onPressed: open,
             ),
-            menuChildren: [
-              for (final h in candidates)
-                MenuItemButton(
-                  onPressed: () => f.update(() => f.jumpChain.add(h.uuid)),
-                  child: Text('${h.name}  ${h.endpoint}'),
-                ),
+            items: (ctx) => [
+              for (final h in candidates) AppMenuItem(value: h.uuid, label: '${h.name}  ${h.endpoint}'),
             ],
+            onSelected: (uuid) => f.update(() => f.jumpChain.add(uuid)),
           ),
       ],
     );
@@ -481,12 +472,10 @@ class _HostSshSectionState extends State<HostSshSection> {
                   label: context.tr('vnc.ssh.auth'),
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: DropdownButtonFormField<AuthType>(
-                      isExpanded: true,
-                      initialValue: ssh.authType,
+                    child: AppDropdown<AuthType>(
+                      value: ssh.authType,
                       items: [
-                        for (final type in AuthType.values)
-                          DropdownMenuItem(value: type, child: Text(context.tr('auth.${type.name}'))),
+                        for (final type in AuthType.values) AppMenuItem(value: type, label: context.tr('auth.${type.name}')),
                       ],
                       onChanged: (v) {
                         if (v != null) f.update(() => f.vncSsh = ssh.copyWith(authType: v));
@@ -501,16 +490,9 @@ class _HostSshSectionState extends State<HostSshSection> {
             const SizedBox(height: 14),
             LabeledField(
               label: context.tr('auth.key.select'),
-              child: DropdownButtonFormField<String>(
-                isExpanded: true,
-                initialValue: _keys.any((k) => k.uuid == ssh.keyUuid) ? ssh.keyUuid : null,
-                items: [
-                  for (final k in _keys)
-                    DropdownMenuItem(
-                      value: k.uuid,
-                      child: Text('${k.name}  (${k.keyType})', overflow: TextOverflow.ellipsis),
-                    ),
-                ],
+              child: AppDropdown<String>(
+                value: ssh.keyUuid,
+                items: [for (final k in _keys) AppMenuItem(value: k.uuid, label: '${k.name}  (${k.keyType})')],
                 onChanged: (v) => f.update(() => f.vncSsh = ssh.copyWith(keyUuid: () => v)),
               ),
             ),

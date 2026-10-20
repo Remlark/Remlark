@@ -80,6 +80,22 @@ void main() {
     expect(w.showingGrid, isTrue);
     a.onUserInput!(a, 'stopped');
     expect(b.received, ['selected']);
+    // 单窗口下开启广播也以网格展示广播目标，停止后恢复单窗口
+    w.showSingle();
+    expect(w.showingGrid, isFalse);
+    w.activate(c.id);
+    w.startBroadcast(ids: [a.id, b.id]);
+    expect(w.showingGrid, isTrue);
+    expect(w.displayedGridSessions, [a, b]);
+    expect(w.active, a);
+    w.selectTab(c.id);
+    expect(w.active, a);
+    w.selectTab(b.id);
+    expect(w.active, b);
+    w.stopBroadcast();
+    expect(w.showingGrid, isFalse);
+    expect(w.gridEnabled, isFalse);
+    w.showGrid();
     w.startBroadcast(ids: [b.id]);
     await w.closeTab(b);
     expect(w.broadcast, isFalse);

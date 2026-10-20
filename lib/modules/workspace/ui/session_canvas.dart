@@ -33,7 +33,7 @@ class SessionCanvas extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, box) {
         final grid = w.showingGrid;
-        final ids = w.gridSessions.map((t) => t.id).toList();
+        final ids = w.displayedGridSessions.map((t) => t.id).toList();
         final cols = columnsFor(ids.length);
         final rows = math.max(1, (ids.length / cols).ceil());
         const inset = 10.0;

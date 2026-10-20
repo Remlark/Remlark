@@ -13,6 +13,7 @@ import '../chat_controller.dart';
 import 'chat_message_view.dart';
 import 'command_permission_selector.dart';
 import 'chat_status_bar.dart';
+import '../../../ui_kit/app_menu.dart';
 
 /// 终端内的 AI 聊天面板：选择 Agent、对话、附带终端上下文、一键把命令发送到终端
 class ChatPanel extends StatefulWidget {
@@ -150,20 +151,11 @@ class _ChatPanelState extends State<ChatPanel> {
             child: Row(
               children: [
                 Expanded(
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      isExpanded: true,
-                      isDense: true,
-                      value: active.uuid,
-                      items: [
-                        for (final a in agents.agents)
-                          DropdownMenuItem(
-                            value: a.uuid,
-                            child: Text(a.name, overflow: TextOverflow.ellipsis),
-                          ),
-                      ],
-                      onChanged: _chat.busy ? null : (v) => v == null ? null : agents.setActive(v),
-                    ),
+                  child: AppDropdown<String>(
+                    borderless: true,
+                    value: active.uuid,
+                    items: [for (final a in agents.agents) AppMenuItem(value: a.uuid, label: a.name)],
+                    onChanged: _chat.busy ? null : (v) => v == null ? null : agents.setActive(v),
                   ),
                 ),
                 IconButton(

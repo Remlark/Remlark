@@ -1,11 +1,13 @@
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../data/database.dart';
 import '../../utils/secret_store.dart';
 import 'key_model.dart';
 
-/// 密钥仓库：私钥与口令加密存储
-class KeyRepository {
+/// 密钥仓库：私钥与口令加密存储。
+/// 保存或删除后通知监听者，常驻页面（如密钥页）据此刷新，不必重新打开
+class KeyRepository extends ChangeNotifier {
   KeyRepository(this._db);
 
   final AppDatabase _db;
@@ -57,10 +59,12 @@ class KeyRepository {
     } else {
       await (_db.update(_db.sshKeys)..where((t) => t.uuid.equals(k.uuid))).write(comp);
     }
+    notifyListeners();
   }
 
   /// 删除
   Future<void> delete(String uuid) async {
     await (_db.delete(_db.sshKeys)..where((t) => t.uuid.equals(uuid))).go();
+    notifyListeners();
   }
 }

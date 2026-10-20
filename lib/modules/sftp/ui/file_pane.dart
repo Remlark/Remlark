@@ -11,6 +11,7 @@ import '../../../utils/format_utils.dart';
 import '../../../utils/ui_utils.dart';
 import '../file_source.dart';
 import '../sftp_service.dart';
+import '../../../ui_kit/app_menu.dart';
 
 /// 栏间拖动的数据：来源栏是否远程 + 拖动的文件
 class FilePaneDrag {
@@ -268,25 +269,17 @@ class FilePaneState extends State<FilePane> {
       });
     }
     final targets = selection;
-    final p = context.palette;
     final extra = widget.extraMenu?.call(context) ?? const [];
-    final r = await showMenu<Object>(
-      context: context,
-      position: RelativeRect.fromLTRB(pos.dx, pos.dy, pos.dx + 1, pos.dy + 1),
-      items: [
-        if (f.isDir && targets.length == 1) PopupMenuItem(value: 'open', child: Text(context.tr('sftp.open'))),
-        PopupMenuItem(value: 'transfer', child: Text(widget.transferLabel)),
-        if (targets.length == 1) PopupMenuItem(value: 'rename', child: Text(context.tr('common.rename'))),
-        PopupMenuItem(value: 'copy', child: Text(context.tr('sftp.copy_path'))),
-        for (var i = 0; i < extra.length; i++)
-          if (targets.length == 1 && extra[i].$2(f)) PopupMenuItem(value: i, child: Text(extra[i].$1)),
-        const PopupMenuDivider(),
-        PopupMenuItem(
-          value: 'delete',
-          child: Text(context.tr('common.delete'), style: TextStyle(color: p.danger)),
-        ),
-      ],
-    );
+    final r = await AppMenu.showAt<Object>(context, pos, [
+      if (f.isDir && targets.length == 1) AppMenuItem(value: 'open', label: context.tr('sftp.open')),
+      AppMenuItem(value: 'transfer', label: widget.transferLabel),
+      if (targets.length == 1) AppMenuItem(value: 'rename', label: context.tr('common.rename')),
+      AppMenuItem(value: 'copy', label: context.tr('sftp.copy_path')),
+      for (var i = 0; i < extra.length; i++)
+        if (targets.length == 1 && extra[i].$2(f)) AppMenuItem(value: i, label: extra[i].$1),
+      const AppMenuDivider(),
+      AppMenuItem(value: 'delete', label: context.tr('common.delete'), danger: true),
+    ]);
     switch (r) {
       case 'open':
         _open(f.path);

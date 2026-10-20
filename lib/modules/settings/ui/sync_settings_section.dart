@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../app/theme/app_palette.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../ui_kit/app_menu.dart';
 import '../../../ui_kit/panel.dart';
 import '../../../utils/format_utils.dart';
 import '../../../utils/ui_utils.dart';
@@ -151,18 +152,15 @@ class _SyncSettingsSectionState extends State<SyncSettingsSection> {
                   alignment: Alignment.centerLeft,
                   child: SizedBox(
                     width: 280,
-                    child: DropdownButtonFormField<int>(
-                      isExpanded: true,
-                      initialValue: _interval,
+                    child: AppDropdown<int>(
+                      value: _interval,
                       items: [
                         for (final m in const [0, 5, 15, 30, 60, 180])
-                          DropdownMenuItem(
+                          AppMenuItem(
                             value: m,
-                            child: Text(
-                              m == 0
-                                  ? context.tr('sync.interval.manual')
-                                  : context.tr('sync.interval.minutes', {'n': m}),
-                            ),
+                            label: m == 0
+                                ? context.tr('sync.interval.manual')
+                                : context.tr('sync.interval.minutes', {'n': m}),
                           ),
                       ],
                       onChanged: (v) => setState(() => _interval = v ?? 0),

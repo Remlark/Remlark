@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../app/theme/app_palette.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../ui_kit/app_menu.dart';
 import '../../../ui_kit/tags.dart';
 import '../../terminal/ui/terminal_themes.dart';
 import '../settings_controller.dart';
@@ -185,12 +186,10 @@ class _TerminalSectionState extends State<TerminalSection> {
           description: context.tr('settings.terminal_theme.desc'),
           child: SizedBox(
             width: 260,
-            child: DropdownButtonFormField<String>(
-              isExpanded: true,
-              initialValue: s.terminalTheme,
+            child: AppDropdown<String>(
+              value: s.terminalTheme,
               items: [
-                for (final id in TerminalThemesX.ids)
-                  DropdownMenuItem(value: id, child: Text(context.tr('term_theme.$id'))),
+                for (final id in TerminalThemesX.ids) AppMenuItem(value: id, label: context.tr('term_theme.$id')),
               ],
               onChanged: (v) => v == null ? null : s.setTerminalTheme(v),
             ),

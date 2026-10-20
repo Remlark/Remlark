@@ -24,7 +24,27 @@ class MainFlutterWindow: NSWindow {
     RegisterGeneratedPlugins(registry: flutterViewController)
     LazyFilePasteboard.shared.attach(messenger: flutterViewController.engine.binaryMessenger)
 
+    // 启动完成后主动激活应用并设为 key window：
+    // 从终端直接运行可执行文件（flutter run / make run）时不经过 LaunchServices，
+    // 系统不一定把新进程切到前台，窗口会出现但拿不到焦点
+    NotificationCenter.default.addObserver(
+      forName: NSApplication.didFinishLaunchingNotification, object: nil, queue: .main
+    ) { [weak self] _ in
+      self?.activateOnLaunch()
+    }
+
     super.awakeFromNib()
+  }
+
+  /// 将应用切为常规前台应用并激活主窗口
+  private func activateOnLaunch() {
+    NSApp.setActivationPolicy(.regular)
+    if #available(macOS 14.0, *) {
+      NSApp.activate()
+    } else {
+      NSApp.activate(ignoringOtherApps: true)
+    }
+    makeKeyAndOrderFront(nil)
   }
 }
 
