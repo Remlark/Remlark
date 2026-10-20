@@ -1,0 +1,262 @@
+{
+  "ubuntu": {
+    "name": "ubuntu",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/ubuntu-linux.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "a85b49c913853e0b06074e62d5bfd44388116cf234f52bf8bbbe583d35a5d256"
+  },
+  "debian": {
+    "name": "debian",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/debian-linux.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "6d19ccc474a0fe870214d9396ca123ef0241c2bb491ad641d705daac3eae2986"
+  },
+  "centos": {
+    "name": "centos",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/centos.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "4ee704b727f583c7df46f30c54c274d89711d7d246f007105a0889447c4a32e6"
+  },
+  "rhel": {
+    "name": "Red Hat Enterprise Linux",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/redhat-linux.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "4e708fd630f45fc406c4e4eeb7b6daa29e9e23ca639820b252c21101b4aa7efa"
+  },
+  "fedora": {
+    "name": "fedora",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/fedora.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "92652651412d17ebb1fb37dd7c208133cbe4ffae62a163c86ee46c1941f00e57"
+  },
+  "rocky": {
+    "name": "rocky",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/rocky-linux.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "f66d6cb38114cf4cb3965f9253d458bf0ffca2b148d08309a4b0e97b1eb91dfa"
+  },
+  "almalinux": {
+    "name": "almalinux",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/alma-linux.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "d19389c71e39e6644aba2f9ca0e3dfb4f1d90e2162ec9fecdc2602dd4102c73d"
+  },
+  "alpine": {
+    "name": "alpine",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/alpine-linux.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "b679bc87845755482da189183a6971efea3e63f19e06dce47bf562f346db66b3"
+  },
+  "arch": {
+    "name": "arch",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/arch-linux.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "c9fd058b6f8ef45dd7fc451d2a5a3508659a150a150cdfe50347f5879c6e0bb6"
+  },
+  "manjaro": {
+    "name": "manjaro",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/manjaro-linux.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "88f56877dbc88005a6b3769e67dddf8c09f86b8bd9f7ae69e08806e8a194edbb"
+  },
+  "opensuse": {
+    "name": "opensuse",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/opensuse.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "b397f9015a07758d4d8aceb8b34307077cafcfe86beee4215762f59e8ff468a9"
+  },
+  "amzn": {
+    "name": "Amazon Linux",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/aws.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "d8054eaffe37e39f2d1979e09243b9de145aea509cbde60b0d4d264219ee2923"
+  },
+  "kali": {
+    "name": "kali",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/kali-linux.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "1cca198b6ba87d94310556d4b729295654ffb5ed2a032e422d4a240e25cb75e5"
+  },
+  "linuxmint": {
+    "name": "linuxmint",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/linux-mint.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "df70f81a693876824674bdea1e6070148b329c1fef8e1fd954b75562187f1b73"
+  },
+  "ol": {
+    "name": "Oracle Linux",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/oracle.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "8e85fe2737d6a7cc4d323b65ad377ba0eb67875175aaf3e53172857790bab577"
+  },
+  "raspbian": {
+    "name": "Raspberry Pi OS",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/raspberry-pi.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "fab41edb4e59a7b8d635c0b8c2274fce297d17b30886524e5a18bd883464140f"
+  },
+  "gentoo": {
+    "name": "gentoo",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/gentoo-linux.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "b258b4ae4db57416eeb002b4743ab109a5fe2c7c21cdb44e939a9aec6bf76d24"
+  },
+  "nixos": {
+    "name": "nixos",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/nixos.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "20cf953237a3c2fd0227930c8b10165cf1cbf5a34cc31f8ae0d7f2d68a573876"
+  },
+  "macos": {
+    "name": "macos",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/apple.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "2287c6c6c4d166217e5ec3b786d103a6b88f91092df806646d1ce4dcab759ea1"
+  },
+  "windows": {
+    "name": "windows",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/microsoft-windows.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "759c31eda1501f7a8b873f82f50a7b83eff2e84fcf48ff599ca2b6e19451a0ce",
+    "content_size": 176
+  },
+  "linux": {
+    "name": "linux",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/linux.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "f843400c7daaeca123c288708c92ab54b20142679c3052d0c1e94d9bf4a98004"
+  },
+  "openwrt": {
+    "name": "openwrt",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/openwrt.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "5b1e1a3ab4232c8b566c2a1fe184cdb4065494086df5aceaaa37ca824a9564e5"
+  },
+  "void": {
+    "name": "void",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/void-linux.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "cfcbb33a1db4e583956140452b308b67da6b70ffcb200d9d9ed023b17b65fce5"
+  },
+  "zorin": {
+    "name": "zorin",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/zorin-linux.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "090900fda93300c3fa12b3d9cf84706f1d5e526da3679fb8334a75d964d4c576"
+  },
+  "endeavouros": {
+    "name": "endeavouros",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/endeavouros-linux.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "e30f4ae196c41ea69ceb2430f9726e5f76f95eedcca8dae11840de9caeace343"
+  },
+  "garuda": {
+    "name": "garuda",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/garuda-linux.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "19f0bbeff6ca3acb6ae3710338cd68ccf6b746cc2a52413e9ad8b9960dc7ead3"
+  },
+  "cachyos": {
+    "name": "cachyos",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/cachyos-linux.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "1e4917c1aea5349c506f92a3fcb12fed00c81229cf471c0c1b38dfc24aa95d67"
+  },
+  "azurelinux": {
+    "name": "azurelinux",
+    "url": "https://raw.githubusercontent.com/homarr-labs/dashboard-icons/main/png/azure-linux.png",
+    "collection": "Dashboard Icons",
+    "source_sha256": "30373d9ce40814c151ba72e2620cbb5769370443925441fffb6007597e353e52"
+  },
+  "deepin": {
+    "name": "deepin",
+    "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/deepin.svg",
+    "collection": "Simple Icons",
+    "source_sha256": "dad2d66d0b1c74e6d80c597545a6c18bd84dbf384a23101d7d109c27cf0f9517"
+  },
+  "freebsd": {
+    "name": "freebsd",
+    "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/freebsd.svg",
+    "collection": "Simple Icons",
+    "source_sha256": "57c61b8658266e79ae3d753d367ebb56d5157e929fc72b2bc6ba7fe7a1059584"
+  },
+  "openbsd": {
+    "name": "openbsd",
+    "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/openbsd.svg",
+    "collection": "Simple Icons",
+    "source_sha256": "f24cc50bc8150a48a06022b70cb949f2fee747972068bafc4c26c9c2fcef3e51"
+  },
+  "netbsd": {
+    "name": "netbsd",
+    "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/netbsd.svg",
+    "collection": "Simple Icons",
+    "source_sha256": "17049a7a40524607e86c04d77036ff976f897c4be6cef25df2fb56aa7ebd9ee1"
+  },
+  "sles": {
+    "name": "SUSE Linux Enterprise",
+    "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/suse.svg",
+    "collection": "Simple Icons",
+    "source_sha256": "718dd111e0c2553a1b7c86e8ef70db8f44bab7e001528b6c3fac6786fef19099"
+  },
+  "slackware": {
+    "name": "slackware",
+    "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/slackware.svg",
+    "collection": "Simple Icons",
+    "source_sha256": "efeef939c245d77970c2b7f23ce78e47a678797c0e6e221bc6a584ddf2714fb2"
+  },
+  "pop": {
+    "name": "Pop!_OS",
+    "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/popos.svg",
+    "collection": "Simple Icons",
+    "source_sha256": "b74950a4c3b1dd2300dc1fad68cfaf45843826408dd328d06497b42379bade1e"
+  },
+  "elementary": {
+    "name": "elementary",
+    "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/elementary.svg",
+    "collection": "Simple Icons",
+    "source_sha256": "da092a1d0868b7c36132fb4da9f9657c1963660df8ce931ff9dab363aebf14a2"
+  },
+  "devuan": {
+    "name": "devuan",
+    "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/devuan.svg",
+    "collection": "Simple Icons",
+    "source_sha256": "9c5f9f298902fbfc9aae4ffab530805fd794a13b23f4546cffd1490760814d58"
+  },
+  "artix": {
+    "name": "artix",
+    "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/artixlinux.svg",
+    "collection": "Simple Icons",
+    "source_sha256": "c934e6c05a5ca0b8eed7786852e4d6ec399d77dec9bfc4d14c6c9379393e45b7"
+  },
+  "mx": {
+    "name": "MX Linux",
+    "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/mxlinux.svg",
+    "collection": "Simple Icons",
+    "source_sha256": "44d723b9a5c8b19c42800678f5ebf5800b2eaa31690c4f52adc381ba7027f187"
+  },
+  "openeuler": {
+    "name": "openEuler",
+    "url": "https://www.openeuler.org/favicon.ico",
+    "collection": "Official website",
+    "source_sha256": "ab0280015a4f91847df51a594aa55968bb63506ac0880b342869e1d141e9fc47"
+  },
+  "anolis": {
+    "name": "Anolis OS",
+    "url": "https://img.alicdn.com/imgextra/i1/O1CN01oJnJZg1yK4RzI4Rx2_!!6000000006559-2-tps-118-118.png",
+    "collection": "Official website",
+    "source_sha256": "1c615ad0d4e4f8a3eef847154e1ec4247697c38b3758199cf27a68de20649e79"
+  },
+  "uos": {
+    "name": "统信 UOS",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/a/ac/Unity_Operating_System%2C_logo.svg",
+    "collection": "Wikimedia Commons (UOS official logo, public-domain geometry)",
+    "source_page": "https://commons.wikimedia.org/wiki/File:Unity_Operating_System,_logo.svg",
+    "source_sha256": "cd76f0ede472bc5f3dc95377ecf029004b17bb12d601d83478eb759044750ad6"
+  },
+  "kylin": {
+    "name": "银河麒麟",
+    "url": "https://www.kylinos.cn/template/1/ky-default/images/favicon.ico",
+    "collection": "Official website",
+    "source_sha256": "684ede51efe9b2545aed05d4c3553ec45221788ac9312e0f485a6add9a87b9dc"
+  }
+}

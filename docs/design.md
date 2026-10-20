@@ -46,6 +46,8 @@
    - keyboard-interactive：提示为密码且已知密码时自动应答，否则逐项弹框。
 3. 主机指纹：首次连接自动记录（accept-new），之后指纹变化时弹出警告，由用户决定是否信任。
 4. 连接成功后后台执行 `uname` + `/etc/os-release` 探测系统，写入主机信息，卡片显示对应系统图标。
+   - 系统标识与图标统一由 `utils/os_registry.dart` 管理，读取 `/etc/os-release` 失败时回退 `/usr/lib/os-release`；优先识别 ID，再按 ID_LIKE 中完整标识的声明顺序回退。
+   - 系统 Logo 存放在 `assets/os_icons/`，每个系统一张 256×256 透明 PNG，统一浅色底板，兼容深浅主题；默认 Logo 内容最大边长 208px，Windows 方形 Logo 单独使用 176px，增加四周留白；来源与原图 SHA-256 记录在 `sources.json`，保留上游许可证。`tools/generate_os_icons.py` 可重新生成（Pillow、resvg-py）。探测到的系统优先于协议默认值，只有未探测到系统的 RDP 主机默认显示 Windows；未知系统保留通用图标。
 
 ## 应用退出
 - 退出（Dock 退出、⌘Q、关闭最后一个窗口）经 `AppLifecycleListener.onExitRequested` 先调用 `AppServices.shutdown()`：停止自动同步 → 关闭所有会话（SSH / VNC / RDP / SFTP）→ 结束 dsh、Codex 子进程 → 关闭数据库，然后才允许退出。数据库必须在引擎关闭前关闭，否则后台 isolate 销毁时 sqlite 清理回调访问已释放的连接导致崩溃。每步限时 3 秒，失败只记日志。

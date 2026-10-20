@@ -476,6 +476,17 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 设置页 Codex 编辑框：模型旁新增推理强度下拉框；保存 Agent 时保留聊天中选择的推理强度；编辑或登录状态变化后丢弃缓存。
   - 测试：`database_migration_test.dart`（schema 1 → 2）、`ai_agent_test.dart`（dsh 可选项与缓存、每轮切换推理强度 / 改回默认 / 中途换模型）、`codex_agent_test.dart`（effort 传入与默认不传、模型推理强度解析）；截图 `09_terminal_ai_codex`。
 
+
+- [已完成] Step 73：补齐系统识别并替换真实 Logo
+  - 用统一系统目录替代探测器与界面中的两份系统列表，补齐 OpenWrt、NetBSD、Slackware、Void、Pop!_OS、Zorin、EndeavourOS、Garuda、CachyOS、Azure Linux、elementary OS、Devuan、Artix、MX Linux；补充 openSUSE、麒麟服务器、CBL-Mariner 等别名。
+  - 原有字母徽标替换为独立品牌 PNG，补齐通用 Linux、macOS 与 Windows Logo；共享 OsIcon 的主机列表、选择器、会话标签与状态栏同步生效，不新增设置或按钮。
+  - ID_LIKE 按完整标识依次匹配，避免子串误判；已探测的系统不再被 RDP 协议强制覆盖成 Windows。图标本地打包，保留来源、摘要及许可证，可用生成脚本重建。
+  - 验证：系统识别与别名、所有资源解码与尺寸、深浅主题和 RDP 图标优先级测试；生成图标总览进行视觉检查。
+
+- [已完成] Step 73.1：调整 Windows Logo 留白
+  - Windows 图标内容最大边长由 208px 缩小至 176px（约 15%），256px 画布与界面底板尺寸不变。生成脚本读取单图 `content_size` 配置，重新生成时保留该比例。
+  - 更新图标总览，检查 20px 与 36px 显示效果。
+
 ## 构建与运行命令
 
 | 命令 | 说明 |

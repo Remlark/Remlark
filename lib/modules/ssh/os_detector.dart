@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:dartssh2/dartssh2.dart';
 
+import '../../utils/os_registry.dart';
+
 /// 远程系统信息
 class OsInfo {
   const OsInfo(this.id, this.name);
@@ -21,7 +23,9 @@ class OsDetector {
   static Future<OsInfo?> detect(SSHClient client) async {
     try {
       final out = await client
-          .run('uname -s 2>/dev/null; cat /etc/os-release 2>/dev/null || sw_vers 2>/dev/null; echo __END__')
+          .run(
+            'uname -s 2>/dev/null; cat /etc/os-release 2>/dev/null || cat /usr/lib/os-release 2>/dev/null || sw_vers 2>/dev/null; echo __END__',
+          )
           .timeout(const Duration(seconds: 8));
       return parse(utf8.decode(out, allowMalformed: true));
     } catch (_) {
@@ -37,7 +41,8 @@ class OsDetector {
 
   /// 解析探测命令输出
   static OsInfo? parse(String output) {
-    if (output.contains('Microsoft Windows') || output.contains('is not recognized')) {
+    if (output.contains('Microsoft Windows') ||
+        output.contains('is not recognized')) {
       return const OsInfo('windows', 'Windows');
     }
     final lines = const LineSplitter().convert(output);
@@ -53,7 +58,11 @@ class OsDetector {
       kv[l.substring(0, i).trim()] = v;
     }
     if (kernel == 'Darwin') {
-      final ver = lines.firstWhere((l) => l.startsWith('ProductVersion'), orElse: () => '').split(':').last.trim();
+      final ver = lines
+          .firstWhere((l) => l.startsWith('ProductVersion'), orElse: () => '')
+          .split(':')
+          .last
+          .trim();
       return OsInfo('macos', 'macOS $ver'.trim());
     }
     if (kernel == 'FreeBSD' || kernel == 'OpenBSD' || kernel == 'NetBSD') {
@@ -69,45 +78,6 @@ class OsDetector {
   }
 
   /// 将 os-release 的 ID 归一化为图标可识别的 id
-  static String normalizeId(String id, String like) {
-    final v = id.toLowerCase();
-    const known = {
-      'ubuntu',
-      'debian',
-      'centos',
-      'rhel',
-      'fedora',
-      'rocky',
-      'almalinux',
-      'alpine',
-      'arch',
-      'opensuse',
-      'opensuse-leap',
-      'opensuse-tumbleweed',
-      'sles',
-      'amzn',
-      'kali',
-      'linuxmint',
-      'deepin',
-      'uos',
-      'openeuler',
-      'kylin',
-      'manjaro',
-      'ol',
-      'raspbian',
-      'gentoo',
-      'nixos',
-      'anolis',
-    };
-    if (known.contains(v)) {
-      return v.startsWith('opensuse') ? 'opensuse' : v;
-    }
-    final l = like.toLowerCase();
-    if (l.contains('rhel') || l.contains('fedora')) return 'rhel';
-    if (l.contains('ubuntu')) return 'ubuntu';
-    if (l.contains('debian')) return 'debian';
-    if (l.contains('arch')) return 'arch';
-    if (l.contains('suse')) return 'opensuse';
-    return v.isEmpty ? 'linux' : v;
-  }
+  static String normalizeId(String id, String like) =>
+      OsRegistry.normalize(id, like);
 }
