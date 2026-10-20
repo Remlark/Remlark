@@ -123,24 +123,46 @@ void main() {
     expect(RdpClient.version, startsWith('3.'));
     final (c, fp) = await connect();
     expect(fp, matches(RegExp('^[0-9a-f]{2}:')));
-    final first = c.copyFrame()!;
+    // 首帧为整屏
+    final firstUpdate = c.takeFrame()!;
+    expect(firstUpdate.full, isTrue);
     expect(c.width, greaterThan(0));
-    expect(first.length, c.width * c.height * 4);
-    expect(first.any((b) => b != 0 && b != 255), isTrue, reason: 'frame should contain image data');
+    final frame = Uint8List.fromList(firstUpdate.patches.single.bgra);
+    expect(frame.length, c.width * c.height * 4);
+    expect(frame.any((b) => b != 0 && b != 255), isTrue, reason: 'frame should contain image data');
+    final first = Uint8List.fromList(frame);
 
-    // 示例服务端会在鼠标位置绘制图标，画面应发生变化
+    // 示例服务端会在鼠标位置绘制图标，画面应发生变化；之后只取走变化区域
     final next = Completer<void>();
     c.onFrame = () {
       if (!next.isCompleted) next.complete();
     };
     c.sendMouse(RdpPointer.move, 200, 200);
     await next.future.timeout(const Duration(seconds: 10));
-    final second = c.copyFrame()!;
+    final update = c.takeFrame()!;
+    expect(update.full, isFalse);
+    var area = 0;
+    for (final p in update.patches) {
+      area += p.w * p.h;
+      expect(p.bgra.length, p.w * p.h * 4);
+      // 把变化区域覆盖到上一帧
+      for (var row = 0; row < p.h; row++) {
+        frame.setRange(
+          ((p.y + row) * c.width + p.x) * 4,
+          ((p.y + row) * c.width + p.x + p.w) * 4,
+          p.bgra,
+          row * p.w * 4,
+        );
+      }
+    }
+    expect(area, lessThan(c.width * c.height), reason: 'only changed regions should be transferred');
     var diff = 0;
-    for (var i = 0; i < second.length; i++) {
-      if (second[i] != first[i]) diff++;
+    for (var i = 0; i < frame.length; i++) {
+      if (frame[i] != first[i]) diff++;
     }
     expect(diff, greaterThan(0));
+    // 已取走，没有新变化时返回 null
+    expect(c.takeFrame(), isNull);
     c.disconnect();
     c.dispose();
 
@@ -198,10 +220,12 @@ void main() {
     expect(s.state, SessionState.connected);
     expect(ui.asked, 1);
     expect((await repo.getByUuid('r1'))!.hostKeyFingerprint, isNotEmpty);
-    for (var i = 0; i < 50 && s.takeFrame() == null; i++) {
+    // 首次取帧为整屏（取走后清空，之后只返回变化区域）
+    var frame = s.takeFrame();
+    for (var i = 0; i < 50 && frame == null; i++) {
       await Future.delayed(const Duration(milliseconds: 100));
+      frame = s.takeFrame();
     }
-    final frame = s.takeFrame();
     expect(frame, isNotNull);
     expect(frame!.full, isTrue);
     expect(frame.patches.single.bgra.length, s.frameWidth * s.frameHeight * 4);

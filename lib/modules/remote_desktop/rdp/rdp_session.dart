@@ -317,13 +317,7 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
   int get frameHeight => _client?.height ?? 0;
 
   @override
-  FrameUpdate? takeFrame() {
-    final c = _client;
-    final px = c?.copyFrame();
-    if (c == null || px == null) return null;
-    // RDP 原生库不提供变化区域，每次整屏
-    return FrameUpdate.fullFrame(frameWidth, frameHeight, px);
-  }
+  FrameUpdate? takeFrame() => _client?.takeFrame();
 
   /// 远程指针形状暂未同步，使用系统指针
   @override

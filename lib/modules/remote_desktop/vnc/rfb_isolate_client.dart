@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import '../../../utils/app_log.dart';
 import '../remote_display.dart';
 import 'rfb_client.dart';
+import 'settle_refresher.dart';
 
 /// 在后台 isolate 中运行 RFB 客户端的代理（多线程渲染流水线的 UI 侧）。
 ///
@@ -199,6 +200,8 @@ class _RfbWorker {
   Future<void> handle(List<Object?> m) async {
     final c = _c;
     if (m[0] == 'key' || m[0] == 'pointer') _activity();
+    // 按键与鼠标点击 / 滚轮之后缩短补刷新等待（纯移动不算）
+    if (m[0] == 'key' || (m[0] == 'pointer' && m[4] == true)) _settle?.noteInput();
     switch (m[0]) {
       case 'connect':
         await _connect(m[1] as String, m[2] as int, m[3] as String?, m[4] as String?);
@@ -241,6 +244,7 @@ class _RfbWorker {
     c.onClipboard = (t) => _toUi.send(['clip', t]);
     c.onBell = () => _toUi.send(const ['bell']);
     c.onClosed = (e) {
+      _settle?.dispose();
       _verifyTimer?.cancel();
       _toUi.send(['closed', e?.toString()]);
     };
@@ -260,6 +264,13 @@ class _RfbWorker {
       return;
     }
     _toUi.send(['connected', c.width, c.height, c.desktopName, c.securityType]);
+    _settle = SettleRefresher(
+      refresh: (rects) {
+        for (final (x, y, w, h) in rects) {
+          c.requestRegionRefresh(x, y, w, h);
+        }
+      },
+    );
     _verifyTimer = Timer.periodic(const Duration(milliseconds: 200), (_) => _maybeVerify(c));
   }
 
@@ -273,45 +284,10 @@ class _RfbWorker {
   /// 上一次按下鼠标的位置：旧菜单在这里，点击别处关闭旧菜单时服务器同样可能漏报“菜单消失”
   (int, int)? _lastPress;
 
-  /// 输入后的变化区域补刷新（事件驱动）：点击后 [_postWindowMs] 内收到更新的区域（如 Finder 先高亮整行、再弹出菜单），
-  /// 在更新停止 [_settleMs] 后对点击以来所有变化区域的外接矩形请求一次完整画面，取到最终状态。
-  /// macOS 服务器有时先发出高亮行（不含菜单）的画面，菜单与其重叠的部分就会暂时缺失，需尽快补上。
-  /// 每次输入最多补 [_maxSettle] 次（补刷新的结果本身也会到达，避免循环）
-  static const _postWindowMs = 500;
-  static const _settleMs = 30;
-  static const _maxSettle = 3;
-  int _postUntil = 0;
-  int _settleCount = 0;
-  final List<(int, int, int, int)> _postRects = [];
-  Timer? _settleTimer;
-
-  /// 记录输入后到达的变化区域，更新停止后补刷新
-  void _notePostInput(RfbClient c, List<(int, int, int, int)> rects) {
-    if (_clock.elapsedMilliseconds > _postUntil || _settleCount >= _maxSettle || rects.isEmpty) return;
-    _postRects.addAll(rects);
-    _settleTimer?.cancel();
-    _settleTimer = Timer(const Duration(milliseconds: _settleMs), () {
-      if (_postRects.isEmpty) return;
-      var l = c.width, t = c.height, r = 0, b = 0;
-      for (final (x, y, w, h) in _postRects) {
-        if (x < l) l = x;
-        if (y < t) t = y;
-        if (x + w > r) r = x + w;
-        if (y + h > b) b = y + h;
-      }
-      // 不清空：之后的补刷新覆盖点击以来所有变化区域的外接矩形（高亮行与菜单可能间隔到达）
-      _settleCount++;
-      // 外扩少许，覆盖阴影与边框
-      const m = 16;
-      c.requestRegionRefresh(l - m, t - m, r - l + 2 * m, b - t + 2 * m);
-    });
-  }
+  /// 画面静止后的区域补刷新（见 SettleRefresher），连接后创建
+  SettleRefresher? _settle;
 
   void _scheduleRefresh(RfbClient c, int x, int y, {required bool pressed}) {
-    // 开启输入后的事件驱动补刷新窗口
-    _postUntil = _clock.elapsedMilliseconds + _postWindowMs;
-    _settleCount = 0;
-    _postRects.clear();
     for (final t in _refreshTimers) {
       t.cancel();
     }
@@ -359,7 +335,7 @@ class _RfbWorker {
         _waiting = false;
         return;
       }
-      _notePostInput(c, rects);
+      _settle?.noteChanges(rects, w, h);
       rects = DirtyMerge.merge(rects, w, h);
     }
     final full = rects == null;
@@ -397,7 +373,7 @@ class _RfbWorker {
   }
 
   void close() {
-    _settleTimer?.cancel();
+    _settle?.dispose();
     for (final t in _refreshTimers) {
       t.cancel();
     }

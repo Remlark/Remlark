@@ -1,7 +1,7 @@
 /*
  * Remlark RDP 胶水库：在 FreeRDP 之上提供一组简单的 C 接口，供 Dart FFI 调用。
  * - 连接在独立线程中运行，事件通过回调通知 Dart（回调可能在任意线程触发）
- * - 画面使用 FreeRDP GDI 合成为 BGRA32，Dart 通过 rmk_rdp_copy_frame 拷贝
+ * - 画面使用 FreeRDP GDI 合成为 BGRA32，Dart 通过 rmk_rdp_take_frame 只取走变化区域
  * - 剪贴板（文本 + 文件）通过 cliprdr 通道实现，文件夹共享通过 rdpdr/drive 通道实现
  */
 #ifndef REMLARK_RDP_H
@@ -61,9 +61,13 @@ RMK_API void rmk_rdp_disconnect(RmkRdp* rdp);
 /* 释放实例（会先断开） */
 RMK_API void rmk_rdp_free(RmkRdp* rdp);
 
-/* 拷贝当前画面（BGRA，行距 = 宽 * 4）到 dst。返回拷贝字节数，缓冲区不足时返回所需字节数的负值 */
-RMK_API int32_t rmk_rdp_copy_frame(RmkRdp* rdp, uint8_t* dst, int32_t dst_size, int32_t* width,
-                                   int32_t* height);
+/* 取出自上次调用以来的变化区域（BGRA）：各区域像素依次紧密写入 dst（每块行距 = 块宽 * 4），
+ * rects 依次写入 [x, y, w, h]，*nrects 为块数（rects 至少容纳 RMK_RDP_MAX_RECTS 块），
+ * *full 为 1 表示整屏（单块覆盖整个画面）。返回写入字节数；没有变化返回 0；
+ * dst 不足时返回所需字节数的负值（变化保留到下次） */
+#define RMK_RDP_MAX_RECTS 16
+RMK_API int32_t rmk_rdp_take_frame(RmkRdp* rdp, uint8_t* dst, int32_t dst_size, int32_t* width,
+                                   int32_t* height, int32_t* rects, int32_t* nrects, int32_t* full);
 
 /* 键盘：scancode 为 RDP 扫描码（扩展键 | 0x100） */
 RMK_API void rmk_rdp_send_key(RmkRdp* rdp, int32_t scancode, int32_t down, int32_t repeat);

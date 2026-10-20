@@ -255,7 +255,7 @@ void main() {
     await server.close();
   });
 
-  test('点击后先后到达的变化区域（高亮行、菜单）在更新停止后按外接矩形补刷新；滚轮不触发', () async {
+  test('点击后先后到达的变化区域（高亮行、菜单）在更新停止后补刷新；滚轮不触发', () async {
     final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     final regions = <List<int>>[];
     late Socket sock;
@@ -317,9 +317,11 @@ void main() {
 
     c.sendPointer(600, 105, 4, input: true);
     await Future.delayed(const Duration(milliseconds: 110));
-    // 两块更新到达后约 30ms：按外接矩形（含 16 像素外扩）补刷新，早于固定的 120ms 补刷新
-    expect(regions, isNotEmpty);
-    expect(regions, anyElement(equals([184, 84, 832, 442])), reason: '覆盖高亮行与菜单的外接矩形');
+    // 更新停止约 30ms 后（早于固定的 120ms 补刷新）补刷新：高亮行与菜单都要被补刷新区域（含 16 像素外扩）覆盖
+    bool covered(List<int> a) =>
+        regions.any((r) => a[0] >= r[0] && a[1] >= r[1] && a[0] + a[2] <= r[0] + r[2] && a[1] + a[3] <= r[1] + r[3]);
+    expect(covered([184, 84, 832, 52]), isTrue, reason: '覆盖高亮行');
+    expect(covered([484, 94, 332, 432]), isTrue, reason: '覆盖菜单（含与高亮行重叠的部分）');
     sock.destroy();
     c.close();
     await server.close();

@@ -13,6 +13,15 @@
 
 typedef struct rmk_clip RmkClipboard;
 
+/* 变化区域最多分别记录的块数，超过后合并为外接矩形 */
+#define RMK_MAX_DIRTY 16
+
+/* 矩形区域 */
+typedef struct
+{
+	INT32 x, y, w, h;
+} RmkRect;
+
 /* 会话 */
 struct rmk_rdp
 {
@@ -29,6 +38,10 @@ struct rmk_rdp
 	UINT32 frame_width;
 	UINT32 frame_height;
 	volatile LONG frame_pending;
+	/* 自上次 Dart 取走以来的变化区域（frame_lock 保护）；dirty_full 表示整屏 */
+	RmkRect dirty[RMK_MAX_DIRTY];
+	int ndirty;
+	BOOL dirty_full;
 
 	/* 连接参数 */
 	char* known_fingerprint;

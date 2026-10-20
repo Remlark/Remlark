@@ -65,13 +65,31 @@ external void rmk_rdp_disconnect(Pointer<RmkRdp> rdp);
 @Native<Void Function(Pointer<RmkRdp>)>()
 external void rmk_rdp_free(Pointer<RmkRdp> rdp);
 
-@Native<Int32 Function(Pointer<RmkRdp>, Pointer<Uint8>, Int32, Pointer<Int32>, Pointer<Int32>)>()
-external int rmk_rdp_copy_frame(
+/// 一次最多返回的变化区域块数（与 RMK_RDP_MAX_RECTS 一致）
+const rmkRdpMaxRects = 16;
+
+/// 取出变化区域；leaf 调用，dst 可直接传 Uint8List（无额外拷贝）
+@Native<
+  Int32 Function(
+    Pointer<RmkRdp>,
+    Pointer<Uint8>,
+    Int32,
+    Pointer<Int32>,
+    Pointer<Int32>,
+    Pointer<Int32>,
+    Pointer<Int32>,
+    Pointer<Int32>,
+  )
+>(isLeaf: true)
+external int rmk_rdp_take_frame(
   Pointer<RmkRdp> rdp,
   Pointer<Uint8> dst,
   int dstSize,
   Pointer<Int32> width,
   Pointer<Int32> height,
+  Pointer<Int32> rects,
+  Pointer<Int32> nrects,
+  Pointer<Int32> full,
 );
 
 @Native<Void Function(Pointer<RmkRdp>, Int32, Int32, Int32)>()

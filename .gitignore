@@ -53,3 +53,6 @@ server/data/
 server/.dart_tool/
 native/rdp/.deps/
 build_native*.log
+
+# Claude Code worktree
+.claude/worktrees/

@@ -48,7 +48,7 @@ static void rmk_set_str(char** dst, const char* src)
 
 /* ---------- 画面 ---------- */
 
-/* 确保画面副本尺寸与 GDI 一致 */
+/* 确保画面副本尺寸与 GDI 一致（重新分配后需整屏刷新） */
 static void rmk_ensure_frame(RmkRdp* rdp, UINT32 w, UINT32 h)
 {
 	if (rdp->frame && rdp->frame_width == w && rdp->frame_height == h)
@@ -57,6 +57,60 @@ static void rmk_ensure_frame(RmkRdp* rdp, UINT32 w, UINT32 h)
 	rdp->frame = calloc((size_t)w * h, 4);
 	rdp->frame_width = rdp->frame ? w : 0;
 	rdp->frame_height = rdp->frame ? h : 0;
+	rdp->dirty_full = TRUE;
+	rdp->ndirty = 0;
+}
+
+/* 两个矩形的外接矩形 */
+static RmkRect rmk_rect_union(RmkRect a, RmkRect b)
+{
+	const INT32 l = a.x < b.x ? a.x : b.x;
+	const INT32 t = a.y < b.y ? a.y : b.y;
+	const INT32 r = (a.x + a.w) > (b.x + b.w) ? (a.x + a.w) : (b.x + b.w);
+	const INT32 btm = (a.y + a.h) > (b.y + b.h) ? (a.y + a.h) : (b.y + b.h);
+	RmkRect u = { l, t, r - l, btm - t };
+	return u;
+}
+
+/* 两个矩形是否相交或相邻（相邻也合并，减少碎块） */
+static BOOL rmk_rect_touch(RmkRect a, RmkRect b)
+{
+	return a.x <= b.x + b.w && b.x <= a.x + a.w && a.y <= b.y + b.h && b.y <= a.y + a.h;
+}
+
+/* 记录变化区域（调用方持有 frame_lock，区域已裁剪）：与已有区域相交则合并，块数超限合并为外接矩形，
+ * 总面积超过半屏改为整屏 */
+static void rmk_add_dirty(RmkRdp* rdp, RmkRect r)
+{
+	if (rdp->dirty_full || r.w <= 0 || r.h <= 0)
+		return;
+	for (int i = 0; i < rdp->ndirty;)
+	{
+		if (rmk_rect_touch(rdp->dirty[i], r))
+		{
+			/* 合并后从列表移除，继续与其余区域比较 */
+			r = rmk_rect_union(rdp->dirty[i], r);
+			rdp->dirty[i] = rdp->dirty[--rdp->ndirty];
+			i = 0;
+			continue;
+		}
+		i++;
+	}
+	if (rdp->ndirty == RMK_MAX_DIRTY)
+	{
+		for (int i = 0; i < rdp->ndirty; i++)
+			r = rmk_rect_union(rdp->dirty[i], r);
+		rdp->ndirty = 0;
+	}
+	rdp->dirty[rdp->ndirty++] = r;
+	int64_t area = 0;
+	for (int i = 0; i < rdp->ndirty; i++)
+		area += (int64_t)rdp->dirty[i].w * rdp->dirty[i].h;
+	if (area * 2 > (int64_t)rdp->frame_width * rdp->frame_height)
+	{
+		rdp->dirty_full = TRUE;
+		rdp->ndirty = 0;
+	}
 }
 
 /* 把 GDI 缓冲区中 [x, y, w, h] 区域拷贝到画面副本，并把 alpha 置为 255 */
@@ -79,6 +133,8 @@ static void rmk_copy_region(RmkRdp* rdp, rdpGdi* gdi, INT32 x, INT32 y, INT32 w,
 			for (INT32 col = 0; col < w; col++)
 				dst[col * 4 + 3] = 0xFF;
 		}
+		RmkRect r = { x, y, w, h };
+		rmk_add_dirty(rdp, r);
 	}
 	LeaveCriticalSection(&rdp->frame_lock);
 	/* 合并通知：Dart 拷贝之前不重复发送 */
@@ -484,26 +540,64 @@ void rmk_rdp_free(RmkRdp* rdp)
 	free(rdp);
 }
 
-int32_t rmk_rdp_copy_frame(RmkRdp* rdp, uint8_t* dst, int32_t dst_size, int32_t* width,
-                           int32_t* height)
+int32_t rmk_rdp_take_frame(RmkRdp* rdp, uint8_t* dst, int32_t dst_size, int32_t* width,
+                           int32_t* height, int32_t* rects, int32_t* nrects, int32_t* full)
 {
+	*nrects = 0;
+	*full = 0;
 	if (!rdp)
 		return 0;
 	EnterCriticalSection(&rdp->frame_lock);
-	const int32_t need = (int32_t)(rdp->frame_width * rdp->frame_height * 4);
-	if (width)
-		*width = (int32_t)rdp->frame_width;
-	if (height)
-		*height = (int32_t)rdp->frame_height;
-	if (!rdp->frame || dst_size < need)
+	*width = (int32_t)rdp->frame_width;
+	*height = (int32_t)rdp->frame_height;
+	/* 先清除通知标志：之后到达的变化会重新通知 */
+	InterlockedExchange(&rdp->frame_pending, 0);
+	if (!rdp->frame || (!rdp->dirty_full && rdp->ndirty == 0))
 	{
 		LeaveCriticalSection(&rdp->frame_lock);
-		return -need;
+		return 0;
 	}
-	memcpy(dst, rdp->frame, (size_t)need);
-	InterlockedExchange(&rdp->frame_pending, 0);
+	RmkRect list[RMK_MAX_DIRTY];
+	int n = rdp->ndirty;
+	if (rdp->dirty_full)
+	{
+		RmkRect all = { 0, 0, (INT32)rdp->frame_width, (INT32)rdp->frame_height };
+		list[0] = all;
+		n = 1;
+	}
+	else
+		memcpy(list, rdp->dirty, sizeof(RmkRect) * (size_t)n);
+	int64_t need = 0;
+	for (int i = 0; i < n; i++)
+		need += (int64_t)list[i].w * list[i].h * 4;
+	if (need > dst_size)
+	{
+		LeaveCriticalSection(&rdp->frame_lock);
+		return (int32_t)-need;
+	}
+	/* 按区域逐行拷贝，像素紧密排列 */
+	const size_t stride = (size_t)rdp->frame_width * 4;
+	uint8_t* out = dst;
+	for (int i = 0; i < n; i++)
+	{
+		const RmkRect r = list[i];
+		const size_t rowBytes = (size_t)r.w * 4;
+		for (INT32 row = 0; row < r.h; row++)
+		{
+			memcpy(out, rdp->frame + (size_t)(r.y + row) * stride + (size_t)r.x * 4, rowBytes);
+			out += rowBytes;
+		}
+		rects[i * 4] = r.x;
+		rects[i * 4 + 1] = r.y;
+		rects[i * 4 + 2] = r.w;
+		rects[i * 4 + 3] = r.h;
+	}
+	*nrects = n;
+	*full = rdp->dirty_full ? 1 : 0;
+	rdp->ndirty = 0;
+	rdp->dirty_full = FALSE;
 	LeaveCriticalSection(&rdp->frame_lock);
-	return need;
+	return (int32_t)need;
 }
 
 void rmk_rdp_send_key(RmkRdp* rdp, int32_t scancode, int32_t down, int32_t repeat)

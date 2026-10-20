@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
+import '../frame_update.dart';
 import 'rdp_bindings.dart';
 
 /// 原生事件类型（与 native/rdp/src/remlark_rdp.h 保持一致）
@@ -116,9 +117,11 @@ class RdpClient {
 
   final int _id;
   late Pointer<RmkRdp> _handle;
-  Pointer<Uint8> _buffer = nullptr;
-  int _bufferSize = 0;
   bool _disposed = false;
+
+  /// takeFrame 的输出参数：[宽, 高, 块数, 是否整屏] 与区域列表（原生内存，复用）
+  final Pointer<Int32> _info = malloc<Int32>(4);
+  final Pointer<Int32> _rects = malloc<Int32>(rmkRdpMaxRects * 4);
 
   int width = 0;
   int height = 0;
@@ -198,25 +201,31 @@ class RdpClient {
     });
   }
 
-  /// 拷贝当前画面（BGRA），无画面时返回 null
-  Uint8List? copyFrame() {
+  /// 取出自上次调用以来的画面变化（只含变化区域），没有变化返回 null。
+  /// 先查询所需大小，再由原生直接写入 Dart 的 Uint8List；两次调用之间若又有新变化则按新大小重试
+  FrameUpdate? takeFrame() {
     if (_disposed) return null;
-    return using((arena) {
-      final w = arena<Int32>();
-      final h = arena<Int32>();
-      var n = rmk_rdp_copy_frame(_handle, _buffer, _bufferSize, w, h);
-      if (n < 0) {
-        // 缓冲区不足，按所需大小重新分配
-        if (_buffer != nullptr) malloc.free(_buffer);
-        _bufferSize = -n;
-        _buffer = malloc<Uint8>(_bufferSize);
-        n = rmk_rdp_copy_frame(_handle, _buffer, _bufferSize, w, h);
+    final w = _info, h = _info + 1, n = _info + 2, full = _info + 3;
+    var size = rmk_rdp_take_frame(_handle, nullptr, 0, w, h, _rects, n, full);
+    while (size < 0) {
+      final data = Uint8List(-size);
+      size = rmk_rdp_take_frame(_handle, data.address, data.length, w, h, _rects, n, full);
+      if (size > 0) {
+        width = w.value;
+        height = h.value;
+        final patches = <FramePatch>[];
+        var off = 0;
+        for (var i = 0; i < n.value; i++) {
+          final r = _rects + i * 4;
+          final rw = r[2], rh = r[3];
+          final len = rw * rh * 4;
+          patches.add(FramePatch(r[0], r[1], rw, rh, Uint8List.sublistView(data, off, off + len)));
+          off += len;
+        }
+        return FrameUpdate(width: width, height: height, full: full.value == 1, patches: patches);
       }
-      if (n <= 0) return null;
-      width = w.value;
-      height = h.value;
-      return Uint8List.fromList(_buffer.asTypedList(n));
-    });
+    }
+    return null;
   }
 
   /// 键盘扫描码（扩展键 | 0x100）
@@ -262,7 +271,7 @@ class RdpClient {
     _disposed = true;
     _clients.remove(_id);
     rmk_rdp_free(_handle);
-    if (_buffer != nullptr) malloc.free(_buffer);
-    _buffer = nullptr;
+    malloc.free(_info);
+    malloc.free(_rects);
   }
 }
