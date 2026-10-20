@@ -1,6 +1,7 @@
-// Native assets 构建钩子：把预先编译好的 RDP 胶水库（native/rdp/scripts/build.sh 生成）
+// Native assets 构建钩子：把预先编译好的 RDP 胶水库（native/rdp/scripts/build.sh 生成）与
+// SSH 加密库（native/ssh_crypto/scripts/build.sh 生成）
 // 声明为代码资源，Flutter 会自动把它打包到各平台应用中（macOS Frameworks / Linux lib / Windows exe 目录）。
-// 若对应平台架构的库尚未编译，则不声明资源，应用中的 RDP 功能会提示“原生库缺失”。
+// 若对应平台架构的库尚未编译，则不声明资源：RDP 功能会提示“原生库缺失”，SSH 退回纯 Dart 加密。
 import 'dart:io';
 
 import 'package:code_assets/code_assets.dart';
@@ -24,11 +25,15 @@ void main(List<String> args) async {
       _ => null,
     };
     if (arch == null) return;
-    final file = input.packageRoot.resolve('build/native/$osDir-$arch/${os.dylibFileName('remlark_rdp')}');
-    output.dependencies.add(file);
-    if (!File.fromUri(file).existsSync()) return;
-    output.assets.code.add(
-      CodeAsset(package: input.packageName, name: 'rdp', linkMode: DynamicLoadingBundled(), file: file),
-    );
+    // 资源名 → 库名：rdp 为 RDP 胶水库，crypto 为 SSH 加密库（native/ssh_crypto）
+    const libs = {'rdp': 'remlark_rdp', 'crypto': 'remlark_crypto'};
+    for (final MapEntry(key: name, value: lib) in libs.entries) {
+      final file = input.packageRoot.resolve('build/native/$osDir-$arch/${os.dylibFileName(lib)}');
+      output.dependencies.add(file);
+      if (!File.fromUri(file).existsSync()) continue;
+      output.assets.code.add(
+        CodeAsset(package: input.packageName, name: name, linkMode: DynamicLoadingBundled(), file: file),
+      );
+    }
   });
 }

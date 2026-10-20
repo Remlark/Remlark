@@ -34,7 +34,9 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  dartssh2: ^4.1.0
+  # 内置副本（含 AES-GCM 原生后端补丁，见 third_party/dartssh2/README.md）
+  dartssh2:
+    path: third_party/dartssh2
   xterm: ^4.0.0
   drift: ^2.35.2
   drift_flutter: ^0.3.1

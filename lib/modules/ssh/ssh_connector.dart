@@ -9,6 +9,7 @@ import '../hosts/vnc_ssh_config.dart';
 import '../hosts/host_repository.dart';
 import '../keys/key_repository.dart';
 import '../keys/key_utils.dart';
+import 'crypto/native_crypto.dart';
 import 'os_detector.dart';
 import 'proxy_socket.dart';
 import 'ssh_interaction.dart';
@@ -46,6 +47,31 @@ class SshConnector {
 
   /// 密码错误时最多重试的次数
   static const _maxAttempts = 5;
+
+  /// 加密算法优先级。dartssh2 的纯 Dart 加密很慢（实测 aes-gcm 约 1MB/s、chacha20-poly1305 约 37MB/s），
+  /// 且运行在 UI 线程，传输时会导致界面卡顿。原生加密库（OpenSSL，硬件 AES 指令）可用时优先 aes-gcm；
+  /// 不可用时优先 chacha20-poly1305，aes-gcm 仅作兜底
+  static SSHAlgorithms get _algorithms => NativeSshCrypto.install() ? _nativeAlgorithms : _dartAlgorithms;
+
+  static const _nativeAlgorithms = SSHAlgorithms(
+    cipher: [
+      SSHCipherType.aes128gcm,
+      SSHCipherType.aes256gcm,
+      SSHCipherType.chacha20poly1305,
+      SSHCipherType.aes128ctr,
+      SSHCipherType.aes256ctr,
+    ],
+  );
+
+  static const _dartAlgorithms = SSHAlgorithms(
+    cipher: [
+      SSHCipherType.chacha20poly1305,
+      SSHCipherType.aes128ctr,
+      SSHCipherType.aes256ctr,
+      SSHCipherType.aes128gcm,
+      SSHCipherType.aes256gcm,
+    ],
+  );
 
   /// 连接到 [target]，必要时通过跳板链与代理
   Future<SshConnection> connect(HostEntry target, SshInteraction ui) async {
@@ -149,6 +175,7 @@ class SshConnector {
         keepAliveInterval: const Duration(seconds: 20),
         handshakeTimeout: const Duration(seconds: 20),
         authTimeout: const Duration(seconds: 120),
+        algorithms: _algorithms,
       );
       try {
         await client.authenticated;

@@ -62,6 +62,7 @@
 
 ## 远程桌面
 - RDP：内嵌 FreeRDP 3（native/rdp，静态链接 OpenSSL，C 胶水库经 Dart FFI 调用，画面在应用内标签页渲染）。
+- SSH 加密：dartssh2 使用内置副本（third_party/dartssh2，仅补丁 AES-GCM 后端可注入），AES-GCM 由原生库 native/ssh_crypto（静态链接 OpenSSL，硬件 AES 指令）经 Dart FFI 计算；原生库缺失时退回纯 Dart 加密并优先 chacha20-poly1305。SFTP 读写请求 64KB，传输进度通知限频 100ms。
   - 登录：保存的密码直接登录；未保存则弹框（可记住）；用户名或密码错误时重新弹框。
   - 证书：首次连接记录 SHA-256 指纹，之后指纹变化时警告并由用户决定是否信任。
   - 显示：GDI 合成 BGRA 画面；未设置固定分辨率时，远程分辨率随窗口大小动态调整（Display Control 通道）。

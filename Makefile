@@ -16,7 +16,7 @@ else
   endif
 endif
 
-.PHONY: all build mac linux windows run deps gen test analyze server server-run clean rdp-lib rdp-test-server
+.PHONY: all build mac linux windows run deps gen test analyze server server-run clean rdp-lib crypto-lib native-lib rdp-test-server
 
 # 默认：按当前平台打包
 all: build
@@ -44,32 +44,46 @@ else
 	powershell -NoProfile -ExecutionPolicy Bypass -File native/rdp/scripts/build.ps1
 endif
 
+# SSH 加密原生库（OpenSSL AES-GCM，复用 rdp-lib 编译的 OpenSSL）
+crypto-lib: rdp-lib
+ifeq ($(CURRENT),mac)
+	native/ssh_crypto/scripts/build.sh x86_64
+	native/ssh_crypto/scripts/build.sh arm64
+else ifeq ($(CURRENT),linux)
+	native/ssh_crypto/scripts/build.sh
+else
+	powershell -NoProfile -ExecutionPolicy Bypass -File native/ssh_crypto/scripts/build.ps1
+endif
+
+# 全部原生库
+native-lib: rdp-lib crypto-lib
+
 # RDP 端到端测试用的服务端（FreeRDP 示例服务端 + 剪贴板测试服务端，不随应用打包）
 rdp-test-server:
 	native/rdp/scripts/build_test_server.sh
 
 # macOS：生成 .app 并打包为 zip
-mac: deps rdp-lib
+mac: deps native-lib
 	flutter build macos --release
 	mkdir -p $(DIST_DIR)
 	cd build/macos/Build/Products/Release && ditto -c -k --keepParent $(APP_NAME).app ../../../../../$(DIST_DIR)/$(APP_NAME)-macos.zip
 	@echo "输出：$(DIST_DIR)/$(APP_NAME)-macos.zip"
 
 # Linux：生成 bundle 并打包为 tar.gz
-linux: deps rdp-lib
+linux: deps native-lib
 	flutter build linux --release
 	mkdir -p $(DIST_DIR)
 	tar -czf $(DIST_DIR)/$(APP_NAME)-linux-x64.tar.gz -C build/linux/x64/release bundle
 	@echo "输出：$(DIST_DIR)/$(APP_NAME)-linux-x64.tar.gz"
 
 # Windows：生成 Release 目录并打包为 zip
-windows: deps rdp-lib
+windows: deps native-lib
 	flutter build windows --release
 	powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path $(DIST_DIR) | Out-Null; Compress-Archive -Force -Path build/windows/x64/runner/Release/* -DestinationPath $(DIST_DIR)/$(APP_NAME)-windows-x64.zip"
 	@echo "输出：$(DIST_DIR)/$(APP_NAME)-windows-x64.zip"
 
 # 运行当前程序（当前平台）
-run: deps rdp-lib
+run: deps native-lib
 ifeq ($(CURRENT),mac)
 	flutter run -d macos
 else ifeq ($(CURRENT),linux)

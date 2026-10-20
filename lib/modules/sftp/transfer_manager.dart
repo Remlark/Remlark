@@ -63,6 +63,19 @@ class TransferTask extends ChangeNotifier {
     return Duration(seconds: ((total - transferred) / speed).ceil());
   }
 
+  /// 进度通知间隔：分块很小（64KB）且速度可达 100MB/s 时，每块都通知会让界面每秒重建上千次
+  static const _progressInterval = Duration(milliseconds: 100);
+  DateTime _lastProgress = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// 传输中的进度更新（限频）
+  void _progress(int value) {
+    transferred = value;
+    final now = DateTime.now();
+    if (now.difference(_lastProgress) < _progressInterval) return;
+    _lastProgress = now;
+    _update();
+  }
+
   void _update() {
     final started = _startedAt;
     if (started != null) {
@@ -233,15 +246,7 @@ class TransferManager extends ChangeNotifier {
       final remotePath = ShellUtils.joinRemote(t.target, relPath);
       await _sftp.ensureRemoteDir(ShellUtils.parentRemote(remotePath));
       final start = base;
-      await _sftp.uploadFile(
-        local,
-        remotePath,
-        cancel: t.cancelToken,
-        onProgress: (n) {
-          t.transferred = start + n;
-          t._update();
-        },
-      );
+      await _sftp.uploadFile(local, remotePath, cancel: t.cancelToken, onProgress: (n) => t._progress(start + n));
       base += size;
       t.transferred = base;
       t.filesDone++;
@@ -261,15 +266,7 @@ class TransferManager extends ChangeNotifier {
       final localPath = p.joinAll([t.target, ...rel.split('/')]);
       Directory(p.dirname(localPath)).createSync(recursive: true);
       final start = base;
-      await _sftp.downloadFile(
-        remotePath,
-        localPath,
-        cancel: t.cancelToken,
-        onProgress: (n) {
-          t.transferred = start + n;
-          t._update();
-        },
-      );
+      await _sftp.downloadFile(remotePath, localPath, cancel: t.cancelToken, onProgress: (n) => t._progress(start + n));
       base += size;
       t.transferred = base;
       t.filesDone++;

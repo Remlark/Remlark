@@ -345,6 +345,14 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 删除仅用于诊断的远程修饰键状态查询（SSH 读取 CGEventFlags），连接后仍释放全部修饰键。
   - 精简剪贴板与 Finder 定位的过程日志；保留连接、认证、锁屏、断开等生命周期日志以及所有警告和错误日志。
 
+- [已完成] Step 55：SSH 原生加密，修复 SFTP / VNC 文件传输仅约 1MB/s 且传输时界面卡顿
+  - 原因：dartssh2 默认优先 aes-gcm，其纯 Dart GCM 实现约 1MB/s，且加解密运行在 UI 线程。
+  - 新增原生库 native/ssh_crypto（libremlark_crypto，静态链接 RDP 构建产出的 OpenSSL），提供 AES-GCM；hook/build.dart 打包为 `crypto` 代码资源，Makefile 新增 crypto-lib / native-lib。
+  - dartssh2 改为内置副本 third_party/dartssh2，补丁：`sshAeadBackend` 可注入；lib/modules/ssh/crypto/native_crypto.dart 以 FFI leaf 调用注入（typed data 直接传指针，无额外拷贝）。
+  - SshConnector：原生库可用时优先 aes-gcm，否则优先 chacha20-poly1305，aes-gcm 兜底。
+  - SFTP 读写请求由 16KB 改为 64KB；传输进度通知限频 100ms，避免每秒上千次界面重建。
+  - 验证：原生与纯 Dart GCM 结果逐字节一致、篡改标签认证失败（test/native_crypto_test.dart）；本机 sshd 实测 SFTP 由约 1MB/s 提升到上传约 90MB/s、下载约 105MB/s。
+
 ## 构建与运行命令
 
 | 命令 | 说明 |
@@ -356,12 +364,14 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
 | `make gen` | 重新生成 drift ORM 代码 |
 | `make server` | 编译同步服务端（dist/remlark-sync-server/bundle/bin/server） |
 | `make server-run TOKEN=xxx` | 本地运行同步服务端 |
+| `make crypto-lib` | 编译 SSH 加密原生库（依赖 rdp-lib 的 OpenSSL；打包与 make run 会自动执行） |
 | `make rdp-lib` | 编译 RDP 原生库（首次约 10 分钟；mac / linux / windows 打包会自动执行） |
 | `make rdp-test-server` | 编译 RDP 端到端测试用的服务端 |
 
 ## 已知限制
 
 - RDP 原生库在本机（macOS x86_64）编译并测试通过，arm64 为交叉编译未实机运行；Linux（build.sh）与 Windows（build.ps1）脚本已编写但未实际构建验证。
+- SSH 加密原生库同上：macOS x86_64 编译测试通过，arm64 交叉编译未实机运行，Linux / Windows 脚本未实际构建验证（缺失时自动退回纯 Dart 加密）。
 - RDP 暂未启用 H.264（AVC）编码，使用 RemoteFX / Progressive / Planar 等编码；暂不支持声音重定向。
 - RDP 远程鼠标指针形状未同步，显示本地指针。
 - RDP 远程复制的文件会立即下载到本地（上限 2GB），超过上限不传输并提示。
