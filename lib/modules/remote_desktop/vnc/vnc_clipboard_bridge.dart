@@ -232,7 +232,6 @@ class VncClipboardBridge {
       existing.add(name);
       tasks.add(tm.upload(f, dir, asName: name == p.basename(f) ? null : name));
     }
-    onNotice?.call('clip.pasting', {'count': files.length, 'dir': dir});
     await TransferManager.waitAll(tasks);
   }
 
@@ -242,7 +241,6 @@ class VncClipboardBridge {
     final root = ShellUtils.joinRemote(await sftp.home(), 'Library/Caches/Remlark/clipboard');
     final dir = ShellUtils.joinRemote(root, '${DateTime.now().millisecondsSinceEpoch}');
     await sftp.ensureRemoteDir(dir);
-    onNotice?.call('clip.pasting', {'count': files.length, 'dir': app});
     final tasks = [for (final f in files) tm.upload(f, dir)];
     if (!await TransferManager.waitAll(tasks)) {
       onNotice?.call('clip.failed', {'detail': 'upload failed'}, error: true);
@@ -317,13 +315,12 @@ class VncClipboardBridge {
       lazy.onProvide = (id) => _provideFile(id, batch);
       final ok = await lazy.offer(remote);
       _localFiles = const [];
-      onNotice?.call(ok ? 'clip.copied' : 'clip.failed', {'count': remote.length, 'detail': 'pasteboard'}, error: !ok);
+      if (!ok) onNotice?.call('clip.failed', {'detail': 'pasteboard'}, error: true);
       return;
     }
     final tm = transfers();
     if (tm == null) return;
     final dir = await _newLocalBatch();
-    onNotice?.call('clip.pulling', {'count': remote.length});
     final sftp = SftpService(conn.client);
     final tasks = <TransferTask>[];
     for (final f in remote) {
@@ -337,7 +334,7 @@ class VncClipboardBridge {
     final ok = await Pasteboard.writeFiles(local);
     // 本地剪贴板现在是这些文件，记录下来，避免被当作新的本地复制
     _localFiles = local;
-    onNotice?.call(ok ? 'clip.pulled' : 'clip.failed', {'count': local.length, 'detail': 'pasteboard'}, error: !ok);
+    if (!ok) onNotice?.call('clip.failed', {'detail': 'pasteboard'}, error: true);
   }
 
   /// 本地粘贴请求某个远程文件时下载（传输进度此时才显示），返回本地路径
@@ -353,7 +350,6 @@ class VncClipboardBridge {
       return null;
     }
     try {
-      onNotice?.call('clip.pulling', {'count': 1});
       final task = tm.download(await SftpService(conn.client).statEntry(remotePath), batch.path);
       final ok = await TransferManager.waitAll([task]);
       if (!ok) {

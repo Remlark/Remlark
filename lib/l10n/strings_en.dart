@@ -248,13 +248,7 @@ const Map<String, String> stringsEn = {
       'RDP native library not built. Run make rdp-lib and rebuild the app.',
   'rdp.resolution.helper':
       'Leave width and height empty to follow the window size',
-  'rdp.drop_hint': 'Drop to paste into the folder or desktop under the pointer (also copied to \\\\tsclient\\Remlark)',
-  'rdp.files_shared':
-      'Sent {count} item(s): paste them remotely or open \\\\tsclient\\Remlark',
-  'rdp.files_pasted':
-      'Pasted {count} item(s) where you dropped them; if they do not appear, press Ctrl+V remotely or open \\\\tsclient\\Remlark',
-  'rdp.files_from_remote':
-      '{count} item(s) copied on the remote desktop are ready to paste locally',
+  'rdp.drop_hint': 'Drop to paste into the folder under the pointer',
   'rdp.files_too_large':
       'Files copied remotely are too large ({mb} MB) and were not transferred',
   'rdp.files_downloading': 'Receiving files copied on the remote desktop…',
@@ -267,14 +261,7 @@ const Map<String, String> stringsEn = {
   'finder.failed': 'Could not read Finder windows on the remote Mac, nothing uploaded: {detail}',
   'clip.no_ssh':
       'Copying files requires an associated SSH host in the host settings',
-  'clip.pasting': 'Pasting {count} item(s) to {dir}',
-  'clip.pulling': 'Copying {count} item(s) from the remote…',
-  'clip.copied':
-      'Copied {count} remote item(s); they transfer when you paste locally',
-  'clip.pulled':
-      'Copied {count} item(s) from the remote, ready to paste locally',
   'clip.failed': 'Clipboard file sync failed: {detail}',
-  'vnc.uploading_to': 'Uploading {count} item(s) to {dir}',
   'vnc.no_transfer_host': 'SSH is off, so files cannot be transferred. Turn on Enable SSH in the host’s VNC settings.',
   'vnc.drop_hint': 'Drop to upload to the folder under the pointer',
   'vnc.locked': 'The remote Mac is locked: the screen may still show the desktop, but clicks have no effect',

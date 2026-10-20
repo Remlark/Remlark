@@ -56,7 +56,7 @@ class _VncViewState extends State<VncView> {
     super.dispose();
   }
 
-  /// 剪贴板桥的提示（开始粘贴、已拉取文件、失败原因）
+  /// 剪贴板桥的失败提示（成功时不提示，传输进度见传输列表）
   void _notice(String key, Map<String, Object> args, {bool error = false}) {
     final ctx = UiUtils.context;
     if (ctx == null) return;
@@ -73,8 +73,7 @@ class _VncViewState extends State<VncView> {
     final remote = dropGlobal == null ? null : _screenKey.currentState?.remoteFromGlobal(dropGlobal);
     final tr = S.of(context);
     try {
-      final dir = await s.uploadFiles(paths, remotePoint: remote);
-      UiUtils.toast(tr.t('vnc.uploading_to', {'count': paths.length, 'dir': dir}));
+      await s.uploadFiles(paths, remotePoint: remote);
     } on FinderLocateException catch (e) {
       UiUtils.toast(tr.t(e.code, {'detail': e.detail ?? ''}), error: true);
     } catch (e) {

@@ -20,7 +20,8 @@ import 'rdp_scancode.dart';
 enum _Attempt { connected, authFailed, certChanged, failed }
 
 /// RDP 会话通知（显示给用户的提示）
-enum RdpNotice { filesFromRemote, filesTooLarge, filesShared, filesPasted }
+/// 需要提示用户的事件（只提示异常；成功时不打扰，进度见状态栏）
+enum RdpNotice { filesTooLarge }
 
 /// RDP 会话：内嵌 FreeRDP（通过 FFI 调用原生胶水库），画面在应用内渲染。
 /// 负责登录流程（保存的密码 / 弹框输入 / 密码错误重试）、证书指纹校验、
@@ -168,7 +169,6 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
       filesDoneKb = filesTotalKb = 0;
       await Pasteboard.writeFiles(paths);
       notifyListeners();
-      onNotice?.call(RdpNotice.filesFromRemote, paths.length);
     };
     c.onClipboardFilesSkipped = (count, mb) => onNotice?.call(RdpNotice.filesTooLarge, mb);
     c.onClipboardFilesProgress = (done, total) {
@@ -280,7 +280,6 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
       if (pasted) await _pasteAt(at.$1, at.$2);
     }
     AppLog.i('rdp', '拖入 ${paths.length} 项：已放入共享目录 $dir 并写入远程剪贴板${pasted ? '，已在 $at 粘贴' : ''}');
-    onNotice?.call(pasted ? RdpNotice.filesPasted : RdpNotice.filesShared, paths.length);
     return paths.length;
   }
 

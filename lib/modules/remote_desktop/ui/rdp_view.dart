@@ -49,14 +49,8 @@ class _RdpViewState extends State<RdpView> {
   void _onNotice(RdpNotice notice, int count) {
     final t = S.of(UiUtils.context!);
     switch (notice) {
-      case RdpNotice.filesFromRemote:
-        UiUtils.toast(t.t('rdp.files_from_remote', {'count': count}));
       case RdpNotice.filesTooLarge:
         UiUtils.toast(t.t('rdp.files_too_large', {'mb': count}), error: true);
-      case RdpNotice.filesShared:
-        UiUtils.toast(t.t('rdp.files_shared', {'count': count}));
-      case RdpNotice.filesPasted:
-        UiUtils.toast(t.t('rdp.files_pasted', {'count': count}));
     }
   }
 
