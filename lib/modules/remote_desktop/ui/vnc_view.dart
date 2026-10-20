@@ -1,7 +1,7 @@
-import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
+import '../../../ui_kit/file_drop_target.dart';
 import '../../../app/theme/app_palette.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../ui_kit/buttons.dart';
@@ -119,7 +119,7 @@ class _VncViewState extends State<VncView> {
             key: const ValueKey('desktop-content'),
             child: s.state != SessionState.connected
                 ? DesktopStatus(tab: s)
-                : DropTarget(
+                : FileDropTarget(
                     onDragEntered: (_) {
                       setState(() => _dragging = true);
                       // 提前建立传输连接，松手后只需查询位置

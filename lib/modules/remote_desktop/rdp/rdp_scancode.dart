@@ -36,6 +36,7 @@ class RdpScancode {
   static const altLeft = 0x38;
   static const winLeft = _ext | 0x5B;
   static const delete = _ext | 0x53;
+  static const keyV = 0x2F;
 
   /// 由物理按键得到扫描码，无法映射返回 null。
   /// [metaAsCtrl] 为 true 时（macOS 习惯）Command 键映射为 Ctrl，使 ⌘C / ⌘V 在远程中生效

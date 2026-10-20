@@ -1,7 +1,7 @@
-import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
+import '../../../ui_kit/file_drop_target.dart';
 import '../../../app/theme/app_palette.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../ui_kit/buttons.dart';
@@ -29,6 +29,9 @@ class RdpView extends StatefulWidget {
 class _RdpViewState extends State<RdpView> {
   bool _dragging = false;
 
+  /// 远程画面，用于把拖放位置换算为远程坐标
+  final _screenKey = GlobalKey<RemoteScreenState>();
+
   RdpSession get s => widget.session;
 
   @override
@@ -52,13 +55,17 @@ class _RdpViewState extends State<RdpView> {
         UiUtils.toast(t.t('rdp.files_too_large', {'mb': count}), error: true);
       case RdpNotice.filesShared:
         UiUtils.toast(t.t('rdp.files_shared', {'count': count}));
+      case RdpNotice.filesPasted:
+        UiUtils.toast(t.t('rdp.files_pasted', {'count': count}));
     }
   }
 
-  Future<void> _drop(List<String> paths) async {
+  /// 发送文件；[dropGlobal] 为拖放松手的全局坐标，用于粘贴到松手处的文件夹
+  Future<void> _drop(List<String> paths, {Offset? dropGlobal}) async {
     if (paths.isEmpty) return;
+    final p = dropGlobal == null ? null : _screenKey.currentState?.remoteFromGlobal(dropGlobal);
     try {
-      await s.dropFiles(paths);
+      await s.dropFiles(paths, at: p == null ? null : (p.dx.round(), p.dy.round()));
     } catch (e) {
       UiUtils.toast('$e', error: true);
     }
@@ -76,16 +83,23 @@ class _RdpViewState extends State<RdpView> {
             key: const ValueKey('desktop-content'),
             child: s.state != SessionState.connected
                 ? DesktopStatus(tab: s)
-                : DropTarget(
+                : FileDropTarget(
                     onDragEntered: (_) => setState(() => _dragging = true),
+                    // 拖动经过时同步移动远程鼠标，便于看清将放到哪个窗口
+                    onDragUpdated: (d) {
+                      final p = _screenKey.currentState?.remoteFromGlobal(d.globalPosition);
+                      if (p != null) s.pointerEvent(p.dx.round(), p.dy.round(), 0);
+                    },
                     onDragExited: (_) => setState(() => _dragging = false),
                     onDragDone: (d) {
                       setState(() => _dragging = false);
-                      _drop(d.files.map((f) => f.path).toList());
+                      _drop(d.files.map((f) => f.path).toList(), dropGlobal: d.globalPosition);
                     },
                     child: Stack(
                       children: [
-                        Positioned.fill(child: RemoteScreen(display: s)),
+                        Positioned.fill(
+                          child: RemoteScreen(key: _screenKey, display: s),
+                        ),
                         if (_dragging) DropHint(text: context.tr('rdp.drop_hint')),
                       ],
                     ),

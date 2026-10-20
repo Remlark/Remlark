@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +7,7 @@ import 'package:pasteboard/pasteboard.dart';
 import 'package:provider/provider.dart';
 import 'package:xterm/xterm.dart';
 
+import '../../../ui_kit/file_drop_target.dart';
 import '../../../app/nav_controller.dart';
 import '../../../app/theme/app_palette.dart';
 import '../../../l10n/app_localizations.dart';
@@ -169,7 +169,7 @@ class _TerminalPaneState extends State<TerminalPane> {
     final settings = context.watch<SettingsController>();
     final theme = TerminalThemesX.byId(settings.terminalTheme, Theme.of(context).brightness);
     final family = settings.terminalFontFamily.trim();
-    return DropTarget(
+    return FileDropTarget(
       onDragEntered: (_) => setState(() => _dragging = true),
       onDragExited: (_) => setState(() => _dragging = false),
       onDragDone: (d) {

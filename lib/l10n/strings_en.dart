@@ -248,9 +248,11 @@ const Map<String, String> stringsEn = {
       'RDP native library not built. Run make rdp-lib and rebuild the app.',
   'rdp.resolution.helper':
       'Leave width and height empty to follow the window size',
-  'rdp.drop_hint': 'Drop to send to the remote desktop: files go to \\\\tsclient\\Remlark and can be pasted remotely',
+  'rdp.drop_hint': 'Drop to paste into the folder or desktop under the pointer (also copied to \\\\tsclient\\Remlark)',
   'rdp.files_shared':
       'Sent {count} item(s): paste them remotely or open \\\\tsclient\\Remlark',
+  'rdp.files_pasted':
+      'Pasted {count} item(s) where you dropped them; if they do not appear, press Ctrl+V remotely or open \\\\tsclient\\Remlark',
   'rdp.files_from_remote':
       '{count} item(s) copied on the remote desktop are ready to paste locally',
   'rdp.files_too_large':

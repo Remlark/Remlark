@@ -20,6 +20,7 @@ class RdpEvent {
   static const clipFiles = 8;
   static const clipFilesSkipped = 9;
   static const clipFilesProgress = 10;
+  static const clipReady = 11;
 }
 
 /// RDP 鼠标标志位
@@ -139,6 +140,9 @@ class RdpClient {
   void Function(int count, int megabytes)? onClipboardFilesSkipped;
   void Function(int doneKb, int totalKb)? onClipboardFilesProgress;
 
+  /// 服务端已确认本地剪贴板内容（[ok] 为 false 表示服务端拒绝）
+  void Function(bool ok)? onClipboardReady;
+
   /// 分发原生事件
   static void _dispatch(int id, int type, int a, int b, int c, int d, Pointer<Utf8> str) {
     String? s;
@@ -175,6 +179,8 @@ class RdpClient {
         client.onClipboardFilesSkipped?.call(a, b);
       case RdpEvent.clipFilesProgress:
         client.onClipboardFilesProgress?.call(a, b);
+      case RdpEvent.clipReady:
+        client.onClipboardReady?.call(a == 1);
     }
   }
 

@@ -74,19 +74,39 @@ class DropHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
+    // 远程画面可能是任意颜色（如资源管理器的白底）：先整体压暗，再用主题配色的卡片显示提示，保证可辨识
     return Positioned.fill(
       child: IgnorePointer(
         child: Container(
-          margin: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: context.palette.accent.withValues(alpha: 0.12),
-            border: Border.all(color: context.palette.accent, width: 1.5),
-            borderRadius: BorderRadius.circular(12),
+            color: Colors.black.withValues(alpha: 0.45),
+            border: Border.all(color: p.accent, width: 3),
           ),
           alignment: Alignment.center,
-          child: Text(
-            text,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+          padding: const EdgeInsets.all(24),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 460),
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+            decoration: BoxDecoration(
+              color: p.panelRaised,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: p.accent, width: 1.5),
+              boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 24, offset: Offset(0, 8))],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.file_download_outlined, size: 28, color: p.accent),
+                const SizedBox(width: 14),
+                Flexible(
+                  child: Text(
+                    text,
+                    style: TextStyle(color: p.text, fontSize: 15, fontWeight: FontWeight.w600, height: 1.4),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

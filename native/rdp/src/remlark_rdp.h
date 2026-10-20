@@ -31,7 +31,8 @@ enum RmkEventType
 	RMK_EV_CLIP_TEXT = 7,      /* 远程复制了文本 str=UTF-8 文本 */
 	RMK_EV_CLIP_FILES = 8,     /* 远程复制的文件已下载到本地 str=以 \n 分隔的本地路径 */
 	RMK_EV_CLIP_FILES_SKIPPED = 9, /* 远程复制的文件过大未下载 a=文件数 */
-	RMK_EV_CLIP_FILES_PROGRESS = 10 /* 远程文件下载进度 a=已完成 KB b=总 KB */
+	RMK_EV_CLIP_FILES_PROGRESS = 10, /* 远程文件下载进度 a=已完成 KB b=总 KB */
+	RMK_EV_CLIP_READY = 11     /* 服务端已确认本地剪贴板格式列表（此后远程粘贴可取到新内容） a=1 成功 / 0 失败 */
 };
 
 /* 事件回调：str 为 malloc 分配的字符串（可能为 NULL），使用后需调用 rmk_rdp_free_string 释放 */

@@ -515,11 +515,14 @@ static UINT rmk_on_server_format_list(CliprdrClientContext* ctx, const CLIPRDR_F
 	return CHANNEL_RC_OK;
 }
 
+/* 服务端确认本地格式列表：通知 Dart，拖放后据此再发送粘贴快捷键 */
 static UINT rmk_on_server_format_list_response(CliprdrClientContext* ctx,
                                                const CLIPRDR_FORMAT_LIST_RESPONSE* resp)
 {
-	WINPR_UNUSED(ctx);
-	WINPR_UNUSED(resp);
+	RmkClipboard* clip = (RmkClipboard*)ctx->custom;
+	if (clip)
+		rmk_emit(clip->rdp, RMK_EV_CLIP_READY, (resp->common.msgFlags & CB_RESPONSE_OK) ? 1 : 0, 0, 0,
+		         0, NULL);
 	return CHANNEL_RC_OK;
 }
 

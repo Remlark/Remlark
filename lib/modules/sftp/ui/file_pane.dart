@@ -1,7 +1,7 @@
-import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../ui_kit/file_drop_target.dart';
 import '../../../app/theme/app_palette.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../l10n/app_localizations.dart';
@@ -331,7 +331,7 @@ class FilePaneState extends State<FilePane> {
       ),
     );
     if (widget.onExternalDrop != null) {
-      body = DropTarget(
+      body = FileDropTarget(
         onDragEntered: (_) => setState(() => _dropHover = true),
         onDragExited: (_) => setState(() => _dropHover = false),
         onDragDone: (d) {

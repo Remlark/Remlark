@@ -363,6 +363,19 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 新增 vnc/settle_refresher.dart：记录所有增量变化区域，画面静止 250ms（输入后 0.5 秒内为 30ms）后对外扩 16 像素、相交合并后的区域请求完整画面；补刷新结果 1 秒内落在已补刷新区域内的变化不再记录，防止循环。取代原先仅在点击后 0.5 秒内生效的补刷新；点击处的固定补刷新与空闲整屏校验保留。
   - 验证：settle_refresher_test（静止后补刷新、持续变化不刷新、相交合并、防循环、输入后加速、大面积整屏）；rfb_isolate_client_test 高亮行与菜单都被补刷新覆盖。
 
+- [已完成] Step 58：文件拖放只由可见的窗口接收
+  - 问题：同时打开 SSH 与 RDP 时，拖文件给 RDP，SSH 也开始上传。desktop_drop 的 DropTarget 全局监听、只按坐标判断，隐藏的会话（工作区 Offstage）、隐藏的页面（IndexedStack）、对话框下层的组件都会收到。
+  - 新增 ui_kit/file_drop_target.dart：仅在 `Visibility.of`（综合所有祖先）为真且所在路由为当前路由时启用；终端、SFTP、VNC、RDP 四处拖放统一改用。
+  - 工作区隐藏会话由 Offstage + TickerMode + ExcludeFocus 改为等价的 `Visibility(maintainState: true)`，以提供可见性作用域。
+  - 验证（test/file_drop_target_test.dart，模拟原生拖放事件）：对照组复现原问题；RDP 与 SSH 叠放、多个 SSH 标签切换、VNC / SFTP / 多 SSH 混合、网格各格、切到其他页面、对话框遮挡、拖动中被隐藏回调离开。
+
+- [已完成] Step 59：RDP 拖放直接粘贴到松手处
+  - 问题：拖入 RDP 的文件只放入 \\tsclient\Remlark 与远程剪贴板，需手动 Ctrl+V；拖放提示在白色画面（如资源管理器）上难以辨认。
+  - RDP 只传输画面与输入，无法查询远程窗口 / 文件夹（Windows 的 SSH 会话与桌面不在同一会话），改为“激活 + 粘贴”：
+    原生剪贴板模块在服务端确认格式列表时发出 RMK_EV_CLIP_READY；dropFiles 收到确认后在松手处单击激活窗口，再发送 Ctrl+V（超时 2 秒则只提示手动粘贴）。拖动经过时同步移动远程鼠标。
+  - 拖放提示：画面整体压暗 + 主题配色卡片（图标 + 文字）+ 强调色边框，任意背景下可辨识（VNC / RDP 共用）。
+  - 验证：rdp_clipboard_test 写入文件剪贴板后收到就绪事件。
+
 ## 构建与运行命令
 
 | 命令 | 说明 |

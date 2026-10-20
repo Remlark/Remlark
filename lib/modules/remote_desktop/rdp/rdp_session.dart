@@ -20,7 +20,7 @@ import 'rdp_scancode.dart';
 enum _Attempt { connected, authFailed, certChanged, failed }
 
 /// RDP 会话通知（显示给用户的提示）
-enum RdpNotice { filesFromRemote, filesTooLarge, filesShared }
+enum RdpNotice { filesFromRemote, filesTooLarge, filesShared, filesPasted }
 
 /// RDP 会话：内嵌 FreeRDP（通过 FFI 调用原生胶水库），画面在应用内渲染。
 /// 负责登录流程（保存的密码 / 弹框输入 / 密码错误重试）、证书指纹校验、
@@ -176,6 +176,11 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
       filesTotalKb = total;
       notifyListeners();
     };
+    c.onClipboardReady = (ok) {
+      final r = _clipReady;
+      _clipReady = null;
+      if (r != null && !r.isCompleted) r.complete(ok);
+    };
 
     final size = _viewSize;
     final fixedW = (host.extra['width'] as num?)?.toInt();
@@ -247,8 +252,13 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
 
   // ---------- 文件传输 ----------
 
-  /// 拖入的文件：复制到共享文件夹，同时放入远程剪贴板（远程中可直接粘贴）
-  Future<int> dropFiles(List<String> paths) async {
+  /// 等待服务端确认本地剪贴板（拖放后粘贴前使用）
+  Completer<bool>? _clipReady;
+
+  /// 拖入的文件：复制到共享文件夹，同时放入远程剪贴板。
+  /// [at] 为松手处的远程坐标：服务端确认剪贴板后，在该处点击激活窗口（资源管理器 / 桌面）并发送 Ctrl+V，
+  /// 文件直接粘贴到松手处的文件夹。RDP 无法查询远程窗口与文件夹，只能借助“激活 + 粘贴”实现
+  Future<int> dropFiles(List<String> paths, {(int, int)? at}) async {
     final dir = sharedDir ?? await _prepareSharedDir();
     sharedDir = dir;
     for (final src in paths) {
@@ -261,9 +271,31 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
       }
     }
     _lastClipFiles = paths.join('\n');
+    final ready = _clipReady = Completer<bool>();
     _client?.setClipboardFiles(paths);
-    onNotice?.call(RdpNotice.filesShared, paths.length);
+    var pasted = false;
+    if (at != null) {
+      // 服务端确认新剪贴板后再粘贴，否则可能粘贴出旧内容；超时则只提示手动粘贴
+      pasted = await ready.future.timeout(const Duration(seconds: 2), onTimeout: () => false);
+      if (pasted) await _pasteAt(at.$1, at.$2);
+    }
+    AppLog.i('rdp', '拖入 ${paths.length} 项：已放入共享目录 $dir 并写入远程剪贴板${pasted ? '，已在 $at 粘贴' : ''}');
+    onNotice?.call(pasted ? RdpNotice.filesPasted : RdpNotice.filesShared, paths.length);
     return paths.length;
+  }
+
+  /// 在远程 (x, y) 处单击激活窗口，再发送 Ctrl+V
+  Future<void> _pasteAt(int x, int y) async {
+    final c = _client;
+    if (c == null) return;
+    _lastX = x;
+    _lastY = y;
+    c.sendMouse(RdpPointer.move, x, y);
+    c.sendMouse(RdpPointer.button1 | RdpPointer.down, x, y);
+    c.sendMouse(RdpPointer.button1, x, y);
+    // 等窗口激活后再粘贴
+    await Future.delayed(const Duration(milliseconds: 150));
+    sendCombo([RdpScancode.ctrlLeft, RdpScancode.keyV]);
   }
 
   Future<void> _copyDir(Directory src, Directory dst) async {

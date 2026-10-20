@@ -88,7 +88,13 @@ void main() {
     // 3. 本地目录 -> 远程（远程按需读取文件内容）
     final up = Directory(p.join(dir.path, 'up'))..createSync();
     File(p.join(up.path, 'hello.txt')).writeAsStringSync('hi there');
+    // 服务端确认格式列表后通知“剪贴板就绪”（拖放后据此再发送 Ctrl+V）
+    final ready = Completer<bool>();
+    c.onClipboardReady = (ok) {
+      if (!ready.isCompleted) ready.complete(ok);
+    };
     c.setClipboardFiles([up.path]);
+    expect(await ready.future.timeout(const Duration(seconds: 10)), isTrue);
     expect(await waitLine('CLIENT_FILES:'), 'CLIENT_FILES:up|up\\hello.txt');
     expect(await waitLine('CLIENT_FILE_DATA:'), 'CLIENT_FILE_DATA:hi there');
 

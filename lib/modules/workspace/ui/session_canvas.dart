@@ -78,19 +78,15 @@ class SessionCanvas extends StatelessWidget {
 }
 
 /// 隐藏会话保留视图状态，但不得获取键盘焦点或驱动动画。
+/// 使用 Visibility（等价于 Offstage + TickerMode + ExcludeFocus），子组件可通过 Visibility.of 判断是否可见，
+/// 例如文件拖放只由可见的会话接收（见 FileDropTarget）
 class _SessionVisibility extends StatelessWidget {
   const _SessionVisibility({required this.visible, required this.child});
   final bool visible;
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => Offstage(
-    offstage: !visible,
-    child: TickerMode(
-      enabled: visible,
-      child: ExcludeFocus(excluding: !visible, child: child),
-    ),
-  );
+  Widget build(BuildContext context) => Visibility(visible: visible, maintainState: true, child: child);
 }
 
 /// 网格标题栏独立响应聚焦手势，不截获终端选词或远程桌面的双击。
