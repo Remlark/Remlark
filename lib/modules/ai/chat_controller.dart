@@ -78,7 +78,7 @@ class ChatController extends ChangeNotifier {
   /// 上一轮是否为终端操作模式（中途切换时在本轮提问前告知 AI）
   bool? _lastOperated;
 
-  /// 在本终端中新建的 dsh 会话 id（载入其他服务器的历史记录后，续问使用它而不是原记录的会话）
+  /// 在本终端中新建的外部会话 id（dsh 会话 / Codex 线程）（载入其他服务器的历史记录后，续问使用它而不是原记录的会话）
   String? _hereExternalId;
 
   /// 一次任务最多的步数（防止 AI 无限循环）
@@ -86,6 +86,10 @@ class ChatController extends ChangeNotifier {
 
   /// 当前会话（未发送消息时为空）
   ChatSession? get session => _session;
+
+  /// 本聊天绑定的 Agent：有消息后固定为开始时使用的 Agent（换 Agent 会让上下文缓存失效，应新建对话）；
+  /// 新对话为 null，使用全局默认 Agent
+  String? get boundAgentUuid => messages.isEmpty ? null : _session?.agentUuid;
 
   /// 新建对话
   void newChat() {
@@ -157,7 +161,8 @@ class ChatController extends ChangeNotifier {
     } else {
       systemPrompt = custom.isEmpty ? _defaultSystemPrompt : custom;
     }
-    var request = operate ? TerminalAgentProtocol.userPrompt(fullPrompt, term.screenText()) : fullPrompt;
+    // 所有模式都附上终端当前屏幕（只给建议时 AI 也需要知道终端在显示什么）
+    var request = term != null ? TerminalAgentProtocol.userPrompt(fullPrompt, term.screenText()) : fullPrompt;
     // 续聊中途切换了是否操作终端：系统提示词只在新会话时发送，因此在本轮提问前附上说明（不显示在界面）
     if (_lastOperated != null && _lastOperated != operate && _session!.externalSessionId != null) {
       request = operate
@@ -186,7 +191,7 @@ class ChatController extends ChangeNotifier {
         emptyRetries = 0;
         final action = TerminalAgentProtocol.parse(text);
         await _showAction(action, text);
-        // 下一步的历史：到本步回复为止的全部对话（dsh 自己保存上下文，不使用；无会话的 Agent 靠它保持整个任务的上下文）
+        // 下一步的历史：到本步回复为止的全部对话（dsh、Codex 自己保存上下文，不使用；无会话的 Agent 靠它保持整个任务的上下文）
         history = _history();
         String? output;
         switch (action.type) {
@@ -262,11 +267,11 @@ class ChatController extends ChangeNotifier {
     final sub = agent
         .send(
           AgentRequest(
-            // dsh 会话由 dsh 自己保存上下文，history 只在会话无法恢复时使用
+            // dsh、Codex 自己保存上下文，history 只在会话无法恢复时使用
             history: history,
             prompt: prompt,
-            // 只续接本服务器上的 dsh 会话：在其他服务器的终端里载入的历史记录新建会话，避免操作错服务器
-            externalSessionId: settings.kind != AgentKind.deepseekCli
+            // 只续接本服务器上的外部会话：在其他服务器的终端里载入的历史记录新建会话，避免操作错服务器
+            externalSessionId: !settings.kind.keepsContext
                 ? null
                 : (_session!.hostName == hostName ? _session!.externalSessionId : _hereExternalId),
             systemPrompt: systemPrompt,
@@ -327,7 +332,7 @@ class ChatController extends ChangeNotifier {
     for (final err in errors) {
       await chats.addMessage(sessionId, 'error', err);
     }
-    // 在其他服务器的终端里续聊时不改写原记录的 dsh 会话（该会话属于原服务器）
+    // 在其他服务器的终端里续聊时不改写原记录的外部会话（该会话属于原服务器）
     final sameHost = _session!.hostName == hostName;
     await chats.touchSession(sessionId, externalSessionId: sameHost ? externalId : null);
     if (externalId != null) _session = await chats.getSession(sessionId);
@@ -369,7 +374,7 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 之前的对话（不保存上下文的 Agent 每次都需要；dsh 只在会话无法恢复时使用）：
+  /// 之前的对话（不保存上下文的 Agent 每次都需要；dsh、Codex 只在会话无法恢复时使用）：
   /// AI 回复使用原始文本（保持 JSON 协议格式），终端输出作为用户消息
   List<AgentMessage> _history() => [
     for (final m in messages)

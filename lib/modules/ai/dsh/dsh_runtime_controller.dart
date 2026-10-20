@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../utils/version_utils.dart';
+import '../agent_config.dart';
+import '../runtime/agent_options.dart';
 import '../runtime/agent_runtime.dart';
 import 'dsh_acp_service.dart';
 import 'dsh_environment.dart';
@@ -187,6 +189,15 @@ class DshRuntimeController extends ChangeNotifier implements AgentRuntime {
     installedVersion = installer?.env.dshVersion;
     notifyListeners();
   }
+
+  /// dsh 的会话记录由所有 Agent 共用，没有单个 Agent 的专属数据
+  @override
+  Future<void> removeAgentData(String agentUuid) async {}
+
+  /// 模型与推理强度来自 dsh 会话公布的配置项（每个 API Key 读取一次并缓存）
+  @override
+  Future<AgentOptions> loadOptions(AgentSettings settings, {bool force = false}) =>
+      _service.options(settings.apiKey, force: force);
 
   void _setStage(DshInstallStage s, String? version) {
     stage = s;

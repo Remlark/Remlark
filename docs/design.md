@@ -47,6 +47,9 @@
 3. 主机指纹：首次连接自动记录（accept-new），之后指纹变化时弹出警告，由用户决定是否信任。
 4. 连接成功后后台执行 `uname` + `/etc/os-release` 探测系统，写入主机信息，卡片显示对应系统图标。
 
+## 应用退出
+- 退出（Dock 退出、⌘Q、关闭最后一个窗口）经 `AppLifecycleListener.onExitRequested` 先调用 `AppServices.shutdown()`：停止自动同步 → 关闭所有会话（SSH / VNC / RDP / SFTP）→ 结束 dsh、Codex 子进程 → 关闭数据库，然后才允许退出。数据库必须在引擎关闭前关闭，否则后台 isolate 销毁时 sqlite 清理回调访问已释放的连接导致崩溃。每步限时 3 秒，失败只记日志。
+
 ## 同步协议
 - 服务端（`server/`，Dart shelf + drift）按访问令牌划分数据空间，存储 `(uuid, updatedAt, deleted, payload)`；payload 为客户端用“同步口令”经 PBKDF2 派生密钥后 AES-GCM 加密的密文，服务端无法解密；建议通过 `--cert/--key` 或反向代理启用 HTTPS。
 - 客户端主机有 `syncEnabled` 与 `syncedAt`：`syncedAt == updatedAt` 为“已同步”，否则为“待同步”，未参与同步为“仅本地”。
@@ -61,13 +64,31 @@
 - DeepSeek Harness（dsh）：第一个运行环境实现（`DshRuntimeController`），由应用安装、更新、移除，不依赖也不修改本机的 node / npm / dsh。
   - 安装（`modules/ai/dsh/dsh_installer.dart`）：dsh 只以 npm 包 `@deepseek-ai/dsh` 发布，先从 nodejs.org 下载最新 LTS 的 Node.js 官方包（按 SHASUMS256.txt 校验），再用这个 Node 自带的 npm 安装 dsh；先装到临时目录并运行 `dsh --version` 验证，再整目录替换，失败或中断不破坏已安装版本。Node 只在缺失或主版本落后最新 LTS 时重装。
   - 目录（应用数据目录下 `dsh/`）：`node`（Node.js）、`runtime`（dsh 及依赖，约 1GB）、`home`（DSH_HOME：profile 与会话记录，升级和移除运行环境时保留）、`workspace`（会话工作目录，空目录）。
-  - 平台差异（安装包名、node/npm 路径、解压方式）由 `DshPlatform` 接口封装，macOS / Linux / Windows 各自实现。
-  - 运行（`dsh_acp_service.dart`）：`node <dsh 入口> --profile acp` 常驻子进程，标准输入输出上走 ACP（Agent Client Protocol，JSON-RPC 2.0，每行一条消息）。首次提问时启动，所有聊天共用；每个 API Key 一个进程（以 `DEEPSEEK_API_KEY` 环境变量传入）；进程退出后下次提问自动重启；安装或升级前结束进程。
+  - 平台差异（安装包名、node/npm 路径）由 `DshPlatform` 接口封装，macOS / Linux / Windows 各自实现；解压使用公共的 `utils/archive/ArchiveExtractor`（同样按平台实现：系统 tar / unzip，Windows 用 System32 的 bsdtar）。
+  - 运行（`dsh_acp_service.dart`）：`node <dsh 入口> --profile acp` 常驻子进程，标准输入输出上走 ACP（Agent Client Protocol，JSON-RPC 2.0，每行一条消息，连接为 dsh 与 Codex 共用的 `runtime/json_rpc_connection.dart`）。首次提问时启动，所有聊天共用；每个 API Key 一个进程（以 `DEEPSEEK_API_KEY` 环境变量传入）；进程退出后下次提问自动重启；安装或升级前结束进程。
   - 会话：每个聊天一个 dsh 会话（`session/new`，会话 id 存为聊天的外部会话 id）；同一进程中直接 `session/prompt` 续问；进程重启后 `session/resume`；恢复失败时新建会话，第一条消息附上之前的对话。配置了模型时按名称匹配会话公布的模型选项并 `session/set_config_option`。
   - 提问结束后继续接收迟到的更新（300ms 内无新更新才结束本轮，还没有回答文本时最多等 5 秒），防止 dsh 偶发先返回结束、后送达最后一条消息时丢失回答；迟到的更新会写日志。
   - 输出：`agent_message_chunk` 为回答，`agent_thought_chunk` 与工具调用标题显示在推理区，`usage_update` 提供上下文占用；dsh 不报告每轮输入 / 输出 token，按文本估算并标注“≈”。
   - 不碰用户的电脑：启动时附加补丁（`DSH_HOME/remlark.patch.yml`）关闭 dsh 的全部自带工具（bash / pwsh / 文件读写与搜索 / jobs / workflow / 子 Agent / 切换目录，以及网络搜索与抓取 / todo / goal / skill / 计划模式，避免模型浪费轮次），dsh 自身的权限请求一律拒绝，不声明文件系统与终端能力；dsh 只负责思考下一步，命令由 Remlark 输入到用户的终端。
-- AI 操作终端（`modules/ai/terminal_agent/`，与具体 Agent 无关，OpenAI 兼容 API 同样适用）：
+- Codex：第二个运行环境实现（`CodexRuntimeController`，`modules/ai/codex/`），参照 GitAstra 的接入方式，由应用安装、更新、移除，不依赖也不修改本机的 codex 与 `~/.codex`。
+  - 安装（`codex_installer.dart`）：从 GitHub Releases（`openai/codex` 最新版本）下载当前平台的完整运行包 `codex-package-<架构>-<平台>.tar.gz`（主程序、执行工具、资源，约 350MB），按发布信息中的 SHA-256 校验；解压到临时目录，运行 `codex --version`（版本须与发布一致）与执行工具 `--help` 验证后整目录替换，失败或中断不破坏已安装版本。版本从运行包的 `codex-package.json` 读取，不启动进程。最新版本查询缓存 30 分钟（GitHub 未登录接口有频率限制）。
+  - 平台差异（发布包名、可执行文件名）由 `CodexPlatform` 接口封装，macOS（apple-darwin）/ Linux（musl 静态包）/ Windows（msvc，.exe）各自实现。
+  - 目录（应用数据目录下 `codex/`）：`runtime`（运行包，升级时整包替换）、`homes/<Agent uuid>`（每个 Codex Agent 独立的 CODEX_HOME：登录凭据与会话记录，仅当前用户可访问，升级与移除运行环境时保留，删除 Agent 或放弃新建时删除）、`workspace`（会话工作目录，空目录，避免读取任何项目文件与 AGENTS.md）。
+  - 运行（`codex_app_server.dart`）：`codex app-server --listen stdio://` 子进程，标准输入输出上走 JSON-RPC。聊天使用常驻进程（每个 Agent 一个，首次提问时启动，退出后自动重启，登录状态变化与安装升级前结束）；设置页读取账号、模型与登录使用短生命周期进程，用完即关闭。同一 CODEX_HOME 的进程启动（启动 + 握手）排队进行：多个进程同时初始化 CODEX_HOME 中的 sqlite 状态库会报 “failed to initialize sqlite state runtime”（新目录上同时读取账号与模型时必现）；握手完成后多个进程可同时运行。
+  - 不碰用户的电脑：启动参数以 `-c features.<名称>=false` 关闭本机命令（shell_tool / unified_exec）、插件与应用、子 Agent、图片生成、浏览器 / 电脑操作、goals、hooks 等功能（新版本中不存在的名称只会被忽略，不会导致启动失败），`web_search="disabled"`；线程只读沙箱、从不请求审批，app-server 发来的请求一律拒绝。Codex 只负责思考下一步，命令由 Remlark 输入到用户的终端。
+  - 会话（`agents/codex_agent.dart`）：每个聊天一个 Codex 线程（`thread/start`，线程 id 存为聊天的外部会话 id），系统提示词（终端操作协议）作为 `baseInstructions` 替换 Codex 默认的编程助手提示词；同一进程中直接 `turn/start` 续问；进程重启后 `thread/resume`；恢复失败时新建线程，第一条消息附上之前的对话。每轮先读取账号，未登录直接提示到设置中登录。模型与推理强度见下文。
+  - 输出：`item/agentMessage/delta` 为回答（没有增量时使用 `item/completed` 的完整消息），`item/reasoning/summaryTextDelta` 显示在推理区，`thread/tokenUsage/updated` 的 `last` 累加为本轮输入 / 输出 token，上下文取最近一次调用；取消时 `turn/interrupt`。
+  - 账号与模型（设置页 Agent 编辑框，`settings/ui/codex_account_panel.dart`）：打开时依次读取账号与模型（不同时启动多个进程，与 GitAstra 一致）；未登录时「登录 ChatGPT」（`account/login/start`，在系统浏览器中打开登录页，等待期间可取消或复制登录链接；与 GitAstra 相同，登录在临时 CODEX_HOME `homes/.login-*` 中进行，成功后只把 `auth.json` 替换到 Agent 的目录，取消或失败时删除临时目录，原登录不受影响），已登录显示邮箱与订阅并可退出；模型下拉框来自 `model/list`，打开编辑框时与登录完成后自动刷新，也可手动刷新，第一项为 Codex 默认模型。Codex Agent 不保存 API Key。
+- 模型与推理强度：运行环境接口 `loadOptions` 读取 Agent 可选的模型（每个模型带支持的推理强度与默认值），`AgentOptionsController` 按 Agent 缓存，聊天窗口与设置页共用。
+  - 聊天输入框：⌘Enter（macOS）/ Ctrl+Enter（Windows、Linux）发送，单独按 Enter 换行（避免误触发送）。终端当前屏幕（最近 30 行）在所有权限模式下自动附上，有选区时另外附带选中内容（不再有“附带终端输出”开关）。
+  - 聊天窗口顶部显示当前聊天标题（新对话显示“新对话”），右侧为历史记录与新对话。输入框上方工具栏：Agent、模型、推理强度三个紧凑下拉菜单，右侧为命令权限；空间不足时优先保留 Agent 名称。Agent 在这里切换（菜单列出全部 Agent 与类型，底部「管理 Agent…」跳到设置页）；设置页只负责添加、编辑、删除 Agent，不再选择当前使用的 Agent。
+  - 聊天绑定 Agent：聊天有消息后固定使用开始时的 Agent（`ChatController.boundAgentUuid`，来自会话记录的 agentUuid）；切换 Agent 时设为以后新聊天的默认，当前聊天已有消息则新建对话（换 Agent 无法续用原上下文与提示词缓存）。其他终端标签中的聊天不受影响，继续使用各自的 Agent。模型与推理强度选择结果保存到该 Agent 的配置（`model`、`reasoningEffort`，数据库 schema 2 新增 `reasoning_effort` 列），每个 Agent 各自记住；切换 Agent 即切换到它的模型与推理强度。第一项为「默认（X）」；切换模型时新模型不支持当前推理强度则改回默认；模型菜单底部可刷新列表；回答进行中不能切换。
+  - dsh：可选项来自会话公布的 ACP 配置项（模型 category=model，推理强度 category=thought_level：off / low / high / max，默认 high），每个 API Key 新建一个会话读取一次并缓存；每轮提问前按配置 `session/set_config_option` 切换（聊天中途切换立即生效），配置为默认时切回该配置项的默认值。
+  - Codex：可选项来自 `model/list`（每个模型支持的推理强度不同）；模型与推理强度随每轮 `turn/start` 传入。Codex 编辑框中也可选择模型与推理强度；登录或退出后丢弃缓存。
+  - OpenAI 兼容 API：模型来自接口的 `GET /models`（`agents/openai_models.dart`，带 API Key 时 Bearer 认证，本地服务如 Ollama 可不填）；没有默认接口地址与默认模型（不再默认 DeepSeek）：必须填写 API 地址并选择模型才能保存，未配置时提问直接提示；推理强度固定为默认、不可选择。界面统一称“OpenAI 兼容 API”（`AgentKind.label`）。设置页模型输入框右侧「获取列表」读取后在下方弹出选择，也可直接输入；API Key 输入框可切换显示。
+  - 运行环境未安装的 dsh / Codex 只显示配置的模型。
+- 运行环境接口另有 `removeAgentData`：删除 Agent 或放弃新建时清理该 Agent 在运行环境中的专属数据（Codex 的 CODEX_HOME；dsh 无专属数据）。聊天续接外部会话按 `AgentKind.keepsContext` 判断（dsh、Codex）。
+- AI 操作终端（`modules/ai/terminal_agent/`，与具体 Agent 无关，Codex、OpenAI 兼容 API 同样适用）：
   - JSON 协议（`terminal_agent_protocol.dart`）：系统提示词约定 Agent 每轮只回复一个 JSON 动作——`run`（一条命令 + 本步说明）、`wait`（命令还在运行，N 秒后再看，2–300）、`answer`（在聊天中回答，任务结束）。回复不是合法动作时整段作为回答，普通问题直接 `answer`。
   - 循环（`ChatController.send`）：用户提问附上终端当前屏幕 → Agent 回复动作 → 执行 → 把终端新增输出（`AnsiUtils` 去掉控制序列、处理 `\r` 进度覆盖，超长保留末尾 12000 字符）作为下一轮提问 → 直到 `answer`。每一步都是一次独立提问，命令执行多久都可以；单次任务最多 200 步。没有收到回复时请 AI 重新回复一次，仍没有则在聊天中提示，任务不会悄悄结束。
   - 上下文：同一个聊天（直到「新对话」）的所有步骤与提问共享上下文。dsh 全部发到同一个 dsh 会话，由 dsh 保存；不保存上下文的 Agent（OpenAI 兼容 API）每一步都重新带上整个对话：用户问题、AI 的原始 JSON 回复（界面显示整理后的文字）、终端输出。

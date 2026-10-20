@@ -1,5 +1,6 @@
 import 'agent_config.dart';
 import 'agent_interface.dart';
+import 'agents/codex_agent.dart';
 import 'agents/deepseek_harness_agent.dart';
 import 'agents/openai_compatible_agent.dart';
 
@@ -13,6 +14,8 @@ class AgentFactory {
         return DeepSeekHarnessAgent(s);
       case AgentKind.openaiApi:
         return OpenAiCompatibleAgent(s);
+      case AgentKind.codex:
+        return CodexAgent(s);
     }
   }
 }

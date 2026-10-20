@@ -10,7 +10,7 @@ import 'package:remlark/modules/ai/agent_interface.dart';
 import 'package:remlark/modules/ai/agents/deepseek_harness_agent.dart';
 import 'package:remlark/modules/ai/chat_controller.dart';
 import 'package:remlark/modules/ai/chat_repository.dart';
-import 'package:remlark/modules/ai/dsh/acp_connection.dart';
+import 'package:remlark/modules/ai/runtime/json_rpc_connection.dart';
 import 'package:remlark/modules/ai/dsh/dsh_acp_service.dart';
 import 'package:remlark/modules/ai/terminal_agent/command_permission.dart';
 import 'package:remlark/modules/ai/terminal_agent/read_only_commands.dart';
@@ -51,9 +51,9 @@ class FakeAcpAgent {
   Completer<void>? holdPrompt;
   Map<String, dynamic>? _pendingPrompt;
 
-  late final AcpConnection connection = () {
+  late final JsonRpcConnection connection = () {
     _fromClient.stream.transform(utf8.decoder).transform(const LineSplitter()).listen(_onLine);
-    return AcpConnection(_toClient.stream, _fromClient.sink, onClose: () async => _toClient.close());
+    return JsonRpcConnection(_toClient.stream, _fromClient.sink, onClose: () async => _toClient.close());
   }();
 
   List<String> get methods => requests.map((r) => r['method'] as String).toList();
@@ -78,6 +78,17 @@ class FakeAcpAgent {
             {'value': '["deepseek-official","deepseek-v4-pro"]', 'name': 'deepseek-v4-pro'},
           ],
         },
+      ],
+    },
+    {
+      'id': 'reasoning_effort',
+      'category': 'thought_level',
+      'currentValue': 'high',
+      'options': [
+        {'value': 'off', 'name': 'Off'},
+        {'value': 'low', 'name': 'Low'},
+        {'value': 'high', 'name': 'High'},
+        {'value': 'max', 'name': 'Max'},
       ],
     },
   ];
@@ -549,8 +560,15 @@ void terminalAgentTests() {
     c.permission = CommandPermission.suggestOnly;
     await c.send(settings, '怎么看硬盘');
     expect(fake.prompts.last, startsWith('[The user turned off terminal control.'));
+    // 只给建议时也附上终端当前屏幕
+    expect(fake.prompts.last, contains('[Current terminal screen]'));
+    expect(fake.prompts.last, contains('root@web-01:~#'));
     expect(c.messages.last.content, '用 `df -h` 查看');
     expect(term.typed, isEmpty);
+    // 聊天有消息后绑定开始时的 Agent；新对话解除绑定
+    expect(c.boundAgentUuid, settings.uuid);
+    c.newChat();
+    expect(c.boundAgentUuid, isNull);
     c.dispose();
     await db.close();
   });
@@ -578,7 +596,7 @@ void terminalAgentTests() {
     term.onType = (cmd, submit) => Future<void>.delayed(const Duration(milliseconds: 30), () => term.emit('$cmd\r\n/dev/vda1 100G\r\n# '));
     final c = ChatController(chats: ChatRepository(db), tokens: TokenRepository(db), hostName: 'web-01', terminal: term)
       ..permission = CommandPermission.autoAll;
-    final api = AgentSettings(uuid: 'o1', name: 'API', kind: AgentKind.openaiApi, endpoint: 'http://127.0.0.1:${server.port}', createdAt: 0);
+    final api = AgentSettings(uuid: 'o1', name: 'API', kind: AgentKind.openaiApi, endpoint: 'http://127.0.0.1:${server.port}', model: 'test-model', createdAt: 0);
 
     await c.send(api, '硬盘多大');
     // 第 2 步：系统提示 + 用户问题 + AI 原始 JSON + 终端输出（作为本次提问）
@@ -709,5 +727,53 @@ void terminalAgentTests() {
     a.dispose();
     b.dispose();
     await db.close();
+  });
+
+  test('DeepSeek Harness：可选模型与推理强度来自会话配置项，并按 API Key 缓存', () async {
+    final fake = FakeAcpAgent();
+    final service = DshAcpService(launcher: (_) async => fake.connection, workspace: () async => '/tmp/rmk-ws');
+    final opts = await service.options('sk-test');
+    expect(opts.models.map((m) => m.id), ['deepseek-v4-flash', 'deepseek-v4-pro']);
+    expect(opts.defaultModel?.id, 'deepseek-v4-flash');
+    expect(opts.models.first.efforts, ['off', 'low', 'high', 'max']);
+    expect(opts.models.first.defaultEffort, 'high');
+    await service.options('sk-test');
+    expect(fake.methods.where((m) => m == 'session/new').length, 1);
+    await service.shutdown();
+  });
+
+  test('DeepSeek Harness：每轮按配置切换推理强度，改回默认时恢复会话默认值', () async {
+    final fake = FakeAcpAgent();
+    final service = DshAcpService(launcher: (_) async => fake.connection, workspace: () async => '/tmp/rmk-ws');
+    const base = AgentSettings(uuid: 'a1', name: 'DSH', kind: AgentKind.deepseekCli, createdAt: 0);
+    List<Map<String, dynamic>> sets() => [
+      for (final r in fake.requests)
+        if (r['method'] == 'session/set_config_option') (r['params'] as Map).cast<String, dynamic>(),
+    ];
+
+    final events = await collect(
+      DeepSeekHarnessAgent(
+        base.copyWith(reasoningEffort: 'max'),
+        service: service,
+      ).send(const AgentRequest(history: [], prompt: '1')),
+    );
+    final sid = events.whereType<AgentSessionId>().single.id;
+    expect(sets().map((p) => (p['configId'], p['value'])), [('reasoning_effort', 'max')]);
+
+    // 同一会话中改为默认模型与默认推理强度：推理强度切回 high，模型本来就是默认不需要切换
+    await collect(
+      DeepSeekHarnessAgent(base, service: service).send(AgentRequest(history: const [], prompt: '2', externalSessionId: sid)),
+    );
+    expect(sets().map((p) => (p['configId'], p['value'])), [('reasoning_effort', 'max'), ('reasoning_effort', 'high')]);
+
+    // 中途切换模型
+    await collect(
+      DeepSeekHarnessAgent(
+        base.copyWith(model: 'deepseek-v4-pro'),
+        service: service,
+      ).send(AgentRequest(history: const [], prompt: '3', externalSessionId: sid)),
+    );
+    expect(sets().last['value'], '["deepseek-official","deepseek-v4-pro"]');
+    await service.shutdown();
   });
 }

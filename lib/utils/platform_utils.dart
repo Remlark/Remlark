@@ -67,6 +67,17 @@ class PlatformUtils {
     }
   }
 
+  /// 在系统默认浏览器中打开网址
+  static Future<void> openUrl(String url) async {
+    if (Platform.isMacOS) {
+      await Process.run('open', [url]);
+    } else if (Platform.isWindows) {
+      await Process.run('rundll32', ['url.dll,FileProtocolHandler', url]);
+    } else {
+      await Process.run('xdg-open', [url]);
+    }
+  }
+
   /// 将文件权限设置为仅当前用户可读写（非 Windows）
   static Future<void> restrictPermissions(String path) => _chmod('600', path);
 

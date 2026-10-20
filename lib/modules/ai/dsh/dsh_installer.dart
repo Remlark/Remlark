@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
 import '../../../l10n/app_localizations.dart';
+import '../../../utils/archive/archive_extractor.dart';
 import '../../../utils/download_utils.dart';
 import '../../../utils/version_utils.dart';
 import 'dsh_environment.dart';
@@ -123,7 +124,7 @@ class DshInstaller {
       final out = Directory(p.join(staging.path, 'out'));
       await out.create();
       try {
-        await env.platform.extract(archive, out);
+        await ArchiveExtractor.current().extract(archive, out);
       } catch (e) {
         throw DshException(_t('dsh.err.extract', {'error': '$e'}));
       }

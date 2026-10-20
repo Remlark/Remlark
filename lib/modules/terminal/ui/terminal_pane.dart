@@ -211,7 +211,6 @@ class _TerminalPaneState extends State<TerminalPane> {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsController>();
     final theme = TerminalThemesX.byId(settings.terminalTheme, Theme.of(context).brightness);
-    final family = settings.terminalFontFamily.trim();
     return FileDropTarget(
       onDragEntered: (_) => setState(() => _dragging = true),
       onDragExited: (_) => setState(() => _dragging = false),
@@ -236,7 +235,8 @@ class _TerminalPaneState extends State<TerminalPane> {
                 theme: theme,
                 textStyle: TerminalStyle(
                   fontSize: settings.terminalFontSize,
-                  fontFamily: family.isEmpty ? (_isApple ? 'Menlo' : 'monospace') : family,
+                  // 使用系统等宽字体（macOS 为 Menlo），不提供自定义
+                  fontFamily: _isApple ? 'Menlo' : 'monospace',
                 ),
                 shortcuts: _shortcuts,
                 onKeyEvent: _onKey,

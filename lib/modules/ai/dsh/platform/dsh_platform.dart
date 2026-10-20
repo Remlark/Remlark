@@ -5,7 +5,7 @@ import 'dsh_platform_linux.dart';
 import 'dsh_platform_macos.dart';
 import 'dsh_platform_windows.dart';
 
-/// dsh 运行环境中与平台相关的部分：Node.js 安装包名称、目录布局与解压方式。
+/// dsh 运行环境中与平台相关的部分：Node.js 安装包名称与目录布局（解压见 ArchiveExtractor）。
 /// 每个平台各自实现，修改时三个平台需要一起改。
 abstract class DshPlatform {
   /// 当前平台的实现
@@ -30,6 +30,4 @@ abstract class DshPlatform {
   /// PATH 分隔符
   String get pathSeparator;
 
-  /// 解压 Node.js 安装包 [archive] 到 [dest]
-  Future<void> extract(File archive, Directory dest);
 }

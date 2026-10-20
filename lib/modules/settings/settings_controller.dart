@@ -11,7 +11,6 @@ class SettingsController extends ChangeNotifier {
   Locale _locale = const Locale('zh');
   ThemeMode _themeMode = ThemeMode.dark;
   double _terminalFontSize = 14;
-  String _terminalFontFamily = '';
   String _terminalTheme = 'auto';
   bool _copyOnSelect = false;
   String _accent = 'sage';
@@ -19,7 +18,6 @@ class SettingsController extends ChangeNotifier {
   Locale get locale => _locale;
   ThemeMode get themeMode => _themeMode;
   double get terminalFontSize => _terminalFontSize;
-  String get terminalFontFamily => _terminalFontFamily;
   String get terminalTheme => _terminalTheme;
   bool get copyOnSelect => _copyOnSelect;
 
@@ -30,7 +28,6 @@ class SettingsController extends ChangeNotifier {
     'ui.locale',
     'ui.theme',
     'term.fontSize',
-    'term.fontFamily',
     'term.theme',
     'term.copyOnSelect',
     'ui.accent',
@@ -54,7 +51,6 @@ class SettingsController extends ChangeNotifier {
       _ => ThemeMode.dark,
     };
     _terminalFontSize = double.tryParse(m['term.fontSize'] ?? '') ?? 14;
-    _terminalFontFamily = m['term.fontFamily'] ?? '';
     _terminalTheme = m['term.theme'] ?? 'auto';
     _copyOnSelect = m['term.copyOnSelect'] == '1';
     _accent = m['ui.accent'] ?? 'sage';
@@ -79,13 +75,6 @@ class SettingsController extends ChangeNotifier {
   Future<void> setTerminalFontSize(double v) async {
     _terminalFontSize = v;
     await _repo.set('term.fontSize', '$v');
-    notifyListeners();
-  }
-
-  /// 设置终端字体
-  Future<void> setTerminalFontFamily(String v) async {
-    _terminalFontFamily = v;
-    await _repo.set('term.fontFamily', v);
     notifyListeners();
   }
 

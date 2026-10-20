@@ -437,6 +437,44 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 问题：密钥页常驻于 IndexedStack，只在首次创建时加载列表；在主机编辑器中生成 / 导入的密钥（以及同步、导入数据写入的密钥）不会出现，需在密钥页再操作一次才刷新。
   - `KeyRepository` 改为 ChangeNotifier，保存、删除后通知；密钥页监听并重新加载。
   - 测试：`test/key_repository_test.dart` 验证保存与删除都会通知。
+- [已完成] Step 71：接入 Codex Agent
+  - 参照 GitAstra 的 Codex 接入：应用内从 GitHub Releases 下载完整运行包（SHA-256 校验、验证后整目录替换），以 `codex app-server` 子进程（stdio JSON-RPC）运行；每个 Agent 独立 CODEX_HOME，可登录不同 ChatGPT 账号。
+  - 对接现有接口：`AgentKind.codex`、`CodexAgent implements AiAgent`（线程续接 / 恢复 / 中断、流式回答与推理、真实 token 用量）、`CodexRuntimeController implements AgentRuntime`（安装 / 更新 / 移除），在 `AgentFactory` 与 `AgentRuntimes` 注册；终端操作沿用 dsh 的 JSON 协议：终端输出作为下一轮提问发给 Codex，Codex 回复的命令由 Remlark 输入终端。
+  - 关闭 Codex 的本机命令、插件、子 Agent、网络搜索等功能，线程只读、不请求审批，Codex 不碰用户的电脑。
+  - 设置页：Agent 编辑框新增 Codex 类型，显示运行环境状态、账号（登录 ChatGPT / 退出登录，登录中可取消或复制链接）与模型下拉框；模型在打开时与登录完成后自动刷新，可手动刷新。放弃新建或删除 Agent 时删除其 CODEX_HOME（`AgentRuntime.removeAgentData`）。
+  - 公共化：dsh 的 ACP 连接改为 dsh 与 Codex 共用的 `runtime/json_rpc_connection.dart`（`JsonRpcConnection`）；解压改为公共的 `utils/archive/ArchiveExtractor`（各平台实现）；新增 `PlatformUtils.openUrl`。
+  - 测试：`test/codex_agent_test.dart`（假 app-server：新线程参数、流式输出与用量、续问 / 恢复 / 恢复失败附历史、未登录提示、取消中断、账号与模型）、`test/codex_installer_test.dart`（本地 HTTP 模拟发布：安装、升级、校验失败保留旧版本、移除）；截图 `09_agent_dialog_codex`。已用本机真实 codex 0.162.1 验证启动参数、模型列表、`thread/start` 参数与登录链接获取。
+  - 尚未验证：登录后真实对话（需要 ChatGPT 账号登录）；Windows / Linux 安装流程未实机验证。
+- [已完成] Step 71.1：修复 Codex 刚安装后报 “failed to initialize sqlite state runtime”
+  - 原因：编辑框同时读取账号与模型，在新的 CODEX_HOME 上同时启动两个 app-server，同时初始化 sqlite 状态库，其中一个失败（用真实 codex 0.163.0 复现）。
+  - 修复（参照 GitAstra 的做法）：编辑框先读账号、再读模型，不同时启动进程；登录改为在临时 CODEX_HOME 中进行，成功后 `adoptLogin` 只替换凭据文件，登录进程不占用 Agent 自己的目录。另外 `CodexAppServer.open` 按 CODEX_HOME 排队启动作为兜底（聊天窗口读取模型时可能与其他操作同时发生），前一个握手完成后再启动下一个；启动后仍可同时运行。测试：`codex_agent_test.dart` 验证启动不重叠（去掉排队时失败），并用真实 codex 在新目录上连续 5 轮同时打开 3 个进程均成功；`codex_installer_test.dart` 验证采用登录只替换凭据、删除临时目录；真实 codex 验证登录中临时目录存在、取消后被删除。
+- [已完成] Step 72.5：修复退出时崩溃
+  - 现象：从 Dock 退出时弹出崩溃提示。崩溃报告（DiagnosticReports/remlark-*.ips）显示 EXC_BAD_ACCESS @ 0x0：引擎关闭时数据库所在的后台 isolate 被直接销毁，sqlite 语句的清理回调（`sqlite3_finalize` / `sqlite3_changes`）在连接释放后运行。
+  - 修复：`main.dart` 注册 `AppLifecycleListener.onExitRequested`，退出前调用 `AppServices.shutdown()`：停止自动同步、关闭所有会话、结束 dsh / Codex 子进程，最后关闭数据库；每步限时 3 秒并忽略错误，退出不会卡住。日志记录“退出：释放资源”。
+- [已完成] Step 72.4：OpenAI 兼容 API 去掉 DeepSeek 默认值并统一名称
+  - 去掉默认接口地址 https://api.deepseek.com 与默认模型 deepseek-chat（及输入框占位）；API 地址与模型都填写后才能保存，未配置时提问直接提示（不发请求），“获取列表”在未填地址时提示先填写。
+  - 名称统一为“OpenAI 兼容 API / OpenAI-compatible API”（`AgentKind.label`），用于新建 Agent 默认名称、类型切换、Agent 菜单与设置列表。
+  - 测试：`openai_models_test.dart` 新增无地址、无模型时直接报错。
+- [已完成] Step 72.3：聊天布局、Agent 绑定、OpenAI 模型列表、删除终端字体设置
+  - 删除“附带终端输出”开关：终端当前屏幕在所有权限模式下自动附上（原来只给建议模式下不附），选区仍单独附带。
+  - 布局：Agent / 模型 / 推理强度移到输入框上方工具栏（原开关位置），与命令权限同一行；顶部显示当前聊天标题。Agent 菜单名称与类型相同时不重复显示类型；空间不足先截断模型名。
+  - 切换 Agent：当前聊天已有消息则新建对话（聊天绑定开始时的 Agent，换 Agent 无法命中上下文缓存），其他终端标签的聊天不受影响。
+  - OpenAI 兼容 API：设置页模型框右侧「获取列表」读取 `/models` 后弹出选择（可直接输入），API Key 可切换显示、提示本地服务可留空；聊天中也可从模型列表选择，推理强度固定为默认。
+  - 删除终端字体设置（手动输入字体名体验差）：终端固定使用系统等宽字体（macOS 为 Menlo），旧配置忽略。
+  - 测试：`openai_models_test.dart`（地址处理、/models 读取与认证、聊天可选项）、`ai_agent_test.dart`（只给建议也附屏幕、聊天绑定 Agent）、截图测试中验证切换 Agent 新建对话；截图 `09_agent_dialog_openai`、`09_terminal_ai_agent_menu`。
+- [已完成] Step 72.2：聊天改为 ⌘Enter / Ctrl+Enter 发送
+  - 单独按 Enter 经常误触发送：改为 ⌘Enter（macOS）/ Ctrl+Enter（Windows、Linux）发送，Enter 换行；输入框提示按平台显示快捷键。
+  - 测试：`chat_send_key_test.dart`（快捷键判断）；截图测试中验证 Enter 不发送、Ctrl+Enter 发送。
+- [已完成] Step 72.1：Agent 改在聊天窗口中切换
+  - 聊天窗口顶部改为一组紧凑下拉菜单：Agent、模型、推理强度；Agent 菜单列出全部 Agent（附类型），底部「管理 Agent…」跳到设置页。输入框上方工具栏恢复为附带终端输出、命令权限与选区提示。
+  - 设置页 AI Agent 去掉“当前使用”单选与标签，只负责添加、编辑、删除；说明文字改为“使用哪个 Agent 在聊天窗口中切换”。
+- [已完成] Step 72：聊天窗口切换模型与推理强度
+  - 每个 Agent 保存自己的模型与推理强度：`AgentSettings.reasoningEffort`，数据库 schema 1 → 2 新增 `agent_configs.reasoning_effort`（迁移保留旧数据，默认为空 = 模型默认）。
+  - `AgentRuntime.loadOptions` 读取可选模型与推理强度（`runtime/agent_options.dart`），`AgentOptionsController` 按 Agent 缓存。dsh 从会话配置项读取（模型 + off/low/high/max），Codex 从 `model/list` 读取（每个模型不同）；OpenAI 兼容 API 不支持，推理强度固定为默认。
+  - 聊天窗口：输入框上方工具栏新增模型、推理强度两个紧凑下拉菜单（原选区提示改为“附带终端输出”的悬停说明）；切换模型时不支持的推理强度改回默认；模型菜单可刷新列表；回答中不能切换。
+  - 生效：dsh 每轮提问前按配置 `session/set_config_option`（中途切换立即生效，改回默认时恢复会话默认值）；Codex 每轮 `turn/start` 带上 model 与 effort。
+  - 设置页 Codex 编辑框：模型旁新增推理强度下拉框；保存 Agent 时保留聊天中选择的推理强度；编辑或登录状态变化后丢弃缓存。
+  - 测试：`database_migration_test.dart`（schema 1 → 2）、`ai_agent_test.dart`（dsh 可选项与缓存、每轮切换推理强度 / 改回默认 / 中途换模型）、`codex_agent_test.dart`（effort 传入与默认不传、模型推理强度解析）；截图 `09_terminal_ai_codex`。
 
 ## 构建与运行命令
 
@@ -464,4 +502,5 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
 - VNC 剪贴板为 RFB 标准文本剪贴板（Latin-1，兼容 UTF-8 服务器）；VNC 协议没有文件传输标准，文件传输通过内置 SSH（兼容旧关联）经 SFTP 完成；增强剪贴板和 Finder/锁屏检测面向远程 macOS。
 - AI 操作终端时命令是否结束由 Agent 根据输出判断；全屏程序（vim、top 等）与需要交互输入的命令由用户在终端处理。
 - DeepSeek Harness 安装需要访问 nodejs.org 与 registry.npmjs.org（暂不支持镜像地址），依赖约占 1GB；Windows / Linux 安装流程未实机验证。
+- Codex 安装需要访问 GitHub（api.github.com 与 Release 下载地址，暂不支持镜像）；GitHub 未登录接口每小时限 60 次查询；OpenAI 兼容 API 不支持选择推理强度。
 - 终端粘贴 / 拖拽上传无法自动获知 shell 当前目录，上传前会确认目标目录（默认 SFTP 最近浏览目录或用户主目录）。

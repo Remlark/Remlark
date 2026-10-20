@@ -3,10 +3,12 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../../../l10n/app_localizations.dart';
 import '../agent_config.dart';
 import '../agent_interface.dart';
+import 'openai_models.dart';
 
-/// OpenAI 兼容 API 的 Agent（DeepSeek API 默认地址 https://api.deepseek.com）
+/// OpenAI 兼容 API 的 Agent（接口地址与模型都需要配置，没有默认值）
 /// 使用 SSE 流式输出，并通过 stream_options.include_usage 获取 token 用量
 class OpenAiCompatibleAgent implements AiAgent {
   OpenAiCompatibleAgent(this.settings);
@@ -18,17 +20,22 @@ class OpenAiCompatibleAgent implements AiAgent {
   String get name => settings.name;
 
   @override
-  String get model => settings.model.isEmpty ? 'deepseek-chat' : settings.model;
-
-  String get _url {
-    var base = settings.endpoint.trim();
-    if (base.isEmpty) base = 'https://api.deepseek.com';
-    if (base.endsWith('/')) base = base.substring(0, base.length - 1);
-    return base.endsWith('/chat/completions') ? base : '$base/chat/completions';
-  }
+  String get model => settings.model;
 
   @override
-  Stream<AgentEvent> send(AgentRequest request) async* {
+  Stream<AgentEvent> send(AgentRequest request) {
+    // 未配置接口地址或模型时直接提示（没有默认值）
+    final missing = settings.endpoint.trim().isEmpty
+        ? 'agent.endpoint.required'
+        : (settings.model.trim().isEmpty ? 'agent.model.required' : null);
+    if (missing != null) return Stream.value(AgentError(S.current.t(missing)));
+    return _send(request);
+  }
+
+  String get _url => '${OpenAiModels.baseUrl(settings.endpoint)}/chat/completions';
+
+  /// 流式请求一轮
+  Stream<AgentEvent> _send(AgentRequest request) async* {
     final client = http.Client();
     _client = client;
     final messages = [
@@ -40,7 +47,7 @@ class OpenAiCompatibleAgent implements AiAgent {
       ..headers.addAll({
         'Content-Type': 'application/json',
         'Accept': 'text/event-stream',
-        if (settings.apiKey?.isNotEmpty == true) 'Authorization': 'Bearer ${settings.apiKey}',
+        ...OpenAiModels.headers(settings.apiKey),
       })
       ..body = jsonEncode({
         'model': model,

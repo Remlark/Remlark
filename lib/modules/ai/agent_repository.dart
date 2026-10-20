@@ -22,6 +22,7 @@ class AgentRepository {
     apiKey: await _secrets.open(r.apiKeyEnc),
     model: r.model,
     systemPrompt: r.systemPrompt,
+    reasoningEffort: r.reasoningEffort,
     isActive: r.isActive,
     createdAt: r.createdAt,
   );
@@ -58,6 +59,7 @@ class AgentRepository {
       apiKeyEnc: Value(await _secrets.seal(a.apiKey)),
       model: Value(a.model),
       systemPrompt: Value(a.systemPrompt),
+      reasoningEffort: Value(a.reasoningEffort),
       isActive: Value(a.isActive),
       createdAt: Value(a.createdAt),
     );

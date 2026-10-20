@@ -104,21 +104,8 @@ class _AccentSwatch extends StatelessWidget {
 }
 
 /// 终端设置：字体、字号、配色、选中即复制、快捷键参考
-class TerminalSection extends StatefulWidget {
+class TerminalSection extends StatelessWidget {
   const TerminalSection({super.key});
-
-  @override
-  State<TerminalSection> createState() => _TerminalSectionState();
-}
-
-class _TerminalSectionState extends State<TerminalSection> {
-  late final _font = TextEditingController(text: context.read<SettingsController>().terminalFontFamily);
-
-  @override
-  void dispose() {
-    _font.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -135,20 +122,6 @@ class _TerminalSectionState extends State<TerminalSection> {
       title: context.tr('settings.terminal'),
       description: context.tr('settings.terminal.desc'),
       children: [
-        SettingsRow(
-          label: context.tr('settings.font_family'),
-          description: context.tr('settings.font_family.desc'),
-          child: SizedBox(
-            width: 260,
-            child: TextField(
-              controller: _font,
-              style: const TextStyle(fontFamily: 'monospace'),
-              decoration: InputDecoration(hintText: context.tr('settings.font_family.hint')),
-              onSubmitted: s.setTerminalFontFamily,
-              onTapOutside: (_) => s.setTerminalFontFamily(_font.text),
-            ),
-          ),
-        ),
         SettingsRow(
           label: context.tr('settings.font_size'),
           child: Row(

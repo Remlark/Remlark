@@ -1,17 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
 
-/// ACP（Agent Client Protocol）对端发来的通知
-class AcpNotification {
-  const AcpNotification(this.method, this.params);
+/// JSON-RPC 对端发来的通知
+class JsonRpcNotification {
+  const JsonRpcNotification(this.method, this.params);
 
   final String method;
   final Map<String, dynamic> params;
 }
 
-/// ACP 调用失败：对端返回 JSON-RPC 错误，或连接已断开（[code] 为 null）
-class AcpException implements Exception {
-  AcpException(this.message, {this.code});
+/// JSON-RPC 调用失败：对端返回 JSON-RPC 错误，或连接已断开（[code] 为 null）
+class JsonRpcException implements Exception {
+  JsonRpcException(this.message, {this.code});
 
   final String message;
   final int? code;
@@ -20,13 +20,13 @@ class AcpException implements Exception {
   String toString() => message;
 }
 
-/// 基于标准输入输出的 ACP 连接（JSON-RPC 2.0，每行一条 JSON 消息）。
+/// 基于标准输入输出的 JSON-RPC 2.0 连接（每行一条 JSON 消息），dsh 的 ACP 与 Codex 的 app-server 共用。
 ///
 /// 请求按 id 匹配响应；没有 id 的消息作为通知广播；对端发来的请求交给 [onRequest]，
 /// 未设置处理器时回复“方法不存在”。
-class AcpConnection {
+class JsonRpcConnection {
   /// 基于已有的输入输出流创建（测试时可传入内存中的假 Agent）
-  AcpConnection(Stream<List<int>> stdout, this._stdin, {Stream<List<int>>? stderr, Future<void> Function()? onClose})
+  JsonRpcConnection(Stream<List<int>> stdout, this._stdin, {Stream<List<int>>? stderr, Future<void> Function()? onClose})
     // 命名参数不能用私有的初始化形参，因此显式赋值
     // ignore: prefer_initializing_formals
     : _onClose = onClose {
@@ -40,7 +40,7 @@ class AcpConnection {
   final StreamSink<List<int>> _stdin;
   final Future<void> Function()? _onClose;
   final _pending = <int, Completer<Map<String, dynamic>>>{};
-  final _notifications = StreamController<AcpNotification>.broadcast();
+  final _notifications = StreamController<JsonRpcNotification>.broadcast();
   final _done = Completer<void>();
   final _stderrTail = StringBuffer();
   int _seq = 0;
@@ -53,7 +53,7 @@ class AcpConnection {
   Future<Map<String, dynamic>> Function(String method, Map<String, dynamic> params)? onRequest;
 
   /// 通知流（需在发出请求之前订阅，否则可能错过）
-  Stream<AcpNotification> get notifications => _notifications.stream;
+  Stream<JsonRpcNotification> get notifications => _notifications.stream;
 
   /// 连接结束（进程退出或主动关闭）时完成
   Future<void> get done => _done.future;
@@ -63,7 +63,7 @@ class AcpConnection {
 
   /// 发送请求并等待结果；[timeout] 为 null 时不限时（提示词可能运行很久）
   Future<Map<String, dynamic>> call(String method, Map<String, dynamic> params, {Duration? timeout}) {
-    if (_closed) return Future.error(AcpException(closeReason ?? 'closed'));
+    if (_closed) return Future.error(JsonRpcException(closeReason ?? 'closed'));
     final id = ++_seq;
     final completer = Completer<Map<String, dynamic>>();
     _pending[id] = completer;
@@ -73,7 +73,7 @@ class AcpConnection {
       timeout,
       onTimeout: () {
         _pending.remove(id);
-        throw AcpException('timeout: $method');
+        throw JsonRpcException('timeout: $method');
       },
     );
   }
@@ -118,7 +118,7 @@ class AcpConnection {
       if (id != null) {
         unawaited(_handleRequest(id, method, params));
       } else {
-        _notifications.add(AcpNotification(method, params));
+        _notifications.add(JsonRpcNotification(method, params));
       }
       return;
     }
@@ -128,7 +128,7 @@ class AcpConnection {
     final error = message['error'];
     if (error != null) {
       final text = error is Map ? '${error['message'] ?? error}' : '$error';
-      completer.completeError(AcpException(text, code: error is Map ? (error['code'] as num?)?.toInt() : null));
+      completer.completeError(JsonRpcException(text, code: error is Map ? (error['code'] as num?)?.toInt() : null));
     } else {
       final result = message['result'];
       completer.complete(result is Map<String, dynamic> ? result : const {});
@@ -140,13 +140,13 @@ class AcpConnection {
     Map<String, dynamic> response;
     try {
       final handler = onRequest;
-      if (handler == null) throw AcpException('unsupported: $method', code: -32601);
+      if (handler == null) throw JsonRpcException('unsupported: $method', code: -32601);
       response = {'jsonrpc': '2.0', 'id': id, 'result': await handler(method, params)};
     } catch (e) {
       response = {
         'jsonrpc': '2.0',
         'id': id,
-        'error': {'code': e is AcpException && e.code != null ? e.code : -32603, 'message': '$e'},
+        'error': {'code': e is JsonRpcException && e.code != null ? e.code : -32603, 'message': '$e'},
       };
     }
     _send(response);
@@ -178,7 +178,7 @@ class AcpConnection {
     closeReason = [?error, if (stderr.isNotEmpty) stderr].join('\n');
     if (closeReason!.isEmpty) closeReason = null;
     for (final c in _pending.values) {
-      c.completeError(AcpException(closeReason ?? 'closed'));
+      c.completeError(JsonRpcException(closeReason ?? 'closed'));
     }
     _pending.clear();
     _notifications.close();

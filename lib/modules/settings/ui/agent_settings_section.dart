@@ -9,12 +9,13 @@ import '../../../ui_kit/buttons.dart';
 import '../../../ui_kit/panel.dart';
 import '../../../ui_kit/tags.dart';
 import '../../ai/agent_config.dart';
+import '../../ai/agent_options_controller.dart';
 import '../../ai/agents_controller.dart';
 import '../../ai/runtime/agent_runtime.dart';
 import 'agent_editor_dialog.dart';
 import 'settings_card.dart';
 
-/// AI Agent 设置：配置多个 Agent，选择当前使用的 Agent。
+/// AI Agent 设置：添加、编辑、删除 Agent（当前使用哪个 Agent 在聊天窗口中切换）。
 /// 需要本地运行环境的 Agent 在添加 / 编辑时安装，列表中显示运行环境状态
 class AgentSettingsSection extends StatefulWidget {
   const AgentSettingsSection({super.key});
@@ -52,7 +53,6 @@ class _AgentSettingsSectionState extends State<AgentSettingsSection> {
   Widget build(BuildContext context) {
     final c = context.watch<AgentsController>();
     final p = context.palette;
-    final active = c.active;
     return SettingsCard(
       title: context.tr('settings.agents'),
       description: context.tr('settings.agents.desc'),
@@ -67,65 +67,54 @@ class _AgentSettingsSectionState extends State<AgentSettingsSection> {
           AppPanel(
             child: EmptyState(icon: Icons.auto_awesome_outlined, title: context.tr('agent.empty')),
           ),
-        RadioGroup<String>(
-          groupValue: active?.uuid,
-          onChanged: (v) => v == null ? null : c.setActive(v),
-          child: Column(
-            children: [
-              for (final a in c.agents)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: AppPanel(
-                    highlighted: a.uuid == active?.uuid,
-                    padding: const EdgeInsets.fromLTRB(10, 12, 12, 12),
-                    child: Row(
+        for (final a in c.agents)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: AppPanel(
+              padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Radio<String>(value: a.uuid),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      a.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: p.text),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Tag(a.kind == AgentKind.deepseekCli ? 'dsh' : 'API', color: p.info),
-                                  if (a.uuid == active?.uuid) ...[
-                                    const SizedBox(width: 8),
-                                    Tag(context.tr('agent.active'), color: p.accent),
-                                  ],
-                                ],
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                a.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: p.text),
                               ),
-                              const SizedBox(height: 4),
-                              _subtitle(context, a),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(width: 10),
+                            Tag(switch (a.kind) {
+                              AgentKind.deepseekCli => 'dsh',
+                              AgentKind.codex => 'Codex',
+                              AgentKind.openaiApi => 'API',
+                            }, color: p.info),
+                          ],
                         ),
-                        GhostIconButton(
-                          icon: Icons.edit_outlined,
-                          tooltip: context.tr('common.edit'),
-                          onPressed: () => _edit(context, a),
-                        ),
-                        GhostIconButton(
-                          icon: Icons.delete_outline,
-                          tooltip: context.tr('common.delete'),
-                          onPressed: () => _delete(context, a),
-                        ),
+                        const SizedBox(height: 4),
+                        _subtitle(context, a),
                       ],
                     ),
                   ),
-                ),
-            ],
+                  GhostIconButton(
+                    icon: Icons.edit_outlined,
+                    tooltip: context.tr('common.edit'),
+                    onPressed: () => _edit(context, a),
+                  ),
+                  GhostIconButton(
+                    icon: Icons.delete_outline,
+                    tooltip: context.tr('common.delete'),
+                    onPressed: () => _delete(context, a),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ),
       ],
     );
   }
@@ -134,9 +123,12 @@ class _AgentSettingsSectionState extends State<AgentSettingsSection> {
   Widget _subtitle(BuildContext context, AgentSettings a) {
     final p = context.palette;
     final runtime = _runtimes.of(a.kind);
-    final base = a.kind == AgentKind.deepseekCli
-        ? 'DeepSeek Harness · ${a.model.isEmpty ? context.tr('agent.model.default') : a.model}'
-        : 'OpenAI API · ${a.model.isEmpty ? 'deepseek-chat' : a.model}';
+    final model = a.model.isEmpty ? context.tr('agent.model.default') : a.model;
+    final base = switch (a.kind) {
+      AgentKind.deepseekCli => 'DeepSeek Harness · $model',
+      AgentKind.codex => 'Codex · $model',
+      AgentKind.openaiApi => '${a.kind.label} · ${a.model.isEmpty ? context.tr('ai.model.none') : a.model}',
+    };
     final String? hint;
     Color hintColor = p.warning;
     if (runtime == null || !runtime.loaded) {
@@ -169,7 +161,10 @@ class _AgentSettingsSectionState extends State<AgentSettingsSection> {
       context: context,
       builder: (_) => AgentEditorDialog(existing: a),
     );
-    if (r != null && context.mounted) await context.read<AgentsController>().save(r);
+    if (r == null || !context.mounted) return;
+    // API Key 等配置可能变化：模型与推理强度的可选项下次使用时重新读取
+    context.read<AgentOptionsController>().forget(r.uuid);
+    await context.read<AgentsController>().save(r);
   }
 
   /// 删除 Agent；删除的是使用某运行环境的最后一个 Agent 时，可选择一并移除运行环境
@@ -183,6 +178,8 @@ class _AgentSettingsSectionState extends State<AgentSettingsSection> {
     );
     if (r == null || !r.$1) return;
     await c.delete(a.uuid);
+    // 删除该 Agent 的专属数据（如 Codex 的登录目录）
+    await runtime?.removeAgentData(a.uuid);
     if (r.$2) await runtime!.uninstall();
   }
 }

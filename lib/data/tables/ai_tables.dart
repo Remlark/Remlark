@@ -9,7 +9,7 @@ class AgentConfigs extends Table {
   TextColumn get uuid => text()();
   TextColumn get name => text()();
 
-  /// 实现类型：deepseek_cli / openai_api
+  /// 实现类型：deepseek_cli / openai_api / codex
   TextColumn get kind => text()();
   TextColumn get command => text().withDefault(const Constant(''))();
   TextColumn get args => text().withDefault(const Constant(''))();
@@ -19,6 +19,9 @@ class AgentConfigs extends Table {
   TextColumn get systemPrompt => text().withDefault(const Constant(''))();
   BoolColumn get isActive => boolean().withDefault(const Constant(false))();
   IntColumn get createdAt => integer()();
+
+  /// 推理强度（Codex：low / medium / high 等），空字符串为模型默认（schema 2 新增）
+  TextColumn get reasoningEffort => text().withDefault(const Constant(''))();
 }
 
 /// 聊天会话表

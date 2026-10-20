@@ -27,6 +27,7 @@ class RemlarkApp extends StatelessWidget {
         ChangeNotifierProvider.value(value: services.sync),
         ChangeNotifierProvider.value(value: services.agents),
         Provider.value(value: services.runtimes),
+        ChangeNotifierProvider.value(value: services.agentOptions),
         ChangeNotifierProvider(create: (_) => NavController()),
       ],
       child: Builder(

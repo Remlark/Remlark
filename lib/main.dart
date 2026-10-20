@@ -1,3 +1,5 @@
+import 'dart:ui' show AppExitResponse;
+
 import 'package:flutter/material.dart';
 
 import 'app/app.dart';
@@ -15,6 +17,14 @@ Future<void> main() async {
   final services = AppServices(AppDatabase());
   await services.init(
     installKeySnippetName: services.settings.locale.languageCode == 'zh' ? '系统免密登录' : 'Install system SSH key',
+  );
+  // 退出（Dock 退出、⌘Q、关闭最后一个窗口）前先释放资源并关闭数据库，再允许退出。
+  // 监听器创建时即注册到 WidgetsBinding，由它持有，无需保存引用
+  AppLifecycleListener(
+    onExitRequested: () async {
+      await services.shutdown();
+      return AppExitResponse.exit;
+    },
   );
   runApp(RemlarkApp(services: services));
 }

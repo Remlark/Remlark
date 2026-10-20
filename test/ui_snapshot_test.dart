@@ -6,6 +6,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:remlark/app/app.dart';
 import 'package:remlark/app/app_services.dart';
@@ -15,6 +16,9 @@ import 'package:remlark/modules/ai/agent_config.dart';
 import 'package:remlark/modules/ai/chat_controller.dart';
 import 'package:remlark/modules/ai/terminal_agent/command_permission.dart';
 import 'package:remlark/modules/ai/ui/command_permission_selector.dart';
+import 'package:remlark/modules/ai/codex/codex_app_server.dart';
+import 'package:remlark/modules/ai/codex/codex_environment.dart';
+import 'package:remlark/modules/ai/codex/platform/codex_platform.dart';
 import 'package:remlark/modules/ai/dsh/dsh_types.dart';
 import 'package:remlark/modules/hosts/host_model.dart';
 import 'package:remlark/modules/hosts/ui/host_editor_dialog.dart';
@@ -32,6 +36,7 @@ import 'package:remlark/utils/secret_store.dart';
 import 'package:remlark/utils/ui_utils.dart';
 import 'package:provider/provider.dart';
 
+import 'helpers/fake_codex_server.dart';
 import 'helpers/test_fonts.dart';
 
 Future<void> _shot(WidgetTester tester, String name) async {
@@ -168,6 +173,40 @@ void main() {
       ..installedVersion = null
       ..latestVersion = null
       ..notifyListeners();
+    // Codex：已安装时编辑框显示账号与模型（假 app-server 返回已登录账号与模型列表）
+    CodexAppServer.shared = CodexAppServer(
+      launcher: (_) async => FakeCodexServer().connection,
+      workspace: () async => '/tmp/rmk-codex',
+    );
+    final codexRoot = Directory.systemTemp.createTempSync('rmk-codex-shot-');
+    for (final f in ['runtime/bin/codex', 'runtime/bin/codex-code-mode-host']) {
+      File('${codexRoot.path}/$f').createSync(recursive: true);
+    }
+    File('${codexRoot.path}/runtime/codex-package.json').writeAsStringSync('{"version":"0.163.0"}');
+    CodexEnvironment.override = CodexEnvironment(codexRoot.path, CodexPlatform.current());
+    services.codex.latestVersion = '0.163.0';
+    showDialog<void>(
+      context: UiUtils.navigatorKey.currentContext!,
+      builder: (_) => const AgentEditorDialog(
+        existing: AgentSettings(uuid: 'a2', name: 'Codex', kind: AgentKind.codex, model: 'gpt-b', createdAt: 0),
+      ),
+    );
+    await _shot(tester, '09_agent_dialog_codex');
+    UiUtils.navigatorKey.currentState!.pop();
+    // OpenAI 兼容接口：模型输入框右侧“获取列表”，API Key 可切换显示
+    showDialog<void>(
+      context: UiUtils.navigatorKey.currentContext!,
+      builder: (_) => const AgentEditorDialog(
+        existing: AgentSettings(uuid: 'a4', name: 'Ollama', kind: AgentKind.openaiApi, createdAt: 0),
+      ),
+    );
+    await _shot(tester, '09_agent_dialog_openai');
+    UiUtils.navigatorKey.currentState!.pop();
+    CodexEnvironment.override = null;
+    codexRoot.deleteSync(recursive: true);
+    services.codex
+      ..installedVersion = null
+      ..latestVersion = null;
     // 工作区：打开多个终端（不实际连接）
     final ui = DialogInteraction();
     final ssh = services.hosts.all
@@ -186,6 +225,71 @@ void main() {
     services.workspace.activate(first.id);
     nav().go(AppPage.sessions);
     await _shot(tester, '09_terminal_ai');
+    // 发送快捷键：单独按 Enter 只换行不发送；Ctrl+Enter（macOS 为 ⌘Enter）发送
+    final chatInput = find.byWidgetPredicate((w) => w is TextField && (w.decoration?.hintText ?? '').contains('Ctrl+Enter'));
+    expect(chatInput, findsOneWidget);
+    await tester.tap(chatInput);
+    await tester.enterText(chatInput, '看下磁盘');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    final firstChat = first.uiState['chat'] as ChatController;
+    expect(firstChat.messages, isEmpty);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await tester.pump();
+    expect(firstChat.messages.first.role, 'user');
+    expect(firstChat.messages.first.content, startsWith('看下磁盘'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    // 已有消息时切换 Agent：新建对话（换 Agent 无法续用原上下文与缓存），并设为默认 Agent
+    await tester.runAsync(
+      () => services.agents.save(
+        const AgentSettings(uuid: 'a3', name: 'OpenAI', kind: AgentKind.openaiApi, createdAt: 2),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.text('DeepSeek Harness').last);
+    await tester.pump(const Duration(milliseconds: 200));
+    await _shot(tester, '09_terminal_ai_agent_menu');
+    await tester.tap(find.text('OpenAI').last);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(firstChat.messages, isEmpty);
+    expect(services.agents.active?.uuid, 'a3');
+    await tester.runAsync(() async {
+      await services.agents.delete('a3');
+      await services.agents.setActive('a1');
+    });
+    await tester.pump();
+    // Codex：聊天窗口中可选择模型与推理强度
+    final codexRoot2 = Directory.systemTemp.createTempSync('rmk-codex-shot-');
+    for (final f in ['runtime/bin/codex', 'runtime/bin/codex-code-mode-host']) {
+      File('${codexRoot2.path}/$f').createSync(recursive: true);
+    }
+    File('${codexRoot2.path}/runtime/codex-package.json').writeAsStringSync('{"version":"0.163.0"}');
+    CodexEnvironment.override = CodexEnvironment(codexRoot2.path, CodexPlatform.current());
+    await tester.runAsync(() async {
+      await services.codex.loadLocal();
+      await services.agents.save(
+        const AgentSettings(
+          uuid: 'a2',
+          name: 'Codex',
+          kind: AgentKind.codex,
+          model: 'gpt-a',
+          reasoningEffort: 'high',
+          isActive: true,
+          createdAt: 1,
+        ),
+      );
+      await services.agentOptions.load(services.agents.active!);
+    });
+    await _shot(tester, '09_terminal_ai_codex');
+    await tester.runAsync(() async {
+      await services.agents.setActive('a1');
+      services.codex.installedVersion = null;
+    });
+    CodexEnvironment.override = null;
+    codexRoot2.deleteSync(recursive: true);
     // 逐条确认：命令已填入终端，等待按回车
     final chat = first.uiState['chat'] as ChatController;
     chat.messages.addAll([

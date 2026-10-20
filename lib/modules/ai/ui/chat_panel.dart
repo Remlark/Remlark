@@ -8,12 +8,13 @@ import '../../../l10n/app_localizations.dart';
 import '../../../utils/format_utils.dart';
 import '../../terminal/terminal_agent_driver.dart';
 import '../../terminal/terminal_session.dart';
+import '../agent_config.dart';
 import '../agents_controller.dart';
 import '../chat_controller.dart';
+import 'agent_model_selector.dart';
 import 'chat_message_view.dart';
 import 'command_permission_selector.dart';
 import 'chat_status_bar.dart';
-import '../../../ui_kit/app_menu.dart';
 
 /// 终端内的 AI 聊天面板：选择 Agent、对话、附带终端上下文、一键把命令发送到终端
 class ChatPanel extends StatefulWidget {
@@ -37,6 +38,10 @@ class ChatPanel extends StatefulWidget {
     return c;
   }
 
+  /// 是否为发送快捷键：⌘Enter（macOS）/ Ctrl+Enter（其他平台）；单独按 Enter 只换行，避免误触发送
+  static bool isSendKey(LogicalKeyboardKey key, {required bool apple, required bool meta, required bool control}) =>
+      (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) && (apple ? meta : control);
+
   @override
   State<ChatPanel> createState() => _ChatPanelState();
 }
@@ -45,7 +50,9 @@ class _ChatPanelState extends State<ChatPanel> {
   final _input = TextEditingController();
   final _scroll = ScrollController();
   final _inputFocus = FocusNode();
-  bool _attachOutput = false;
+
+  /// macOS 用 ⌘，其他平台用 Ctrl
+  bool get _isApple => Theme.of(context).platform == TargetPlatform.macOS;
   late ChatController _chat;
 
   @override
@@ -70,17 +77,25 @@ class _ChatPanelState extends State<ChatPanel> {
     });
   }
 
+  /// 本聊天使用的 Agent：有消息后为聊天开始时的 Agent，新对话为全局默认 Agent
+  AgentSettings? _agentOf(AgentsController agents) {
+    final bound = _chat.boundAgentUuid;
+    return (bound == null ? null : agents.agents.where((a) => a.uuid == bound).firstOrNull) ?? agents.active;
+  }
+
+  /// 切换 Agent：设为默认 Agent；当前聊天已有消息时新建对话（换 Agent 无法续用原上下文与缓存）
+  void _switchAgent(AgentsController agents, String uuid) {
+    if (uuid == _agentOf(agents)?.uuid) return;
+    agents.setActive(uuid);
+    if (_chat.messages.isNotEmpty) _chat.newChat();
+  }
+
   Future<void> _send() async {
-    final agent = context.read<AgentsController>().active;
+    final agent = _agentOf(context.read<AgentsController>());
     final text = _input.text.trim();
     if (agent == null || text.isEmpty) return;
-    String? ctx;
-    final sel = widget.session.selectedText();
-    if (sel != null) {
-      ctx = sel;
-    } else if (_attachOutput) {
-      ctx = widget.session.recentText();
-    }
+    // 有选区时附带选中内容；终端当前屏幕由 ChatController 自动附上
+    final ctx = widget.session.selectedText();
     _input.clear();
     await _chat.send(agent, text, context: ctx);
   }
@@ -141,7 +156,7 @@ class _ChatPanelState extends State<ChatPanel> {
         ),
       );
     }
-    final active = agents.active!;
+    final active = _agentOf(agents)!;
     return ListenableBuilder(
       listenable: _chat,
       builder: (context, _) => Column(
@@ -150,12 +165,16 @@ class _ChatPanelState extends State<ChatPanel> {
             padding: const EdgeInsets.fromLTRB(8, 6, 4, 6),
             child: Row(
               children: [
+                // 当前聊天的标题（新对话显示“新对话”）
                 Expanded(
-                  child: AppDropdown<String>(
-                    borderless: true,
-                    value: active.uuid,
-                    items: [for (final a in agents.agents) AppMenuItem(value: a.uuid, label: a.name)],
-                    onChanged: _chat.busy ? null : (v) => v == null ? null : agents.setActive(v),
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: Text(
+                      _chat.session?.title ?? context.tr('ai.chat.untitled'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall,
+                    ),
                   ),
                 ),
                 IconButton(
@@ -200,33 +219,36 @@ class _ChatPanelState extends State<ChatPanel> {
               children: [
                 Row(
                   children: [
-                    FilterChip(
-                      visualDensity: VisualDensity.compact,
-                      label: Text(context.tr('ai.attach_output'), style: const TextStyle(fontSize: 11)),
-                      selected: _attachOutput,
-                      onSelected: (v) => setState(() => _attachOutput = v),
+                    // 由谁回答：Agent、模型、推理强度（回答中不能切换；换 Agent 新建对话）
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: AgentModelSelector(
+                          agents: agents.agents,
+                          agent: active,
+                          enabled: !_chat.busy,
+                          onAgentChanged: (uuid) => _switchAgent(agents, uuid),
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: 4),
                     CommandPermissionSelector(
                       value: _chat.permission,
                       onChanged: (p) => _chat.permission = p,
                     ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        context.tr('ai.selection_hint'),
-                        style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.outline),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 6),
+                // ⌘Enter（macOS）/ Ctrl+Enter 发送；单独按 Enter 换行，避免误触发送
                 Focus(
                   onKeyEvent: (node, e) {
+                    final k = HardwareKeyboard.instance;
                     if (e is KeyDownEvent &&
-                        e.logicalKey == LogicalKeyboardKey.enter &&
-                        !HardwareKeyboard.instance.isShiftPressed) {
+                        ChatPanel.isSendKey(
+                          e.logicalKey,
+                          apple: _isApple,
+                          meta: k.isMetaPressed,
+                          control: k.isControlPressed,
+                        )) {
                       _send();
                       return KeyEventResult.handled;
                     }
@@ -238,7 +260,7 @@ class _ChatPanelState extends State<ChatPanel> {
                     minLines: 1,
                     maxLines: 6,
                     decoration: InputDecoration(
-                      hintText: context.tr('ai.input_hint'),
+                      hintText: context.tr('ai.input_hint', {'key': _isApple ? '⌘Enter' : 'Ctrl+Enter'}),
                       suffixIcon: _chat.busy
                           ? IconButton(icon: const Icon(Icons.stop_circle_outlined), onPressed: _chat.stop)
                           : IconButton(icon: const Icon(Icons.send), onPressed: _send),

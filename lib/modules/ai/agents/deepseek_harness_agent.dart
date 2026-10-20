@@ -4,8 +4,9 @@ import '../../../l10n/app_localizations.dart';
 import '../../../utils/app_log.dart';
 import '../agent_config.dart';
 import '../agent_interface.dart';
-import '../dsh/acp_connection.dart';
+import '../runtime/json_rpc_connection.dart';
 import '../dsh/dsh_acp_service.dart';
+import '../dsh/dsh_config_options.dart';
 
 /// DeepSeek Harness（dsh）Agent：通过 [DshAcpService] 的常驻 ACP 子进程提问。
 ///
@@ -48,6 +49,8 @@ class DeepSeekHarnessAgent implements AiAgent {
       _sessionId = sessionId;
       if (sessionId != request.externalSessionId) out.add(AgentSessionId(sessionId));
       if (fresh) promptText = _firstPrompt(request);
+      // 每轮按 Agent 配置切换模型与推理强度：聊天中途切换也立即生效
+      await _applyConfig(peer, sessionId);
 
       var lastUpdate = DateTime.now();
       var settled = false;
@@ -87,7 +90,7 @@ class DeepSeekHarnessAgent implements AiAgent {
       if (stop == 'refusal' || stop == 'max_tokens') {
         out.add(AgentError(S.current.t('dsh.stop.$stop')));
       }
-    } on AcpException catch (e) {
+    } on JsonRpcException catch (e) {
       if (!_cancelled) out.add(AgentError(e.message));
     } catch (e) {
       if (!_cancelled) out.add(AgentError('$e'));
@@ -139,9 +142,9 @@ class DeepSeekHarnessAgent implements AiAgent {
           'mcpServers': const [],
         }, timeout: const Duration(seconds: 60));
         live.add(externalId);
-        await _selectModel(peer, externalId, r['configOptions']);
+        peer.recordConfig(externalId, r['configOptions']);
         return (externalId, false);
-      } on AcpException catch (_) {
+      } on JsonRpcException catch (_) {
         // 会话不存在或已损坏：新建会话
       }
     }
@@ -150,41 +153,35 @@ class DeepSeekHarnessAgent implements AiAgent {
       'mcpServers': const [],
     }, timeout: const Duration(seconds: 60));
     final id = r['sessionId'];
-    if (id is! String || id.isEmpty) throw AcpException('session/new: sessionId');
+    if (id is! String || id.isEmpty) throw JsonRpcException('session/new: sessionId');
     live.add(id);
-    await _selectModel(peer, id, r['configOptions']);
+    peer.recordConfig(id, r['configOptions']);
     return (id, true);
   }
 
-  /// 配置中指定了模型时，从会话公布的模型选项中按名称或值匹配并切换；找不到则使用 dsh 默认模型
-  Future<void> _selectModel(DshPeer peer, String sessionId, Object? configOptions) async {
-    final want = settings.model.trim();
-    if (want.isEmpty || configOptions is! List) return;
-    for (final opt in configOptions.whereType<Map>()) {
-      if (opt['id'] != 'model' && opt['category'] != 'model') continue;
-      final value = _findOption(opt['options'], want);
-      if (value == null || value == opt['currentValue']) return;
-      await peer.connection.call('session/set_config_option', {
+  /// 按 Agent 配置切换会话的模型与推理强度：按名称或值匹配会话公布的选项，找不到则不切换；
+  /// 配置为“默认”（空）时切回该配置项的默认值
+  Future<void> _applyConfig(DshPeer peer, String sessionId) async {
+    final wanted = <Map? Function(Object?), String>{
+      DshConfigOptions.model: settings.model.trim(),
+      DshConfigOptions.effort: settings.reasoningEffort,
+    };
+    for (final MapEntry(key: find, value: want) in wanted.entries) {
+      final opt = find(peer.sessionConfig[sessionId]);
+      if (opt == null) continue;
+      final value = want.isEmpty ? peer.configDefaults[opt['id']] : DshConfigOptions.valueOf(opt, want);
+      if (value == null || value == '${opt['currentValue']}') continue;
+      final r = await peer.connection.call('session/set_config_option', {
         'sessionId': sessionId,
         'configId': opt['id'],
         'value': value,
       }, timeout: const Duration(seconds: 30));
-      return;
-    }
-  }
-
-  /// 在（可能分组的）选项列表中查找名称或值等于 [want] 的选项值
-  static String? _findOption(Object? options, String want) {
-    if (options is! List) return null;
-    for (final o in options.whereType<Map>()) {
-      if (o['options'] is List) {
-        final v = _findOption(o['options'], want);
-        if (v != null) return v;
-      } else if (o['name'] == want || o['value'] == want) {
-        return '${o['value']}';
+      if (r['configOptions'] is List) {
+        peer.recordConfig(sessionId, r['configOptions']);
+      } else {
+        opt['currentValue'] = value;
       }
     }
-    return null;
   }
 
   /// 新会话的第一条消息：系统提示词 + 之前的对话（会话恢复失败时保留上下文）+ 本次问题

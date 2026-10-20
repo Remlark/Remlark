@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../agent_config.dart';
+import 'agent_options.dart';
 
 /// Agent 运行环境：某类 Agent 需要在本机安装的程序（如 dsh），由应用下载、更新与移除。
 /// 新增需要本地运行环境的 Agent 时实现此接口，并在 [AgentRuntimes] 中注册；
@@ -51,6 +52,13 @@ abstract class AgentRuntime implements Listenable {
 
   /// 移除运行环境
   Future<void> uninstall();
+
+  /// 删除某个 Agent 在运行环境中的专属数据（如 Codex 每个 Agent 独立的登录目录）；
+  /// 在删除 Agent 或放弃新建时调用，没有专属数据的运行环境不做任何事
+  Future<void> removeAgentData(String agentUuid);
+
+  /// 读取 Agent [settings] 可选的模型与推理强度（需要已安装）。[force] 时不使用运行环境自己的缓存。失败时抛出异常
+  Future<AgentOptions> loadOptions(AgentSettings settings, {bool force = false});
 }
 
 /// 各类 Agent 的运行环境注册表；不需要本地运行环境的 Agent（如 OpenAI 兼容 API）返回 null

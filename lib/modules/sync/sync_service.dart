@@ -245,9 +245,15 @@ class SyncService extends ChangeNotifier {
     onHostsChanged?.call();
   }
 
+  /// 停止自动同步（退出时调用；界面仍可能在监听，因此不 dispose）
+  void stop() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
   @override
   void dispose() {
-    _timer?.cancel();
+    stop();
     super.dispose();
   }
 }
