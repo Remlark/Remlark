@@ -5,7 +5,7 @@ import '../../../utils/ui_utils.dart';
 import '../../workspace/workspace_tab.dart';
 import '../terminal_session.dart';
 
-/// 终端上传辅助：拖拽或右键粘贴文件时，确认远程目标目录后加入传输队列
+/// 终端上传辅助：拖拽或右键粘贴文件时，确认远程目标目录后加入终端自己的上传队列
 class UploadHelper {
   UploadHelper._();
 
@@ -13,7 +13,7 @@ class UploadHelper {
   static Future<void> upload(BuildContext context, TerminalSession session, List<String> paths) async {
     if (paths.isEmpty) return;
     final sftp = session.sftp;
-    final transfers = session.transfers;
+    final transfers = session.uploads;
     if (session.state != SessionState.connected || sftp == null || transfers == null) {
       UiUtils.toast(context.tr('terminal.not_connected'), error: true);
       return;
@@ -35,9 +35,9 @@ class UploadHelper {
     );
     if (target == null || target.trim().isEmpty) return;
     session.lastRemoteDir = target.trim();
+    // 进度显示在终端状态栏，不再弹出提示
     for (final p in paths) {
       transfers.upload(p, target.trim());
     }
-    UiUtils.toast(S.of(UiUtils.context!).t('upload.queued', {'count': paths.length}));
   }
 }

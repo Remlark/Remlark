@@ -11,11 +11,17 @@ import 'package:remlark/app/app.dart';
 import 'package:remlark/app/app_services.dart';
 import 'package:remlark/app/nav_controller.dart';
 import 'package:remlark/data/database.dart';
+import 'package:remlark/modules/ai/agent_config.dart';
+import 'package:remlark/modules/ai/chat_controller.dart';
+import 'package:remlark/modules/ai/terminal_agent/command_permission.dart';
+import 'package:remlark/modules/ai/ui/command_permission_selector.dart';
+import 'package:remlark/modules/ai/dsh/dsh_types.dart';
 import 'package:remlark/modules/hosts/host_model.dart';
 import 'package:remlark/modules/hosts/ui/host_editor_dialog.dart';
 import 'package:remlark/modules/keys/key_model.dart';
 import 'package:remlark/modules/remote_desktop/vnc/vnc_session.dart';
 import 'package:remlark/modules/remote_desktop/rdp/rdp_session.dart';
+import 'package:remlark/modules/settings/ui/agent_editor_dialog.dart';
 import 'package:remlark/modules/ssh/ui/ssh_dialogs.dart';
 import 'package:remlark/modules/terminal/terminal_session.dart';
 import 'package:remlark/modules/terminal/ui/terminal_tab_view.dart';
@@ -131,6 +137,37 @@ void main() {
     await _shot(tester, '07_keys');
     nav().goSettings(SettingsSection.sync);
     await _shot(tester, '08_settings_sync');
+    // AI Agent 设置：列表 + 编辑框中 DeepSeek Harness 运行环境的未安装 / 安装中 / 可更新三种状态
+    await tester.runAsync(
+      () => services.agents.save(
+        const AgentSettings(uuid: 'a1', name: 'DeepSeek Harness', kind: AgentKind.deepseekCli, createdAt: 0),
+      ),
+    );
+    nav().goSettings(SettingsSection.agents);
+    await _shot(tester, '09_settings_agents');
+    showDialog<void>(
+      context: UiUtils.navigatorKey.currentContext!,
+      builder: (_) => const AgentEditorDialog(),
+    );
+    await _shot(tester, '09_agent_dialog_missing');
+    services.dsh
+      ..stage = DshInstallStage.downloadingNode
+      ..stageVersion = '24.22.0'
+      ..progress = 0.42
+      ..notifyListeners();
+    await _shot(tester, '09_agent_dialog_installing');
+    services.dsh
+      ..stage = null
+      ..progress = null
+      ..installedVersion = '0.2.1-rc.1'
+      ..latestVersion = '0.2.1-rc.2'
+      ..notifyListeners();
+    await _shot(tester, '09_agent_dialog_update');
+    UiUtils.navigatorKey.currentState!.pop();
+    services.dsh
+      ..installedVersion = null
+      ..latestVersion = null
+      ..notifyListeners();
     // 工作区：打开多个终端（不实际连接）
     final ui = DialogInteraction();
     final ssh = services.hosts.all
@@ -149,6 +186,30 @@ void main() {
     services.workspace.activate(first.id);
     nav().go(AppPage.sessions);
     await _shot(tester, '09_terminal_ai');
+    // 逐条确认：命令已填入终端，等待按回车
+    final chat = first.uiState['chat'] as ChatController;
+    chat.messages.addAll([
+      UiChatMessage('user', '帮我看下这台服务器硬盘多大'),
+      UiChatMessage('assistant', '查看各分区的容量与使用情况\n\n```bash\ndf -h\n```'),
+      UiChatMessage(
+        'terminal',
+        'root@bastion:~# df -h\nFilesystem      Size  Used Avail Use% Mounted on\n/dev/vda1        99G   41G   54G  44% /\nroot@bastion:~# ',
+      ),
+      UiChatMessage('assistant', '这台服务器系统盘 **/dev/vda1** 共 **99G**，已用 41G（44%），剩余 54G。'),
+      UiChatMessage('user', '把 nginx 重启一下'),
+      UiChatMessage('assistant', '重启 nginx 服务\n\n```bash\nsystemctl restart nginx\n```'),
+    ]);
+    chat.waitingForEnter = true;
+    chat.notifyListeners();
+    await _shot(tester, '09_terminal_ai_press_enter');
+    chat.waitingForEnter = false;
+    chat.messages.clear();
+    // 聊天底部的命令权限菜单
+    await tester.tap(find.byType(CommandPermissionSelector));
+    await _shot(tester, '09_terminal_ai_permission_menu');
+    await tester.tap(find.text('全部自动执行').last);
+    await _shot(tester, '09_terminal_ai_permission_auto');
+    chat.permission = CommandPermission.ask;
     services.workspace.openSftp(first);
     await _shot(tester, '10_sftp');
     services.workspace.showGrid();

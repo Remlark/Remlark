@@ -42,6 +42,44 @@ class ChatMessageView extends StatelessWidget {
         child: SelectableText(m.content, style: TextStyle(color: context.palette.danger, fontSize: 12)),
       );
     }
+    // 交给 AI 的终端输出：默认折叠，展开后以等宽字体显示
+    if (m.role == 'terminal') {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Material(
+          color: scheme.surfaceContainer,
+          borderRadius: BorderRadius.circular(8),
+          clipBehavior: Clip.antiAlias,
+          child: Theme(
+            data: theme.copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              dense: true,
+              tilePadding: const EdgeInsets.symmetric(horizontal: 10),
+              childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+              leading: Icon(Icons.terminal_rounded, size: 16, color: scheme.outline),
+              title: Text(
+                context.tr('ai.terminal.output_lines', {
+                  'n': m.content.trim().isEmpty ? 0 : m.content.trim().split('\n').length,
+                }),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelMedium?.copyWith(color: scheme.outline),
+              ),
+              children: [
+                Container(
+                  width: double.infinity,
+                  constraints: const BoxConstraints(maxHeight: 280),
+                  child: SingleChildScrollView(
+                    reverse: true,
+                    child: SelectableText(m.content, style: const TextStyle(fontFamily: 'monospace', fontSize: 11.5)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     final isUser = m.role == 'user';
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,

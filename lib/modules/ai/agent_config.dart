@@ -1,6 +1,6 @@
 /// Agent 实现类型
 enum AgentKind {
-  /// DeepSeek Harness 命令行（dsh）
+  /// DeepSeek Harness（dsh，应用内安装，以 ACP 子进程运行；值保持旧名以兼容已保存的配置）
   deepseekCli('deepseek_cli'),
 
   /// OpenAI 兼容 HTTP API（DeepSeek API 等）
@@ -33,10 +33,10 @@ class AgentSettings {
   final String name;
   final AgentKind kind;
 
-  /// CLI 可执行文件路径或名称（默认 dsh）
+  /// 旧版 CLI 可执行文件路径（已不使用，保留以兼容数据库与同步）
   final String command;
 
-  /// CLI 额外参数（空格分隔）
+  /// 旧版 CLI 额外参数（已不使用，保留以兼容数据库与同步）
   final String args;
 
   /// API 地址

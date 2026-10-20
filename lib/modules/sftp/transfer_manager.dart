@@ -164,6 +164,12 @@ class TransferManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 移除一个已结束的任务（进行中的任务需先取消）
+  void remove(TransferTask t) {
+    if (t.isActive || !tasks.remove(t)) return;
+    notifyListeners();
+  }
+
   /// 成功的任务按 [autoRemoveDoneAfter] 延时移除；失败任务保留以便查看与重试
   void _scheduleAutoRemove(TransferTask t) {
     final delay = autoRemoveDoneAfter;

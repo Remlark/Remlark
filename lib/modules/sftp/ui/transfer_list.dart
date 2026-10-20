@@ -120,6 +120,19 @@ class _TaskRow extends StatelessWidget {
                   icon: const Icon(Icons.close, size: 16),
                   onPressed: () => manager.cancel(t),
                 ),
+              // 失败 / 已取消：可重试或移除
+              if (t.isFailed) ...[
+                IconButton(
+                  tooltip: context.tr('common.retry'),
+                  icon: const Icon(Icons.refresh, size: 16),
+                  onPressed: () => manager.retry(t),
+                ),
+                IconButton(
+                  tooltip: context.tr('transfer.remove'),
+                  icon: const Icon(Icons.close, size: 16),
+                  onPressed: () => manager.remove(t),
+                ),
+              ],
             ],
           ),
         );

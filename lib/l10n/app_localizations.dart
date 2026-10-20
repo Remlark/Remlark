@@ -16,6 +16,9 @@ class S {
 
   static const LocalizationsDelegate<S> delegate = _SDelegate();
 
+  /// 当前界面语言的翻译实例，供没有 BuildContext 的服务层生成提示文本（如安装、Agent 错误）
+  static S current = S(const Locale('zh'));
+
   /// 获取当前上下文的翻译实例
   static S of(BuildContext context) {
     return Localizations.of<S>(context, S) ?? S(const Locale('zh'));
@@ -39,7 +42,7 @@ class _SDelegate extends LocalizationsDelegate<S> {
 
   @override
   // 同步加载，避免首帧空白
-  Future<S> load(Locale locale) => SynchronousFuture(S(locale));
+  Future<S> load(Locale locale) => SynchronousFuture(S.current = S(locale));
 
   @override
   bool shouldReload(covariant LocalizationsDelegate<S> old) => false;

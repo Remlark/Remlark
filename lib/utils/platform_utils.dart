@@ -68,10 +68,15 @@ class PlatformUtils {
   }
 
   /// 将文件权限设置为仅当前用户可读写（非 Windows）
-  static Future<void> restrictPermissions(String path) async {
+  static Future<void> restrictPermissions(String path) => _chmod('600', path);
+
+  /// 将目录权限设置为仅当前用户可访问（非 Windows）
+  static Future<void> restrictDirectory(String path) => _chmod('700', path);
+
+  static Future<void> _chmod(String mode, String path) async {
     if (Platform.isWindows) return;
     try {
-      await Process.run('chmod', ['600', path]);
+      await Process.run('chmod', [mode, path]);
     } catch (_) {
       // 设置权限失败不影响主流程
     }

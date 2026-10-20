@@ -12,6 +12,7 @@ import '../../workspace/workspace_controller.dart';
 import '../../workspace/workspace_tab.dart';
 import '../terminal_session.dart';
 import 'terminal_pane.dart';
+import 'upload_status.dart';
 
 /// 终端侧边面板类型（SFTP 已改为独立工作区标签）
 enum SidePanel { none, ai }
@@ -149,7 +150,13 @@ class _TerminalTabViewState extends State<TerminalTabView> {
               },
             ),
           ),
-          if (!widget.compact) SessionStatusBar(tab: s, detail: s.host.osName),
+          if (!widget.compact)
+            SessionStatusBar(
+              tab: s,
+              detail: s.host.osName,
+              // 终端拖拽 / 粘贴上传的进度
+              trailing: [if (s.uploads != null) UploadStatus(manager: s.uploads!)],
+            ),
         ],
       ),
     );

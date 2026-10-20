@@ -2,6 +2,9 @@ import '../data/database.dart';
 import '../modules/ai/agent_repository.dart';
 import '../modules/ai/agents_controller.dart';
 import '../modules/ai/chat_repository.dart';
+import '../modules/ai/agent_config.dart';
+import '../modules/ai/dsh/dsh_runtime_controller.dart';
+import '../modules/ai/runtime/agent_runtime.dart';
 import '../modules/ai/token_repository.dart';
 import '../modules/hosts/group_repository.dart';
 import '../modules/hosts/host_repository.dart';
@@ -31,6 +34,8 @@ class AppServices {
     connector = SshConnector(hostRepo, keyRepo);
     sync = SyncService(settingsRepo, hostRepo, groupRepo, keyRepo)..onHostsChanged = hosts.load;
     agents = AgentsController(agentRepo);
+    dsh = DshRuntimeController();
+    runtimes = AgentRuntimes({AgentKind.deepseekCli: dsh});
     workspace = WorkspaceController();
     importExport = ImportExportService(hostRepo, groupRepo, keyRepo, snippetRepo);
   }
@@ -50,6 +55,10 @@ class AppServices {
   late final SshConnector connector;
   late final SyncService sync;
   late final AgentsController agents;
+  late final DshRuntimeController dsh;
+
+  /// 各类 Agent 的本地运行环境（新增需要安装的 Agent 时在此注册）
+  late final AgentRuntimes runtimes;
   late final WorkspaceController workspace;
   late final ImportExportService importExport;
 

@@ -19,7 +19,7 @@ import '../terminal_session.dart';
 import 'terminal_themes.dart';
 import 'upload_helper.dart';
 
-/// 终端面板：xterm 视图 + 拖拽上传 + 右键（有选区复制 / 无选区粘贴：文本输入、文件上传）
+/// 终端面板：xterm 视图 + 拖拽上传 + 右键菜单（复制 / 粘贴：文本输入、文件上传）
 /// + 快捷键复制粘贴 + 连接状态遮罩
 class TerminalPane extends StatefulWidget {
   const TerminalPane({super.key, required this.session, this.autofocus = true});
@@ -133,6 +133,61 @@ class _TerminalPaneState extends State<TerminalPane> {
     if (text != null && text.isNotEmpty) s.pasteText(text);
   }
 
+  /// 右键菜单：复制选区、粘贴（剪贴板为文件时显示为“粘贴并上传”）
+  Future<void> _contextMenu(Offset pos) async {
+    // 先记下选区，避免弹出菜单期间选区变化
+    final selected = s.selectedText();
+    List<String> files = const [];
+    var hasText = false;
+    try {
+      files = await Pasteboard.files();
+    } catch (_) {}
+    try {
+      hasText = await Clipboard.hasStrings();
+    } catch (_) {}
+    if (!mounted) return;
+    final p = context.palette;
+    final connected = s.state == SessionState.connected;
+    // 菜单项：文字 + 右侧快捷键提示
+    PopupMenuItem<String> item(String value, String text, String shortcut, bool enabled) => PopupMenuItem(
+      value: value,
+      enabled: enabled,
+      height: 36,
+      child: Row(
+        children: [
+          Expanded(child: Text(text)),
+          const SizedBox(width: 24),
+          Text(shortcut, style: TextStyle(fontSize: 12, color: p.textFaint)),
+        ],
+      ),
+    );
+    final r = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(pos.dx, pos.dy, pos.dx + 1, pos.dy + 1),
+      items: [
+        item('copy', context.tr('common.copy'), _isApple ? '⌘C' : 'Ctrl+Shift+C', selected != null),
+        item(
+          'paste',
+          files.isNotEmpty
+              ? context.tr('terminal.menu.paste_upload', {'count': files.length})
+              : context.tr('terminal.menu.paste'),
+          _isApple ? '⌘V' : 'Ctrl+Shift+V',
+          connected && (files.isNotEmpty || hasText),
+        ),
+      ],
+    );
+    if (!mounted) return;
+    switch (r) {
+      case 'copy':
+        Clipboard.setData(ClipboardData(text: selected!));
+        s.controller.clearSelection();
+        UiUtils.toast(context.tr('common.copied'));
+      case 'paste':
+        await _paste();
+    }
+    _focus.requestFocus();
+  }
+
   /// 拦截粘贴快捷键（macOS: Cmd+V，其他: Ctrl+Shift+V / Shift+Insert）
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
     if (e is! KeyDownEvent) return KeyEventResult.ignored;
@@ -197,9 +252,8 @@ class _TerminalPaneState extends State<TerminalPane> {
                 ),
                 shortcuts: _shortcuts,
                 onKeyEvent: _onKey,
-                onSecondaryTapDown: (details, offset) {
-                  if (!_copy()) _paste();
-                },
+                // 远程程序开启鼠标上报（vim、tmux 等）时右键交给远程，不弹菜单
+                onSecondaryTapDown: (details, offset) => _contextMenu(details.globalPosition),
               ),
             ),
           ),

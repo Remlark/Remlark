@@ -58,7 +58,12 @@ class AgentError extends AgentEvent {
 
 /// Agent 请求
 class AgentRequest {
-  const AgentRequest({required this.history, required this.prompt, this.externalSessionId, this.systemPrompt = ''});
+  const AgentRequest({
+    required this.history,
+    required this.prompt,
+    this.externalSessionId,
+    this.systemPrompt = '',
+  });
 
   /// 之前的对话（不含本次 prompt）
   final List<AgentMessage> history;

@@ -4,18 +4,49 @@ import 'package:provider/provider.dart';
 import '../../../app/theme/app_palette.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../ui_kit/app_dialog.dart';
+import '../../../ui_kit/check_label.dart';
 import '../../../ui_kit/buttons.dart';
 import '../../../ui_kit/panel.dart';
 import '../../../ui_kit/tags.dart';
-import '../../../utils/id_utils.dart';
-import '../../../utils/ui_utils.dart';
 import '../../ai/agent_config.dart';
 import '../../ai/agents_controller.dart';
+import '../../ai/runtime/agent_runtime.dart';
+import 'agent_editor_dialog.dart';
 import 'settings_card.dart';
 
-/// AI Agent 设置：配置多个 Agent，选择当前使用的 Agent
-class AgentSettingsSection extends StatelessWidget {
+/// AI Agent 设置：配置多个 Agent，选择当前使用的 Agent。
+/// 需要本地运行环境的 Agent 在添加 / 编辑时安装，列表中显示运行环境状态
+class AgentSettingsSection extends StatefulWidget {
   const AgentSettingsSection({super.key});
+
+  @override
+  State<AgentSettingsSection> createState() => _AgentSettingsSectionState();
+}
+
+class _AgentSettingsSectionState extends State<AgentSettingsSection> {
+  late final AgentRuntimes _runtimes = context.read<AgentRuntimes>();
+
+  @override
+  void initState() {
+    super.initState();
+    // 只读取各运行环境的本机安装状态（列表中显示未安装 / 正在安装）；检测更新在编辑框中进行
+    for (final r in _runtimes.all) {
+      r.addListener(_onRuntime);
+      r.loadLocal();
+    }
+  }
+
+  void _onRuntime() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    for (final r in _runtimes.all) {
+      r.removeListener(_onRuntime);
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,7 +97,7 @@ class AgentSettingsSection extends StatelessWidget {
                                     ),
                                   ),
                                   const SizedBox(width: 10),
-                                  Tag(a.kind == AgentKind.deepseekCli ? 'CLI' : 'API', color: p.info),
+                                  Tag(a.kind == AgentKind.deepseekCli ? 'dsh' : 'API', color: p.info),
                                   if (a.uuid == active?.uuid) ...[
                                     const SizedBox(width: 8),
                                     Tag(context.tr('agent.active'), color: p.accent),
@@ -74,14 +105,7 @@ class AgentSettingsSection extends StatelessWidget {
                                 ],
                               ),
                               const SizedBox(height: 4),
-                              Text(
-                                a.kind == AgentKind.deepseekCli
-                                    ? 'DeepSeek Harness CLI · ${a.command.isEmpty ? 'dsh' : a.command}'
-                                    : 'OpenAI API · ${a.model.isEmpty ? 'deepseek-chat' : a.model}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 13, color: p.textMuted, fontFamily: 'monospace'),
-                              ),
+                              _subtitle(context, a),
                             ],
                           ),
                         ),
@@ -93,15 +117,7 @@ class AgentSettingsSection extends StatelessWidget {
                         GhostIconButton(
                           icon: Icons.delete_outline,
                           tooltip: context.tr('common.delete'),
-                          onPressed: () async {
-                            final ok = await UiUtils.confirm(
-                              context,
-                              title: context.tr('agent.delete'),
-                              message: a.name,
-                              danger: true,
-                            );
-                            if (ok) await c.delete(a.uuid);
-                          },
+                          onPressed: () => _delete(context, a),
                         ),
                       ],
                     ),
@@ -114,134 +130,105 @@ class AgentSettingsSection extends StatelessWidget {
     );
   }
 
+  /// 副标题：类型与模型；需要运行环境时附上未安装 / 正在安装提示（是否可更新只在编辑框中显示）
+  Widget _subtitle(BuildContext context, AgentSettings a) {
+    final p = context.palette;
+    final runtime = _runtimes.of(a.kind);
+    final base = a.kind == AgentKind.deepseekCli
+        ? 'DeepSeek Harness · ${a.model.isEmpty ? context.tr('agent.model.default') : a.model}'
+        : 'OpenAI API · ${a.model.isEmpty ? 'deepseek-chat' : a.model}';
+    final String? hint;
+    Color hintColor = p.warning;
+    if (runtime == null || !runtime.loaded) {
+      hint = null;
+    } else if (runtime.busy) {
+      hint = context.tr('runtime.installing', {'name': runtime.displayName});
+      hintColor = p.info;
+    } else if (!runtime.installed) {
+      hint = context.tr('runtime.not_installed');
+    } else {
+      hint = null;
+    }
+    final style = TextStyle(fontSize: 13, color: p.textMuted, fontFamily: 'monospace');
+    return Text.rich(
+      TextSpan(
+        text: base,
+        children: [
+          if (hint != null) TextSpan(text: ' · $hint', style: style.copyWith(color: hintColor)),
+        ],
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: style,
+    );
+  }
+
+  /// 添加或编辑 Agent
   Future<void> _edit(BuildContext context, [AgentSettings? a]) async {
     final r = await showDialog<AgentSettings>(
       context: context,
-      builder: (_) => _AgentDialog(existing: a),
+      builder: (_) => AgentEditorDialog(existing: a),
     );
     if (r != null && context.mounted) await context.read<AgentsController>().save(r);
   }
+
+  /// 删除 Agent；删除的是使用某运行环境的最后一个 Agent 时，可选择一并移除运行环境
+  Future<void> _delete(BuildContext context, AgentSettings a) async {
+    final c = context.read<AgentsController>();
+    final runtime = _runtimes.of(a.kind);
+    final lastUser = runtime != null && runtime.installed && !c.agents.any((o) => o.uuid != a.uuid && o.kind == a.kind);
+    final r = await showDialog<(bool, bool)>(
+      context: context,
+      builder: (_) => _DeleteAgentDialog(name: a.name, runtime: lastUser ? runtime : null),
+    );
+    if (r == null || !r.$1) return;
+    await c.delete(a.uuid);
+    if (r.$2) await runtime!.uninstall();
+  }
 }
 
-class _AgentDialog extends StatefulWidget {
-  const _AgentDialog({this.existing});
+/// 删除 Agent 确认框；[runtime] 非空时提供“同时移除运行环境”（默认不勾选）。
+/// 返回 (是否删除, 是否移除运行环境)
+class _DeleteAgentDialog extends StatefulWidget {
+  const _DeleteAgentDialog({required this.name, this.runtime});
 
-  final AgentSettings? existing;
+  final String name;
+  final AgentRuntime? runtime;
 
   @override
-  State<_AgentDialog> createState() => _AgentDialogState();
+  State<_DeleteAgentDialog> createState() => _DeleteAgentDialogState();
 }
 
-class _AgentDialogState extends State<_AgentDialog> {
-  late AgentKind _kind = widget.existing?.kind ?? AgentKind.deepseekCli;
-  late final _name = TextEditingController(text: widget.existing?.name ?? 'DeepSeek Harness');
-  late final _command = TextEditingController(text: widget.existing?.command ?? '');
-  late final _args = TextEditingController(text: widget.existing?.args ?? '');
-  late final _endpoint = TextEditingController(text: widget.existing?.endpoint ?? '');
-  late final _apiKey = TextEditingController(text: widget.existing?.apiKey ?? '');
-  late final _model = TextEditingController(text: widget.existing?.model ?? '');
-  late final _system = TextEditingController(text: widget.existing?.systemPrompt ?? '');
+class _DeleteAgentDialogState extends State<_DeleteAgentDialog> {
+  bool _removeRuntime = false;
 
   @override
   Widget build(BuildContext context) {
-    final cli = _kind == AgentKind.deepseekCli;
+    final p = context.palette;
+    final runtime = widget.runtime;
     return AppDialog(
-      title: context.tr(widget.existing == null ? 'agent.new' : 'agent.edit'),
-      width: 580,
-      content: SizedBox(
-        width: 532,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SegmentedButton<AgentKind>(
-                segments: const [
-                  ButtonSegment(value: AgentKind.deepseekCli, label: Text('DeepSeek Harness CLI')),
-                  ButtonSegment(value: AgentKind.openaiApi, label: Text('OpenAI API')),
-                ],
-                selected: {_kind},
-                onSelectionChanged: (s) => setState(() => _kind = s.first),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: _name,
-                decoration: InputDecoration(labelText: context.tr('agent.name')),
-              ),
-              const SizedBox(height: 12),
-              if (cli) ...[
-                TextField(
-                  controller: _command,
-                  decoration: InputDecoration(labelText: context.tr('agent.command'), hintText: 'dsh'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _args,
-                  decoration: InputDecoration(
-                    labelText: context.tr('agent.args'),
-                    hintText: '--profile headless --json',
-                    helperText: context.tr('agent.args.helper'),
-                  ),
-                ),
-              ] else ...[
-                TextField(
-                  controller: _endpoint,
-                  decoration: InputDecoration(
-                    labelText: context.tr('agent.endpoint'),
-                    hintText: 'https://api.deepseek.com',
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              TextField(
-                controller: _apiKey,
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: 'API Key',
-                  helperText: cli ? context.tr('agent.api_key.cli_helper') : null,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _model,
-                decoration: InputDecoration(
-                  labelText: context.tr('agent.model'),
-                  hintText: cli ? 'deepseek-harness' : 'deepseek-chat',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _system,
-                maxLines: 3,
-                decoration: InputDecoration(labelText: context.tr('agent.system_prompt'), alignLabelWithHint: true),
-              ),
-            ],
-          ),
-        ),
+      title: context.tr('agent.delete'),
+      icon: Icons.delete_outline_rounded,
+      iconColor: p.danger,
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(widget.name, style: const TextStyle(height: 1.5)),
+          if (runtime != null) ...[
+            const SizedBox(height: 10),
+            CheckLabel(
+              value: _removeRuntime,
+              onChanged: (v) => setState(() => _removeRuntime = v),
+              label: context.tr('runtime.remove_with_agent', {'name': runtime.displayName}),
+              helper: context.tr('runtime.remove_with_agent.helper'),
+            ),
+          ],
+        ],
       ),
       actions: [
         OutlinedButton(onPressed: () => Navigator.pop(context), child: Text(context.tr('common.cancel'))),
-        FilledButton(
-          onPressed: () {
-            if (_name.text.trim().isEmpty) return;
-            Navigator.pop(
-              context,
-              AgentSettings(
-                uuid: widget.existing?.uuid ?? IdUtils.newId(),
-                name: _name.text.trim(),
-                kind: _kind,
-                command: _command.text.trim(),
-                args: _args.text.trim(),
-                endpoint: _endpoint.text.trim(),
-                apiKey: _apiKey.text.isEmpty ? null : _apiKey.text,
-                model: _model.text.trim(),
-                systemPrompt: _system.text,
-                isActive: widget.existing?.isActive ?? false,
-                createdAt: widget.existing?.createdAt ?? DateTime.now().millisecondsSinceEpoch,
-              ),
-            );
-          },
-          child: Text(context.tr('common.save')),
-        ),
+        DangerButton(label: context.tr('common.delete'), onPressed: () => Navigator.pop(context, (true, _removeRuntime))),
       ],
     );
   }

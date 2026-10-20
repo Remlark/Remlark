@@ -42,6 +42,7 @@ class TerminalSession extends WorkspaceTab {
   SSHSession? _shell;
   SftpService? _sftp;
   TransferManager? _transfers;
+  TransferManager? _uploads;
   StreamSubscription<String>? _stdoutSub;
   int _cols = 80;
   int _rows = 24;
@@ -49,6 +50,15 @@ class TerminalSession extends WorkspaceTab {
 
   /// 广播回调：用户在本终端输入时，由工作区转发给其他选中的会话
   void Function(TerminalSession from, String data)? onUserInput;
+
+  final _outputCtl = StreamController<String>.broadcast();
+  final _userInputCtl = StreamController<String>.broadcast();
+
+  /// shell 输出（解码后的原始文本，含控制序列），供 AI 读取终端结果
+  Stream<String> get output => _outputCtl.stream;
+
+  /// 用户在本终端的键盘输入（不含程序通过 [sendRaw] 发送的内容）
+  Stream<String> get userInput => _userInputCtl.stream;
 
   /// SFTP 上次浏览的目录（拖拽 / 粘贴上传的默认目标）
   String? lastRemoteDir;
@@ -65,8 +75,12 @@ class TerminalSession extends WorkspaceTab {
   /// SFTP 服务（连接后可用）
   SftpService? get sftp => _sftp;
 
-  /// 传输管理器（连接后可用）
+  /// SFTP 标签的传输管理器（连接后可用）
   TransferManager? get transfers => _transfers;
+
+  /// 终端拖拽 / 粘贴上传的传输管理器（连接后可用）：与 SFTP 标签的队列分开，
+  /// 进度只显示在终端状态栏；成功的任务几秒后自动移除
+  TransferManager? get uploads => _uploads;
 
   /// 建立连接并打开 shell
   Future<void> connect() async {
@@ -82,7 +96,12 @@ class TerminalSession extends WorkspaceTab {
       _sftp = SftpService(conn.client);
       _transfers?.dispose();
       _transfers = TransferManager(_sftp!);
-      _stdoutSub = const Utf8Decoder(allowMalformed: true).bind(_mergeOutput(shell)).listen(terminal.write);
+      _uploads?.dispose();
+      _uploads = TransferManager(_sftp!, autoRemoveDoneAfter: const Duration(seconds: 3));
+      _stdoutSub = const Utf8Decoder(allowMalformed: true).bind(_mergeOutput(shell)).listen((s) {
+        terminal.write(s);
+        _outputCtl.add(s);
+      });
       shell.done.then((_) => _onClosed(null));
       conn.client.done.then((_) => _onClosed(null), onError: (Object e) => _onClosed('$e'));
       progress = null;
@@ -122,6 +141,7 @@ class TerminalSession extends WorkspaceTab {
   /// 终端用户输入：发往 shell，并触发广播
   void _handleInput(String data) {
     sendRaw(data);
+    _userInputCtl.add(data);
     onUserInput?.call(this, data);
   }
 
@@ -184,6 +204,15 @@ class TerminalSession extends WorkspaceTab {
     _teardown();
     _transfers?.dispose();
     _transfers = null;
+    _uploads?.dispose();
+    _uploads = null;
+  }
+
+  @override
+  void dispose() {
+    _outputCtl.close();
+    _userInputCtl.close();
+    super.dispose();
   }
 }
 

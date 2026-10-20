@@ -6,10 +6,12 @@ import '../../../app/app_services.dart';
 import '../../../app/nav_controller.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../utils/format_utils.dart';
+import '../../terminal/terminal_agent_driver.dart';
 import '../../terminal/terminal_session.dart';
 import '../agents_controller.dart';
 import '../chat_controller.dart';
 import 'chat_message_view.dart';
+import 'command_permission_selector.dart';
 import 'chat_status_bar.dart';
 
 /// 终端内的 AI 聊天面板：选择 Agent、对话、附带终端上下文、一键把命令发送到终端
@@ -18,12 +20,18 @@ class ChatPanel extends StatefulWidget {
 
   final TerminalSession session;
 
-  /// 获取（或创建）会话绑定的聊天控制器
+  /// 获取（或创建）会话绑定的聊天控制器：每个终端标签页一个，切换回来继续原对话；
+  /// AI 只操作这个终端（即这一台服务器）
   static ChatController controllerFor(BuildContext context, TerminalSession s) {
     final existing = s.uiState['chat'];
     if (existing is ChatController) return existing;
     final services = context.read<AppServices>();
-    final c = ChatController(chats: services.chatRepo, tokens: services.tokenRepo, hostName: s.host.name);
+    final c = ChatController(
+      chats: services.chatRepo,
+      tokens: services.tokenRepo,
+      hostName: s.host.name,
+      terminal: TerminalAgentDriver(s),
+    );
     s.uiState['chat'] = c;
     return c;
   }
@@ -191,6 +199,7 @@ class _ChatPanelState extends State<ChatPanel> {
                     itemBuilder: (context, i) => ChatMessageView(message: _chat.messages[i], onRunCommand: _runCommand),
                   ),
           ),
+          if (_chat.waitingForEnter) _EnterHint(),
           const Divider(height: 1),
           ChatStatusBar(stats: _chat.stats, busy: _chat.busy),
           Padding(
@@ -204,6 +213,11 @@ class _ChatPanelState extends State<ChatPanel> {
                       label: Text(context.tr('ai.attach_output'), style: const TextStyle(fontSize: 11)),
                       selected: _attachOutput,
                       onSelected: (v) => setState(() => _attachOutput = v),
+                    ),
+                    const SizedBox(width: 4),
+                    CommandPermissionSelector(
+                      value: _chat.permission,
+                      onChanged: (p) => _chat.permission = p,
                     ),
                     const SizedBox(width: 6),
                     Expanded(
@@ -242,6 +256,30 @@ class _ChatPanelState extends State<ChatPanel> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 逐条确认时的提示：命令已填入终端，等待用户检查后按回车
+class _EnterHint extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.keyboard_return_rounded, size: 16, color: theme.colorScheme.primary),
+          const SizedBox(width: 8),
+          Expanded(child: Text(context.tr('ai.terminal.press_enter'), style: theme.textTheme.bodySmall)),
         ],
       ),
     );
