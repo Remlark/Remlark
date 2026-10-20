@@ -7,9 +7,9 @@ import 'package:path/path.dart' as p;
 
 import '../../utils/shell_utils.dart';
 
-/// 远程文件条目
-class RemoteFile {
-  const RemoteFile({
+/// 文件条目（远程 SFTP 与本地文件系统共用）
+class FileEntry {
+  const FileEntry({
     required this.name,
     required this.path,
     required this.isDir,
@@ -69,9 +69,9 @@ class SftpService {
   Future<String> home() async => (await sftp).absolute('.');
 
   /// 列出目录（目录在前，按名称排序）
-  Future<List<RemoteFile>> list(String path) async {
+  Future<List<FileEntry>> list(String path) async {
     final names = await (await sftp).listdir(path);
-    final files = <RemoteFile>[];
+    final files = <FileEntry>[];
     for (final n in names) {
       if (n.filename == '.' || n.filename == '..') continue;
       final full = ShellUtils.joinRemote(path, n.filename);
@@ -84,7 +84,7 @@ class SftpService {
         } catch (_) {}
       }
       files.add(
-        RemoteFile(
+        FileEntry(
           name: n.filename,
           path: full,
           isDir: isDir,
@@ -122,6 +122,19 @@ class SftpService {
   }
 
   /// 是否存在
+  /// 获取单个路径的信息（用于构造下载任务）
+  Future<FileEntry> statEntry(String path) async {
+    final a = await (await sftp).stat(path);
+    return FileEntry(
+      name: ShellUtils.basenameRemote(path),
+      path: path,
+      isDir: a.isDirectory,
+      isLink: false,
+      size: a.size ?? 0,
+      modified: a.modifyTime,
+    );
+  }
+
   Future<bool> exists(String path) async {
     try {
       await (await sftp).stat(path);
@@ -195,7 +208,7 @@ class SftpService {
   }
 
   /// 统计远程目录下的所有文件（相对路径）
-  Future<List<(String remote, String rel, int size)>> walkRemote(RemoteFile root) async {
+  Future<List<(String remote, String rel, int size)>> walkRemote(FileEntry root) async {
     if (!root.isDir) return [(root.path, root.name, root.size)];
     final result = <(String, String, int)>[];
     Future<void> walk(String dir, String rel) async {

@@ -50,6 +50,12 @@ class VncKeysym {
   };
 
   /// 计算按键对应的 keysym，无法映射返回 null
+  /// 字符（Unicode 码点）对应的 keysym：Latin-1 直接使用码点，其他使用 Unicode keysym
+  static int fromChar(int code) => code < 0x100 ? code : 0x01000000 + code;
+
+  /// 回车
+  static const enter = 0xff0d;
+
   static int? fromEvent(KeyEvent event) {
     final special = _special[event.logicalKey];
     if (special != null) return special;
@@ -60,7 +66,7 @@ class VncKeysym {
         // Ctrl 组合键产生的控制字符，使用按键标签字符
         return _fromLabel(event.logicalKey);
       }
-      return code < 0x100 ? code : 0x01000000 + code;
+      return fromChar(code);
     }
     return _fromLabel(event.logicalKey);
   }

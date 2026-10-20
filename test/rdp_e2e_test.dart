@@ -22,7 +22,7 @@ class _Ui implements RemoteDesktopInteraction {
   int asked = 0;
 
   @override
-  Future<PasswordInput?> askDesktopPassword(HostEntry host, {String? error}) async {
+  Future<PasswordInput?> askDesktopPassword(HostEntry host, {String? error, bool askUsername = false}) async {
     asked++;
     return const PasswordInput('pw');
   }
@@ -198,12 +198,13 @@ void main() {
     expect(s.state, SessionState.connected);
     expect(ui.asked, 1);
     expect((await repo.getByUuid('r1'))!.hostKeyFingerprint, isNotEmpty);
-    for (var i = 0; i < 50 && s.readFrame() == null; i++) {
+    for (var i = 0; i < 50 && s.takeFrame() == null; i++) {
       await Future.delayed(const Duration(milliseconds: 100));
     }
-    final frame = s.readFrame();
+    final frame = s.takeFrame();
     expect(frame, isNotNull);
-    expect(frame!.length, s.frameWidth * s.frameHeight * 4);
+    expect(frame!.full, isTrue);
+    expect(frame.patches.single.bgra.length, s.frameWidth * s.frameHeight * 4);
     // 输入：鼠标按下 / 抬起、滚轮、键盘（扫描码映射）
     s.pointerEvent(100, 100, 1);
     s.pointerEvent(110, 110, 0);

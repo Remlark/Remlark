@@ -45,6 +45,12 @@ class FormatUtils {
     return '$v';
   }
 
+  /// 时长：HH:mm:ss
+  static String duration(Duration d) {
+    final s = d.inSeconds < 0 ? 0 : d.inSeconds;
+    return '${_two(s ~/ 3600)}:${_two(s % 3600 ~/ 60)}:${_two(s % 60)}';
+  }
+
   /// 本周一 0 点
   static DateTime startOfWeek(DateTime t) {
     final d = DateTime(t.year, t.month, t.day);

@@ -5,9 +5,10 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/ui_utils.dart';
 import 'app_services.dart';
-import 'home_shell.dart';
+import 'shell/home_shell.dart';
 import 'nav_controller.dart';
-import 'theme.dart';
+import 'theme/app_palette.dart';
+import 'theme/app_theme.dart';
 
 /// 应用根组件：注入依赖、配置主题与多语言
 class RemlarkApp extends StatelessWidget {
@@ -37,8 +38,8 @@ class RemlarkApp extends StatelessWidget {
               debugShowCheckedModeBanner: false,
               navigatorKey: UiUtils.navigatorKey,
               scaffoldMessengerKey: UiUtils.messengerKey,
-              theme: AppTheme.build(Brightness.light),
-              darkTheme: AppTheme.build(Brightness.dark),
+              theme: AppTheme.build(Brightness.light, AccentPreset.byId(settings.accent)),
+              darkTheme: AppTheme.build(Brightness.dark, AccentPreset.byId(settings.accent)),
               themeMode: settings.themeMode,
               locale: settings.locale,
               supportedLocales: S.supportedLocales,

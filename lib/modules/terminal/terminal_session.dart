@@ -5,11 +5,13 @@ import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:xterm/xterm.dart';
 
+import '../../utils/app_log.dart';
 import '../sftp/sftp_service.dart';
 import '../sftp/transfer_manager.dart';
 import '../ssh/ssh_connector.dart';
 import '../ssh/ssh_interaction.dart';
 import '../workspace/workspace_tab.dart';
+import 'reflow_safe_terminal.dart';
 
 /// SSH 终端会话：持有连接、shell、xterm 终端模型与 SFTP 传输
 class TerminalSession extends WorkspaceTab {
@@ -18,6 +20,7 @@ class TerminalSession extends WorkspaceTab {
     terminal.onResize = (w, h, pw, ph) {
       _cols = w;
       _rows = h;
+      AppLog.d('terminal', '「${host.name}」终端尺寸 $w×$h');
       _shell?.resizeTerminal(w, h, pw, ph);
     };
     terminal.onTitleChange = (t) {
@@ -29,8 +32,8 @@ class TerminalSession extends WorkspaceTab {
   final SshConnector _connector;
   final SshInteraction _interaction;
 
-  /// xterm 终端模型
-  final Terminal terminal = Terminal(maxLines: 20000);
+  /// xterm 终端模型（修正 reflow 后光标漂移）
+  final Terminal terminal = ReflowSafeTerminal(maxLines: 20000);
 
   /// 选区控制器（复制使用）
   final TerminalController controller = TerminalController();
@@ -74,6 +77,7 @@ class TerminalSession extends WorkspaceTab {
       final shell = await conn.client.shell(
         pty: SSHPtyConfig(type: 'xterm-256color', width: _cols, height: _rows),
       );
+      AppLog.i('terminal', '「${host.name}」shell 已打开，终端 $_cols×$_rows');
       _shell = shell;
       _sftp = SftpService(conn.client);
       _transfers?.dispose();
@@ -110,6 +114,7 @@ class TerminalSession extends WorkspaceTab {
   void _onClosed(String? reason) {
     if (state == SessionState.disconnected) return;
     if (state != SessionState.connected) return;
+    AppLog.i('terminal', '「${host.name}」连接断开${reason == null ? '' : '：$reason'}');
     terminal.write('\r\n\x1b[33m[disconnected]\x1b[0m\r\n');
     setState(SessionState.disconnected, error: reason);
   }

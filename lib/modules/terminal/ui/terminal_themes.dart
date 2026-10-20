@@ -5,11 +5,15 @@ import 'package:xterm/xterm.dart';
 class TerminalThemesX {
   TerminalThemesX._();
 
-  /// 可选配色 id
-  static const ids = ['dark', 'light', 'solarized', 'dracula'];
+  /// 跟随界面主题的配色 id（默认）
+  static const auto = 'auto';
 
-  /// 根据 id 获取配色
-  static TerminalTheme byId(String id) => switch (id) {
+  /// 可选配色 id
+  static const ids = [auto, 'dark', 'light', 'solarized', 'dracula'];
+
+  /// 根据 id 获取配色；[auto] 时按界面亮度在浅色 / 深色之间选择
+  static TerminalTheme byId(String id, Brightness uiBrightness) => switch (id) {
+    auto => uiBrightness == Brightness.light ? _light : _dark,
     'light' => _light,
     'solarized' => _solarized,
     'dracula' => _dracula,
@@ -20,7 +24,7 @@ class TerminalThemesX {
     cursor: Color(0xFFE6E6E6),
     selection: Color(0x804A90E2),
     foreground: Color(0xFFD8DEE9),
-    background: Color(0xFF16181D),
+    background: Color(0xFF131518),
     black: Color(0xFF2E3440),
     red: Color(0xFFE06C75),
     green: Color(0xFF98C379),

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../../l10n/app_localizations.dart';
+import '../../../ui_kit/app_dialog.dart';
+import '../../../ui_kit/panel.dart';
 import '../../../utils/id_utils.dart';
 import '../../../utils/platform_utils.dart';
 import '../snippet_model.dart';
+import '../../../ui_kit/check_label.dart';
 
 /// 快捷指令编辑对话框
 class SnippetEditorDialog extends StatefulWidget {
@@ -24,18 +27,19 @@ class _SnippetEditorDialogState extends State<SnippetEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(context.tr(widget.existing == null ? 'snippet.new' : 'snippet.edit')),
+    return AppDialog(
+      title: context.tr(widget.existing == null ? 'snippet.new' : 'snippet.edit'),
+      width: 560,
       content: SizedBox(
         width: 520,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            FieldLabel(context.tr('snippet.kind')),
             DropdownButtonFormField<SnippetKind>(
               isExpanded: true,
               initialValue: _kind,
-              decoration: InputDecoration(labelText: context.tr('snippet.kind')),
               items: [
                 DropdownMenuItem(
                   value: SnippetKind.text,
@@ -49,26 +53,21 @@ class _SnippetEditorDialogState extends State<SnippetEditorDialog> {
               ],
               onChanged: (v) => setState(() => _kind = v ?? SnippetKind.text),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _name,
-              autofocus: true,
-              decoration: InputDecoration(labelText: context.tr('snippet.name')),
-            ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
+            FieldLabel(context.tr('snippet.name'), required: true),
+            TextField(controller: _name, autofocus: true),
+            const SizedBox(height: 16),
             if (_kind == SnippetKind.text) ...[
+              FieldLabel(context.tr('snippet.content')),
               TextField(
                 controller: _content,
                 maxLines: 5,
                 style: const TextStyle(fontFamily: 'monospace'),
-                decoration: InputDecoration(labelText: context.tr('snippet.content'), alignLabelWithHint: true),
               ),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
+              CheckLabel(
                 value: _autoEnter,
-                onChanged: (v) => setState(() => _autoEnter = v ?? true),
-                title: Text(context.tr('snippet.auto_enter')),
+                onChanged: (v) => setState(() => _autoEnter = v),
+                label: context.tr('snippet.auto_enter'),
               ),
             ] else
               Text(context.tr('snippet.kind.install_key.desc'), style: Theme.of(context).textTheme.bodySmall),
@@ -76,7 +75,7 @@ class _SnippetEditorDialogState extends State<SnippetEditorDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text(context.tr('common.cancel'))),
+        OutlinedButton(onPressed: () => Navigator.pop(context), child: Text(context.tr('common.cancel'))),
         FilledButton(
           onPressed: () {
             if (_name.text.trim().isEmpty) return;

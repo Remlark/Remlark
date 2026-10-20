@@ -1,22 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../../app/theme/app_palette.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../ui_kit/buttons.dart';
 import '../../ai/ui/chat_panel.dart';
-import '../../sftp/ui/sftp_panel.dart';
 import '../../snippets/ui/snippet_picker.dart';
 import '../../snippets/ui/snippet_runner.dart';
+import '../../workspace/ui/session_status_bar.dart';
+import '../../workspace/workspace_controller.dart';
 import '../../workspace/workspace_tab.dart';
 import '../terminal_session.dart';
 import 'terminal_pane.dart';
 
-/// 终端侧边面板类型
-enum SidePanel { none, sftp, ai }
+/// 终端侧边面板类型（SFTP 已改为独立工作区标签）
+enum SidePanel { none, ai }
 
-/// 单个终端标签的完整视图：工具栏 + 终端 + 可切换的侧边面板（SFTP / AI）+ 状态栏
+/// 单个终端标签的完整视图：工具栏 + 终端 + 可伸缩 AI 侧栏 + 状态栏
 class TerminalTabView extends StatefulWidget {
-  const TerminalTabView({super.key, required this.session});
+  const TerminalTabView({
+    super.key,
+    required this.session,
+    this.compact = false,
+    this.autofocus = true,
+  });
 
   final TerminalSession session;
+  final bool compact;
+  final bool autofocus;
 
   @override
   State<TerminalTabView> createState() => _TerminalTabViewState();
@@ -26,9 +37,13 @@ class _TerminalTabViewState extends State<TerminalTabView> {
   TerminalSession get s => widget.session;
 
   SidePanel get _panel => s.uiState['panel'] as SidePanel? ?? SidePanel.none;
-  double get _panelWidth => s.uiState['panelWidth'] as double? ?? 400;
+  double get _panelWidth => s.uiState['panelWidth'] as double? ?? 420;
 
-  void _toggle(SidePanel p) => setState(() => s.uiState['panel'] = _panel == p ? SidePanel.none : p);
+  void _toggleAi() => setState(
+    () => s.uiState['panel'] = _panel == SidePanel.ai
+        ? SidePanel.none
+        : SidePanel.ai,
+  );
 
   Future<void> _snippets() async {
     final sn = await SnippetPicker.show(context);
@@ -37,75 +52,96 @@ class _TerminalTabViewState extends State<TerminalTabView> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final p = context.palette;
     return ListenableBuilder(
       listenable: s,
       builder: (context, _) => Column(
         children: [
-          Container(
-            height: 38,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: Row(
-              children: [
-                _ToolButton(icon: Icons.bolt, label: context.tr('terminal.snippets'), onPressed: _snippets),
-                _ToolButton(
-                  icon: Icons.folder_outlined,
-                  label: 'SFTP',
-                  selected: _panel == SidePanel.sftp,
-                  onPressed: s.state == SessionState.connected ? () => _toggle(SidePanel.sftp) : null,
-                ),
-                _ToolButton(
-                  icon: Icons.auto_awesome_outlined,
-                  label: 'AI',
-                  selected: _panel == SidePanel.ai,
-                  onPressed: () => _toggle(SidePanel.ai),
-                ),
-                const SizedBox(width: 8),
-                // 系统与地址信息过长时省略，避免挤压工具按钮
-                Expanded(
-                  child: Text(
-                    [if (s.host.osName != null) s.host.osName!, s.host.endpoint].join('  ·  '),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.end,
-                    style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.outline),
+          if (!widget.compact)
+            Container(
+              height: 48,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  ToolButton(
+                    compact: true,
+                    icon: Icons.bolt_outlined,
+                    label: context.tr('terminal.snippets'),
+                    onPressed: s.state == SessionState.connected
+                        ? _snippets
+                        : null,
                   ),
-                ),
-                IconButton(
-                  tooltip: context.tr('terminal.reconnect'),
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.refresh, size: 16),
-                  onPressed: s.state == SessionState.connecting ? null : s.reconnect,
-                ),
-              ],
+                  Container(
+                    width: 1,
+                    height: 20,
+                    margin: const EdgeInsets.symmetric(horizontal: 10),
+                    color: p.border,
+                  ),
+                  ToolButton(
+                    compact: true,
+                    icon: Icons.folder_open_outlined,
+                    label: context.tr('terminal.open_sftp'),
+                    onPressed: s.state == SessionState.connected
+                        ? () => context.read<WorkspaceController>().openSftp(s)
+                        : null,
+                  ),
+                  const SizedBox(width: 8),
+                  ToolButton(
+                    compact: true,
+                    icon: Icons.auto_awesome_outlined,
+                    label: context.tr('terminal.ai'),
+                    selected: _panel == SidePanel.ai,
+                    onPressed: _toggleAi,
+                  ),
+                  const SizedBox(width: 8),
+                  ToolButton(
+                    compact: true,
+                    icon: Icons.refresh,
+                    label: context.tr('terminal.reconnect'),
+                    onPressed: s.state == SessionState.connecting
+                        ? null
+                        : s.reconnect,
+                  ),
+                ],
+              ),
             ),
-          ),
-          const Divider(height: 1),
+          if (!widget.compact) const Divider(height: 1),
           Expanded(
+            key: const ValueKey('terminal-content'),
             // 侧边面板宽度受可用宽度限制，保证终端至少保留 320 像素
             child: LayoutBuilder(
               builder: (context, box) {
-                final maxPanel = (box.maxWidth - 320 - 5).clamp(240.0, 900.0);
-                final panelWidth = _panelWidth.clamp(240.0, maxPanel);
+                final maxPanel = (box.maxWidth - 320 - 5).clamp(260.0, 900.0);
+                final panelWidth = _panelWidth.clamp(260.0, maxPanel);
                 return Row(
                   children: [
-                    Expanded(child: TerminalPane(session: s)),
-                    if (_panel != SidePanel.none) ...[
+                    Expanded(
+                      child: TerminalPane(
+                        session: s,
+                        autofocus: widget.autofocus,
+                      ),
+                    ),
+                    if (!widget.compact && _panel == SidePanel.ai) ...[
                       // 可拖动的分隔条，调整侧边面板宽度
                       MouseRegion(
                         cursor: SystemMouseCursors.resizeColumn,
                         child: GestureDetector(
                           onHorizontalDragUpdate: (d) => setState(
-                            () => s.uiState['panelWidth'] = (panelWidth - d.delta.dx).clamp(240.0, maxPanel),
+                            () => s.uiState['panelWidth'] =
+                                (panelWidth - d.delta.dx).clamp(
+                                  260.0,
+                                  maxPanel,
+                                ),
                           ),
-                          child: Container(width: 5, color: theme.dividerColor),
+                          child: Container(width: 5, color: p.border),
                         ),
                       ),
                       SizedBox(
                         width: panelWidth,
-                        child: _panel == SidePanel.sftp
-                            ? SftpPanel(key: ValueKey('sftp-${s.id}-${s.sftp.hashCode}'), session: s)
-                            : ChatPanel(key: ValueKey('ai-${s.id}'), session: s),
+                        child: ChatPanel(
+                          key: ValueKey('ai-${s.id}'),
+                          session: s,
+                        ),
                       ),
                     ],
                   ],
@@ -113,33 +149,8 @@ class _TerminalTabViewState extends State<TerminalTabView> {
               },
             ),
           ),
+          if (!widget.compact) SessionStatusBar(tab: s, detail: s.host.osName),
         ],
-      ),
-    );
-  }
-}
-
-class _ToolButton extends StatelessWidget {
-  const _ToolButton({required this.icon, required this.label, this.onPressed, this.selected = false});
-
-  final IconData icon;
-  final String label;
-  final VoidCallback? onPressed;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(right: 2),
-      child: TextButton.icon(
-        style: TextButton.styleFrom(
-          visualDensity: VisualDensity.compact,
-          backgroundColor: selected ? scheme.primaryContainer : null,
-        ),
-        onPressed: onPressed,
-        icon: Icon(icon, size: 16),
-        label: Text(label),
       ),
     );
   }

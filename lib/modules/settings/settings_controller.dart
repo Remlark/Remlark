@@ -9,11 +9,12 @@ class SettingsController extends ChangeNotifier {
   final SettingsRepository _repo;
 
   Locale _locale = const Locale('zh');
-  ThemeMode _themeMode = ThemeMode.system;
+  ThemeMode _themeMode = ThemeMode.dark;
   double _terminalFontSize = 14;
   String _terminalFontFamily = '';
-  String _terminalTheme = 'dark';
+  String _terminalTheme = 'auto';
   bool _copyOnSelect = false;
+  String _accent = 'sage';
 
   Locale get locale => _locale;
   ThemeMode get themeMode => _themeMode;
@@ -22,7 +23,18 @@ class SettingsController extends ChangeNotifier {
   String get terminalTheme => _terminalTheme;
   bool get copyOnSelect => _copyOnSelect;
 
-  static const _keys = ['ui.locale', 'ui.theme', 'term.fontSize', 'term.fontFamily', 'term.theme', 'term.copyOnSelect'];
+  /// 界面强调色预设 id（见 AccentPreset）
+  String get accent => _accent;
+
+  static const _keys = [
+    'ui.locale',
+    'ui.theme',
+    'term.fontSize',
+    'term.fontFamily',
+    'term.theme',
+    'term.copyOnSelect',
+    'ui.accent',
+  ];
 
   /// 启动时从数据库加载
   Future<void> load() async {
@@ -37,13 +49,15 @@ class SettingsController extends ChangeNotifier {
     }
     _themeMode = switch (m['ui.theme']) {
       'light' => ThemeMode.light,
-      'dark' => ThemeMode.dark,
-      _ => ThemeMode.system,
+      'system' => ThemeMode.system,
+      // 未设置时默认深色（设计稿主风格）
+      _ => ThemeMode.dark,
     };
     _terminalFontSize = double.tryParse(m['term.fontSize'] ?? '') ?? 14;
     _terminalFontFamily = m['term.fontFamily'] ?? '';
-    _terminalTheme = m['term.theme'] ?? 'dark';
+    _terminalTheme = m['term.theme'] ?? 'auto';
     _copyOnSelect = m['term.copyOnSelect'] == '1';
+    _accent = m['ui.accent'] ?? 'sage';
     notifyListeners();
   }
 
@@ -86,6 +100,13 @@ class SettingsController extends ChangeNotifier {
   Future<void> setCopyOnSelect(bool v) async {
     _copyOnSelect = v;
     await _repo.set('term.copyOnSelect', v ? '1' : '0');
+    notifyListeners();
+  }
+
+  /// 设置界面强调色
+  Future<void> setAccent(String id) async {
+    _accent = id;
+    await _repo.set('ui.accent', id);
     notifyListeners();
   }
 }

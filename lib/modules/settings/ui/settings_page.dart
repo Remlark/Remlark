@@ -1,158 +1,66 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../app/nav_controller.dart';
 import '../../../l10n/app_localizations.dart';
-import '../../terminal/ui/terminal_themes.dart';
-import '../settings_controller.dart';
+import '../../../ui_kit/nav_tile.dart';
+import '../../../ui_kit/page_header.dart';
 import 'agent_settings_section.dart';
 import 'data_section.dart';
-import 'settings_card.dart';
+import 'general_section.dart';
 import 'sync_settings_section.dart';
 
-/// 设置页：通用、终端、同步、AI Agent、数据
+/// 设置页：页头 + 左侧分区导航（通用、终端、同步、AI Agent、数据）+ 当前分区内容
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
-      children: [
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 820),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+    final nav = context.watch<NavController>();
+    final items = <(SettingsSection, IconData, String)>[
+      (SettingsSection.general, Icons.tune_rounded, context.tr('settings.general')),
+      (SettingsSection.terminal, Icons.terminal_rounded, context.tr('settings.terminal')),
+      (SettingsSection.sync, Icons.sync_rounded, context.tr('settings.sync')),
+      (SettingsSection.agents, Icons.auto_awesome_outlined, context.tr('settings.agents')),
+      (SettingsSection.data, Icons.storage_rounded, context.tr('settings.data')),
+    ];
+    final Widget content = switch (nav.settingsSection) {
+      SettingsSection.general => const GeneralSection(),
+      SettingsSection.terminal => const TerminalSection(),
+      SettingsSection.sync => const SyncSettingsSection(),
+      SettingsSection.agents => const AgentSettingsSection(),
+      SettingsSection.data => const DataSection(),
+    };
+    return PageFrame(
+      header: PageHeader(title: context.tr('nav.settings'), subtitle: context.tr('settings.subtitle')),
+      body: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SubNav(
+            children: [
+              for (final (section, icon, label) in items)
+                NavTile(
+                  icon: icon,
+                  label: label,
+                  selected: nav.settingsSection == section,
+                  onTap: () => nav.goSettings(section),
+                ),
+            ],
+          ),
+          Expanded(
+            child: ListView(
+              key: ValueKey(nav.settingsSection),
+              padding: const EdgeInsets.fromLTRB(32, 24, 32, 24),
               children: [
-                Text(context.tr('nav.settings'), style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 16),
-                const _GeneralSection(),
-                const _TerminalSection(),
-                const SyncSettingsSection(),
-                const AgentSettingsSection(),
-                const DataSection(),
+                Align(
+                  alignment: Alignment.topLeft,
+                  child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 960), child: content),
+                ),
               ],
             ),
           ),
-        ),
-      ],
-    );
-  }
-}
-
-class _GeneralSection extends StatelessWidget {
-  const _GeneralSection();
-
-  @override
-  Widget build(BuildContext context) {
-    final s = context.watch<SettingsController>();
-    return SettingsCard(
-      title: context.tr('settings.general'),
-      children: [
-        SettingsRow(
-          label: context.tr('settings.language'),
-          child: SegmentedButton<String>(
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: 'zh', label: Text('简体中文')),
-              ButtonSegment(value: 'en', label: Text('English')),
-            ],
-            selected: {s.locale.languageCode},
-            onSelectionChanged: (v) => s.setLocale(Locale(v.first)),
-          ),
-        ),
-        SettingsRow(
-          label: context.tr('settings.theme'),
-          child: SegmentedButton<ThemeMode>(
-            showSelectedIcon: false,
-            segments: [
-              ButtonSegment(value: ThemeMode.system, label: Text(context.tr('settings.theme.system'))),
-              ButtonSegment(value: ThemeMode.light, label: Text(context.tr('settings.theme.light'))),
-              ButtonSegment(value: ThemeMode.dark, label: Text(context.tr('settings.theme.dark'))),
-            ],
-            selected: {s.themeMode},
-            onSelectionChanged: (v) => s.setThemeMode(v.first),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _TerminalSection extends StatefulWidget {
-  const _TerminalSection();
-
-  @override
-  State<_TerminalSection> createState() => _TerminalSectionState();
-}
-
-class _TerminalSectionState extends State<_TerminalSection> {
-  late final _font = TextEditingController(text: context.read<SettingsController>().terminalFontFamily);
-
-  @override
-  void dispose() {
-    _font.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = context.watch<SettingsController>();
-    return SettingsCard(
-      title: context.tr('settings.terminal'),
-      children: [
-        SettingsRow(
-          label: context.tr('settings.font_size'),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: 200,
-                child: Slider(
-                  min: 10,
-                  max: 24,
-                  divisions: 14,
-                  value: s.terminalFontSize.clamp(10, 24),
-                  label: s.terminalFontSize.toStringAsFixed(0),
-                  onChanged: s.setTerminalFontSize,
-                ),
-              ),
-              Text(s.terminalFontSize.toStringAsFixed(0)),
-            ],
-          ),
-        ),
-        SettingsRow(
-          label: context.tr('settings.font_family'),
-          child: SizedBox(
-            width: 240,
-            child: TextField(
-              controller: _font,
-              decoration: InputDecoration(hintText: context.tr('settings.font_family.hint')),
-              onSubmitted: s.setTerminalFontFamily,
-              onTapOutside: (_) => s.setTerminalFontFamily(_font.text),
-            ),
-          ),
-        ),
-        SettingsRow(
-          label: context.tr('settings.terminal_theme'),
-          child: DropdownButton<String>(
-            value: s.terminalTheme,
-            items: [
-              for (final id in TerminalThemesX.ids)
-                DropdownMenuItem(value: id, child: Text(context.tr('term_theme.$id'))),
-            ],
-            onChanged: (v) => v == null ? null : s.setTerminalTheme(v),
-          ),
-        ),
-        SettingsRow(
-          label: context.tr('settings.copy_on_select'),
-          child: Switch(value: s.copyOnSelect, onChanged: s.setCopyOnSelect),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Text(context.tr('settings.shortcuts_hint'), style: Theme.of(context).textTheme.bodySmall),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

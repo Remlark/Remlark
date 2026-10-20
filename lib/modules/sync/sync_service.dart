@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:cryptography/cryptography.dart' show SecretBoxAuthenticationError;
 import 'package:flutter/foundation.dart';
 
+import '../../utils/app_log.dart';
 import '../../utils/crypto_utils.dart';
 import '../../utils/secret_store.dart';
 import '../hosts/group_repository.dart';
@@ -157,6 +158,8 @@ class SyncService extends ChangeNotifier {
     lastError = null;
     notifyListeners();
     final report = SyncReport();
+    final sw = Stopwatch()..start();
+    AppLog.i('sync', '开始同步');
     try {
       final remote = await _api.index();
       final locals = await _hosts.listSyncEnabled();
@@ -205,9 +208,15 @@ class SyncService extends ChangeNotifier {
         }
       }
       lastReport = report;
+      AppLog.i(
+        'sync',
+        '同步完成 ${sw.elapsedMilliseconds}ms：推送 ${report.pushed}，拉取 ${report.pulled}，'
+            '未变 ${report.unchanged}，解除 ${report.detached}',
+      );
       await saveConfig(config.copyWith(lastSyncAt: DateTime.now().millisecondsSinceEpoch));
-    } catch (e) {
+    } catch (e, st) {
       lastError = e is SecretBoxAuthenticationError ? 'sync.error.passphrase' : '$e';
+      AppLog.e('sync', '同步失败', e, st);
       rethrow;
     } finally {
       syncing = false;

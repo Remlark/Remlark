@@ -3,7 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../app/app_services.dart';
+import '../../../app/theme/app_palette.dart';
+import '../../../app/theme/app_theme.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../ui_kit/app_table.dart';
+import '../../../ui_kit/buttons.dart';
+import '../../../ui_kit/panel.dart';
 import '../../../utils/format_utils.dart';
 import '../token_repository.dart';
 
@@ -62,54 +67,68 @@ class _TokenStatsViewState extends State<TokenStatsView> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final p = context.palette;
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _SummaryCard(title: context.tr('stats.today'), s: _today),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _SummaryCard(title: context.tr('stats.week'), s: _week),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _SummaryCard(title: context.tr('stats.month'), s: _month),
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        LayoutBuilder(
+          builder: (context, box) {
+            final cards = [
+              _SummaryCard(title: context.tr('stats.today'), s: _today),
+              _SummaryCard(title: context.tr('stats.week'), s: _week),
+              _SummaryCard(title: context.tr('stats.month'), s: _month),
+            ];
+            return Row(
               children: [
-                Text(context.tr('stats.daily'), style: theme.textTheme.titleSmall),
-                const SizedBox(height: 12),
-                SizedBox(height: 220, child: _DailyChart(rows: _days)),
+                for (var i = 0; i < cards.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 16),
+                  Expanded(child: cards[i]),
+                ],
               ],
-            ),
+            );
+          },
+        ),
+        const SizedBox(height: 16),
+        AppPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      context.tr('stats.daily'),
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: p.text),
+                    ),
+                  ),
+                  _Legend(color: p.textFaint, text: context.tr('stats.input_token')),
+                  const SizedBox(width: 16),
+                  _Legend(color: p.accent, text: context.tr('stats.output_token')),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SizedBox(height: 220, child: _DailyChart(rows: _days)),
+            ],
           ),
         ),
         const SizedBox(height: 20),
         Row(
           children: [
-            Text(context.tr('stats.breakdown'), style: theme.textTheme.titleSmall),
+            Text(
+              context.tr('stats.breakdown'),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: p.text),
+            ),
             const Spacer(),
-            SegmentedButton<StatsRange>(
-              showSelectedIcon: false,
-              segments: [
-                ButtonSegment(value: StatsRange.today, label: Text(context.tr('stats.today'))),
-                ButtonSegment(value: StatsRange.week, label: Text(context.tr('stats.week'))),
-                ButtonSegment(value: StatsRange.month, label: Text(context.tr('stats.month'))),
+            PillChoice<StatsRange>(
+              compact: true,
+              items: [
+                (StatsRange.today, context.tr('stats.today')),
+                (StatsRange.week, context.tr('stats.week')),
+                (StatsRange.month, context.tr('stats.month')),
               ],
-              selected: {_range},
-              onSelectionChanged: (s) {
-                setState(() => _range = s.first);
+              value: _range,
+              onChanged: (v) {
+                setState(() => _range = v);
                 _load();
               },
             ),
@@ -120,11 +139,15 @@ class _TokenStatsViewState extends State<TokenStatsView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: _GroupTable(title: context.tr('stats.by_model'), rows: _models),
+              child: _GroupTable(
+                title: context.tr('stats.by_model'),
+                keyLabel: context.tr('stats.model'),
+                rows: _models,
+              ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 16),
             Expanded(
-              child: _GroupTable(title: context.tr('stats.by_agent'), rows: _agents),
+              child: _GroupTable(title: context.tr('stats.by_agent'), keyLabel: 'Agent', rows: _agents),
             ),
           ],
         ),
@@ -133,6 +156,31 @@ class _TokenStatsViewState extends State<TokenStatsView> {
   }
 }
 
+/// 图例
+class _Legend extends StatelessWidget {
+  const _Legend({required this.color, required this.text});
+
+  final Color color;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(text, style: TextStyle(fontSize: 13, color: context.palette.textMuted)),
+      ],
+    );
+  }
+}
+
+/// 汇总卡片：图标、总量，以及输入 / 输出 / 请求次数
 class _SummaryCard extends StatelessWidget {
   const _SummaryCard({required this.title, required this.s});
 
@@ -141,29 +189,67 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final p = context.palette;
     final v = s;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.outline)),
-            const SizedBox(height: 6),
-            Text(
-              v == null ? '-' : FormatUtils.tokens(v.total),
-              style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              v == null
-                  ? ''
-                  : '↑ ${FormatUtils.tokens(v.input)}   ↓ ${FormatUtils.tokens(v.output)}   ·  ${context.tr('stats.requests', {'n': v.requests})}',
-              style: theme.textTheme.bodySmall,
-            ),
-          ],
-        ),
+    Widget stat(String label, String value) => Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12.5, color: p.textMuted),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            maxLines: 1,
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: p.text),
+          ),
+        ],
+      ),
+    );
+    return AppPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: p.accentSoft,
+                  borderRadius: BorderRadius.circular(AppSizes.radius + 4),
+                ),
+                child: Icon(Icons.calendar_today_outlined, size: 20, color: p.accent),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: TextStyle(fontSize: 13, color: p.textMuted)),
+                    Text(
+                      v == null ? '-' : FormatUtils.tokens(v.total),
+                      maxLines: 1,
+                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: p.text, height: 1.2),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              stat(context.tr('stats.input_token'), v == null ? '-' : FormatUtils.tokens(v.input)),
+              stat(context.tr('stats.output_token'), v == null ? '-' : FormatUtils.tokens(v.output)),
+              stat(context.tr('stats.request_count'), v == null ? '-' : '${v.requests}'),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -176,7 +262,7 @@ class _DailyChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final p = context.palette;
     final now = DateTime.now();
     final byDay = {for (final r in rows) r.key: r.summary};
     final days = [for (var i = 29; i >= 0; i--) FormatUtils.dayKey(now.subtract(Duration(days: i)))];
@@ -184,7 +270,10 @@ class _DailyChart extends StatelessWidget {
     return BarChart(
       BarChartData(
         maxY: maxY == 0 ? 10 : maxY * 1.15,
-        gridData: const FlGridData(drawVerticalLine: false),
+        gridData: FlGridData(
+          drawVerticalLine: false,
+          getDrawingHorizontalLine: (_) => FlLine(color: p.border, strokeWidth: 1, dashArray: [4, 4]),
+        ),
         borderData: FlBorderData(show: false),
         barTouchData: BarTouchData(
           touchTooltipData: BarTouchTooltipData(
@@ -192,7 +281,7 @@ class _DailyChart extends StatelessWidget {
               final s = byDay[days[group.x]];
               return BarTooltipItem(
                 '${days[group.x]}\n↑${FormatUtils.tokens(s?.input ?? 0)} ↓${FormatUtils.tokens(s?.output ?? 0)}',
-                const TextStyle(color: Colors.white, fontSize: 11),
+                TextStyle(color: p.text, fontSize: 11),
               );
             },
           ),
@@ -204,7 +293,8 @@ class _DailyChart extends StatelessWidget {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 44,
-              getTitlesWidget: (v, _) => Text(FormatUtils.tokens(v.toInt()), style: const TextStyle(fontSize: 10)),
+              getTitlesWidget: (v, _) =>
+                  Text(FormatUtils.tokens(v.toInt()), style: TextStyle(fontSize: 11, color: p.textMuted)),
             ),
           ),
           bottomTitles: AxisTitles(
@@ -213,7 +303,7 @@ class _DailyChart extends StatelessWidget {
               getTitlesWidget: (v, _) {
                 final i = v.toInt();
                 if (i % 5 != 4) return const SizedBox.shrink();
-                return Text(days[i].substring(5), style: const TextStyle(fontSize: 10));
+                return Text(days[i].substring(5), style: TextStyle(fontSize: 11, color: p.textMuted));
               },
             ),
           ),
@@ -225,19 +315,19 @@ class _DailyChart extends StatelessWidget {
               barRods: [
                 BarChartRodData(
                   toY: (byDay[days[i]]?.total ?? 0).toDouble(),
-                  width: 10,
+                  width: 12,
                   borderRadius: BorderRadius.circular(3),
                   rodStackItems: byDay[days[i]] == null
                       ? []
                       : [
-                          BarChartRodStackItem(0, byDay[days[i]]!.input.toDouble(), scheme.primary),
+                          BarChartRodStackItem(0, byDay[days[i]]!.input.toDouble(), p.textFaint),
                           BarChartRodStackItem(
                             byDay[days[i]]!.input.toDouble(),
                             byDay[days[i]]!.total.toDouble(),
-                            scheme.tertiary,
+                            p.accent,
                           ),
                         ],
-                  color: scheme.primary,
+                  color: p.accent,
                 ),
               ],
             ),
@@ -247,53 +337,70 @@ class _DailyChart extends StatelessWidget {
   }
 }
 
+/// 分维度明细表：名称、输入、输出、合计、请求次数，末行为总计
 class _GroupTable extends StatelessWidget {
-  const _GroupTable({required this.title, required this.rows});
+  const _GroupTable({required this.title, required this.keyLabel, required this.rows});
 
   final String title;
+  final String keyLabel;
   final List<TokenGroupRow> rows;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: theme.textTheme.titleSmall),
-            const SizedBox(height: 8),
-            if (rows.isEmpty) Text(context.tr('stats.empty'), style: theme.textTheme.bodySmall),
-            if (rows.isNotEmpty)
-              Table(
-                columnWidths: const {0: FlexColumnWidth(2)},
-                children: [
-                  TableRow(
-                    children: [
-                      for (final h in ['', 'stats.input', 'stats.output', 'stats.total'])
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Text(h.isEmpty ? '' : context.tr(h), style: theme.textTheme.labelSmall),
-                        ),
-                    ],
-                  ),
-                  for (final r in rows)
-                    TableRow(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Text(r.key, overflow: TextOverflow.ellipsis),
-                        ),
-                        Text(FormatUtils.tokens(r.summary.input)),
-                        Text(FormatUtils.tokens(r.summary.output)),
-                        Text(FormatUtils.tokens(r.summary.total), style: const TextStyle(fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                ],
-              ),
-          ],
-        ),
+    final p = context.palette;
+    final cols = [
+      AppColumn(keyLabel, flex: 3),
+      AppColumn(context.tr('stats.input'), flex: 2, alignEnd: true),
+      AppColumn(context.tr('stats.output'), flex: 2, alignEnd: true),
+      AppColumn(context.tr('stats.total'), flex: 2, alignEnd: true),
+      AppColumn(context.tr('stats.request_count'), flex: 2, alignEnd: true),
+    ];
+    final sum = rows.fold<(int, int, int)>((
+      0,
+      0,
+      0,
+    ), (a, r) => (a.$1 + r.summary.input, a.$2 + r.summary.output, a.$3 + r.summary.requests));
+    final bold = TextStyle(fontWeight: FontWeight.w700, color: p.text);
+    List<Widget> cells(String k, int i, int o, int n, {bool strong = false}) => [
+      Text(k, maxLines: 1, overflow: TextOverflow.ellipsis, style: strong ? bold : null),
+      Text(FormatUtils.tokens(i), style: strong ? bold : TextStyle(color: p.textMuted)),
+      Text(FormatUtils.tokens(o), style: strong ? bold : TextStyle(color: p.textMuted)),
+      Text(FormatUtils.tokens(i + o), style: bold),
+      Text('$n', style: strong ? bold : TextStyle(color: p.textMuted)),
+    ];
+    return AppPanel(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+            child: Text(
+              title,
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: p.text),
+            ),
+          ),
+          Container(height: 1, color: p.border),
+          AppTableHeader(columns: cols, padding: 12),
+          if (rows.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text(context.tr('stats.empty'), style: TextStyle(color: p.textFaint)),
+            ),
+          for (final r in rows)
+            AppTableRow(
+              columns: cols,
+              height: 44,
+              cells: cells(r.key, r.summary.input, r.summary.output, r.summary.requests),
+            ),
+          if (rows.isNotEmpty)
+            AppTableRow(
+              columns: cols,
+              height: 44,
+              divider: false,
+              cells: cells(context.tr('stats.sum'), sum.$1, sum.$2, sum.$3, strong: true),
+            ),
+        ],
       ),
     );
   }

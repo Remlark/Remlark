@@ -22,6 +22,9 @@ import 'package:remlark/modules/snippets/ui/snippet_editor_dialog.dart';
 import 'package:remlark/modules/ssh/ui/ssh_dialogs.dart';
 import 'package:remlark/modules/terminal/terminal_session.dart';
 import 'package:remlark/modules/terminal/ui/terminal_tab_view.dart';
+import 'package:remlark/modules/workspace/ui/host_picker.dart';
+import 'package:remlark/modules/workspace/ui/session_selection_dialog.dart';
+import 'package:remlark/modules/workspace/workspace_controller.dart';
 import 'package:remlark/modules/workspace/workspace_tab.dart';
 import 'package:remlark/utils/crypto_utils.dart';
 import 'package:remlark/utils/id_utils.dart';
@@ -52,10 +55,18 @@ Future<AppServices> _seed() async {
         address: 'very-long-hostname-$i.internal.example.corp.company.com',
         port: proto.defaultPort + i,
         username: 'administrator-account',
+        extra: proto == HostProtocol.vnc
+            ? {
+                'ssh': {'enabled': true, 'port': 22},
+              }
+            : const {},
         osId: ['ubuntu', 'rhel', 'macos'][i % 3],
-        osName: 'Red Hat Enterprise Linux Server release 9.2 (Plow) long edition',
+        osName:
+            'Red Hat Enterprise Linux Server release 9.2 (Plow) long edition',
         jumpChain: i == 1 ? ['a', 'b'] : const [],
-        proxy: i == 1 ? const ProxyConfig(type: ProxyType.socks5, host: 'p', port: 1) : const ProxyConfig(),
+        proxy: i == 1
+            ? const ProxyConfig(type: ProxyType.socks5, host: 'p', port: 1)
+            : const ProxyConfig(),
         syncEnabled: i.isEven,
         lastConnectedAt: now - i,
         updatedAt: now,
@@ -74,12 +85,28 @@ Future<AppServices> _seed() async {
       createdAt: now,
     ),
   );
-  await s.snippetRepo.save(SnippetEntry(uuid: 's', name: _long, content: 'echo ${'x' * 300}'));
-  await s.agents.save(
-    AgentSettings(uuid: 'a', name: 'DeepSeek Harness 智能助手（生产环境专用配置）', kind: AgentKind.deepseekCli, createdAt: now),
+  await s.snippetRepo.save(
+    SnippetEntry(uuid: 's', name: _long, content: 'echo ${'x' * 300}'),
   );
-  for (final model in ['deepseek-v4-pro-0813-with-long-name', 'deepseek-chat']) {
-    await s.tokenRepo.record(agentUuid: 'a', agentName: _long, model: model, input: 123456789, output: 98765432);
+  await s.agents.save(
+    AgentSettings(
+      uuid: 'a',
+      name: 'DeepSeek Harness 智能助手（生产环境专用配置）',
+      kind: AgentKind.deepseekCli,
+      createdAt: now,
+    ),
+  );
+  for (final model in [
+    'deepseek-v4-pro-0813-with-long-name',
+    'deepseek-chat',
+  ]) {
+    await s.tokenRepo.record(
+      agentUuid: 'a',
+      agentName: _long,
+      model: model,
+      input: 123456789,
+      output: 98765432,
+    );
   }
   final cs = await s.chatRepo.createSession(
     title: '如何排查 ${'很长的问题' * 20}',
@@ -88,7 +115,11 @@ Future<AppServices> _seed() async {
     model: 'm',
   );
   await s.chatRepo.addMessage(cs.id, 'user', '问题 ' * 100);
-  await s.chatRepo.addMessage(cs.id, 'assistant', '回答\n```bash\n${'ls -la /var/log/' * 20}\n```');
+  await s.chatRepo.addMessage(
+    cs.id,
+    'assistant',
+    '回答\n```bash\n${'ls -la /var/log/' * 20}\n```',
+  );
   await s.hosts.load();
   return s;
 }
@@ -104,12 +135,20 @@ void _openTabs(AppServices s) {
       HostProtocol.vnc => VncSession(h, s.hostRepo, s.connector, ui, ui),
       HostProtocol.rdp => RdpSession(h, s.hostRepo, ui),
     };
-    if (tab is! TerminalSession) tab.setState(SessionState.failed, error: '连接失败：${'很长的错误信息' * 10}');
+    if (tab is! TerminalSession) {
+      tab.setState(SessionState.failed, error: '连接失败：${'很长的错误信息' * 10}');
+    }
     s.workspace.add(tab);
+  }
+  // 再补足终端数量，覆盖广播 3×3 宫格
+  final ssh = hosts.where((h) => h.protocol == HostProtocol.ssh).toList();
+  for (var i = 0; i < 7; i++) {
+    s.workspace.add(TerminalSession(ssh[i % ssh.length], s.connector, ui));
   }
   final terms = s.workspace.terminals;
   terms.first.uiState['panel'] = SidePanel.ai;
-  if (terms.length > 1) terms[1].uiState['panel'] = SidePanel.sftp;
+  // SFTP 独立标签（会话未连接，远程栏显示未连接状态）
+  s.workspace.openSftp(terms[1]);
 }
 
 void main() {
@@ -127,14 +166,22 @@ void main() {
       final oldHandler = FlutterError.onError;
       FlutterError.onError = (d) {
         // 记录出错组件的源码位置，便于定位
-        final loc = RegExp(r'(lib/[\w/]+\.dart:\d+)').firstMatch(d.toString())?.group(1) ?? '';
-        errors.add('[$where] ${d.exceptionAsString().split('\n').first} @ $loc');
+        final loc =
+            RegExp(r'(lib/[\w/]+\.dart:\d+)')
+                .firstMatch(d.toString())
+                ?.group(1) ??
+            '';
+        errors.add(
+          '[$where] ${d.exceptionAsString().split('\n').first} @ $loc',
+        );
       };
 
       /// 等待数据加载并渲染
       Future<void> settle() async {
         for (var i = 0; i < 3; i++) {
-          await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 60)));
+          await tester.runAsync(
+            () => Future.delayed(const Duration(milliseconds: 60)),
+          );
           await tester.pump(const Duration(milliseconds: 100));
         }
       }
@@ -144,7 +191,8 @@ void main() {
 
       /// 打开对话框、渲染并关闭
       Future<void> dialog(String name, void Function() open) async {
-        where = '${locale.languageCode} ${tester.view.physicalSize} dialog:$name';
+        where =
+            '${locale.languageCode} ${tester.view.physicalSize} dialog:$name';
         open();
         await settle();
         Navigator.of(ctx()).pop();
@@ -173,15 +221,41 @@ void main() {
           await settle();
           final host = services.hosts.all.first;
           for (final p in HostProtocol.values) {
-            await dialog('host-${p.name}', () => HostEditorDialog.show(ctx(), protocol: p));
+            await dialog(
+              'host-${p.name}',
+              () => HostEditorDialog.show(ctx(), protocol: p),
+            );
           }
-          await dialog('host-edit', () => HostEditorDialog.show(ctx(), existing: host));
+          await dialog(
+            'host-dual',
+            () => HostEditorDialog.show(
+              ctx(),
+              existing: services.hosts.all.firstWhere(
+                (h) => h.protocol == HostProtocol.vnc,
+              ),
+            ),
+          );
+          services.hosts.setListView(true);
+          await settle();
+          services.hosts.setListView(false);
+          await settle();
+          await dialog(
+            'host-edit',
+            () => HostEditorDialog.show(ctx(), existing: host),
+          );
           await dialog(
             'snippet',
-            () => showDialog(context: ctx(), builder: (_) => const SnippetEditorDialog(nextOrder: 0)),
+            () => showDialog(
+              context: ctx(),
+              builder: (_) => const SnippetEditorDialog(nextOrder: 0),
+            ),
           );
           await dialog('key-import', () => KeyDialogs.import(ctx()));
-          await dialog('password', () => DialogInteraction().askPassword(host, error: 'wrong_password'));
+          await dialog(
+            'password',
+            () =>
+                DialogInteraction().askPassword(host, error: 'wrong_password'),
+          );
           await dialog(
             'hostkey',
             () => DialogInteraction().confirmHostKeyChanged(
@@ -191,14 +265,24 @@ void main() {
               'SHA256:${'b' * 43}',
             ),
           );
-          nav().go(AppPage.settings);
-          await settle();
-          await tester.ensureVisible(find.text(t.t('agent.new')));
+          for (final sec in SettingsSection.values) {
+            where = '${locale.languageCode} $size settings:${sec.name}';
+            nav().goSettings(sec);
+            await settle();
+          }
+          nav().goSettings(SettingsSection.agents);
           await settle();
           await dialog('agent', () => tester.tap(find.text(t.t('agent.new'))));
-          await tester.ensureVisible(find.text(t.t('data.export')));
+          nav().goSettings(SettingsSection.data);
           await settle();
-          await dialog('export', () => tester.tap(find.text(t.t('data.export'))));
+          await dialog(
+            'export',
+            () => tester.tap(find.text(t.t('data.export')).last),
+          );
+          await dialog(
+            'host-picker',
+            () => HostPicker.show(ctx(), title: t.t('workspace.new_session')),
+          );
         }
 
         // 会话工作区：多个标签、终端侧边面板、远程桌面状态，以及平铺与广播
@@ -211,14 +295,48 @@ void main() {
             services.workspace.activate(tab.id);
             await settle();
           }
-          where = '${locale.languageCode} $size tiled+broadcast';
-          services.workspace.setTiled(true);
-          services.workspace.setBroadcast(true);
+          // 混合协议网格覆盖 1–9 个会话，广播不改变布局。
+          final w = services.workspace;
+          final ids = w.gridCandidates.map((e) => e.id).toList();
+          for (var n = 1; n <= WorkspaceController.maxGrid; n++) {
+            where = '${locale.languageCode} $size grid:$n';
+            w.showGrid(ids.take(n));
+            await settle();
+          }
+          await dialog(
+            'grid-selection',
+            () => SessionSelectionDialog.show(ctx(), w),
+          );
+          await dialog(
+            'broadcast-selection',
+            () => SessionSelectionDialog.show(ctx(), w, broadcast: true),
+          );
+          w.focusGridSession(ids.first);
           await settle();
-          services.workspace.setTiled(false);
-          services.workspace.setBroadcast(false);
+          w.returnToGrid();
+          w.startBroadcast(ids: w.terminals.take(2).map((t) => t.id));
+          where = '${locale.languageCode} $size broadcast';
+          await settle();
+          expect(w.showGrid(ids.take(2)), isFalse);
+          expect(w.gridIds.length, 9);
+          w.stopBroadcast();
+          w.showSingle();
           await settle();
         }
+
+        // 浅色主题：最小尺寸下渲染所有页面
+        await tester.runAsync(
+          () => services.settings.setThemeMode(ThemeMode.light),
+        );
+        tester.view.physicalSize = kMinWindowSize;
+        for (final page in AppPage.values) {
+          where = '${locale.languageCode} light page:${page.name}';
+          nav().go(page);
+          await settle();
+        }
+        await tester.runAsync(
+          () => services.settings.setThemeMode(ThemeMode.dark),
+        );
       } finally {
         FlutterError.onError = oldHandler;
         for (final e in errors.toSet()) {
@@ -228,7 +346,11 @@ void main() {
       await services.workspace.closeAll();
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
-      expect(errors.toSet().toList(), isEmpty, reason: errors.toSet().join('\n'));
+      expect(
+        errors.toSet().toList(),
+        isEmpty,
+        reason: errors.toSet().join('\n'),
+      );
     });
   }
 }

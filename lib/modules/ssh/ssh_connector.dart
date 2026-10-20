@@ -3,7 +3,9 @@ import 'dart:convert';
 
 import 'package:dartssh2/dartssh2.dart';
 
+import '../../utils/app_log.dart';
 import '../hosts/host_model.dart';
+import '../hosts/vnc_ssh_config.dart';
 import '../hosts/host_repository.dart';
 import '../keys/key_repository.dart';
 import '../keys/key_utils.dart';
@@ -49,6 +51,12 @@ class SshConnector {
   Future<SshConnection> connect(HostEntry target, SshInteraction ui) async {
     final chain = await _resolveChain(target);
     final clients = <SSHClient>[];
+    final sw = Stopwatch()..start();
+    AppLog.i(
+      'ssh',
+      '连接「${target.name}」${target.endpoint}，认证 ${target.authType.name}，'
+          '跳板 ${chain.map((h) => h.name).toList()}，代理 ${target.proxy.type.name}',
+    );
     try {
       final hops = [...chain, target];
       for (var i = 0; i < hops.length; i++) {
@@ -64,13 +72,20 @@ class SshConnector {
           socketFactory = () => prev.forwardLocal(hop.address, hop.port);
         }
         clients.add(await _authenticate(hop, socketFactory, ui));
+        AppLog.i('ssh', '第 ${i + 1}/${hops.length} 跳「${hop.name}」认证成功');
       }
-    } catch (e) {
+    } catch (e, st) {
       for (final c in clients.reversed) {
         c.close();
       }
+      if (e is ConnectCancelled) {
+        AppLog.i('ssh', '用户取消连接「${target.name}」');
+      } else {
+        AppLog.e('ssh', '连接「${target.name}」失败（${sw.elapsedMilliseconds}ms）', e, st);
+      }
       rethrow;
     }
+    AppLog.i('ssh', '已连接「${target.name}」，耗时 ${sw.elapsedMilliseconds}ms');
     unawaited(_hosts.touchConnected(target.uuid));
     return SshConnection(target, clients.last, clients.sublist(0, clients.length - 1));
   }
@@ -94,7 +109,7 @@ class SshConnector {
       if (id == target.uuid) throw StateError('jump chain contains target itself');
       final h = byUuid[id];
       if (h == null) throw StateError('jump host not found: $id');
-      result.add(h);
+      result.add(h.forConnection(HostProtocol.ssh));
     }
     return result;
   }
@@ -141,8 +156,9 @@ class SshConnector {
           await _hosts.updatePassword(hop.uuid, password, true);
         }
         return client;
-      } on SSHAuthError {
+      } on SSHAuthError catch (e) {
         client.close();
+        AppLog.w('ssh', '「${hop.name}」${mode.name} 认证被拒绝（第 ${attempt + 1} 次）：$e');
         if (mode == AuthType.key) {
           // 密钥被拒绝，回退为密码登录
           mode = AuthType.password;

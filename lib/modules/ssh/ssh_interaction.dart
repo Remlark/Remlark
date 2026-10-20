@@ -4,9 +4,12 @@ import '../hosts/host_model.dart';
 
 /// 密码输入结果
 class PasswordInput {
-  const PasswordInput(this.password, {this.remember = false});
+  const PasswordInput(this.password, {this.remember = false, this.username});
 
   final String password;
+
+  /// 用户名（仅在对话框同时询问用户名时有值，如 macOS 屏幕共享）
+  final String? username;
 
   /// 是否勾选“记住密码”
   final bool remember;

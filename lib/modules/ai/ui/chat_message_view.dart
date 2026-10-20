@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
+import '../../../app/theme/app_palette.dart';
 import '../../../l10n/app_localizations.dart';
 import '../chat_controller.dart';
 
@@ -37,8 +38,8 @@ class ChatMessageView extends StatelessWidget {
       return Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-        child: SelectableText(m.content, style: const TextStyle(color: Colors.red, fontSize: 12)),
+        decoration: BoxDecoration(color: context.palette.dangerSoft, borderRadius: BorderRadius.circular(8)),
+        child: SelectableText(m.content, style: TextStyle(color: context.palette.danger, fontSize: 12)),
       );
     }
     final isUser = m.role == 'user';

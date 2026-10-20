@@ -56,6 +56,17 @@ class PlatformUtils {
     return null;
   }
 
+  /// 在系统文件管理器中打开目录
+  static Future<void> openInFileManager(String path) async {
+    if (Platform.isMacOS) {
+      await Process.run('open', [path]);
+    } else if (Platform.isWindows) {
+      await Process.run('explorer', [path]);
+    } else {
+      await Process.run('xdg-open', [path]);
+    }
+  }
+
   /// 将文件权限设置为仅当前用户可读写（非 Windows）
   static Future<void> restrictPermissions(String path) async {
     if (Platform.isWindows) return;

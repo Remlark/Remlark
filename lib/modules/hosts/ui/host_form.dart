@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../utils/id_utils.dart';
 import '../host_model.dart';
+import '../vnc_ssh_config.dart';
 
 /// 主机编辑表单状态：集中管理所有输入控制器，供各编辑分区共享
 class HostForm extends ChangeNotifier {
@@ -22,30 +23,64 @@ class HostForm extends ChangeNotifier {
       domain = TextEditingController(text: e?.extra['domain'] as String? ?? ''),
       width = TextEditingController(text: '${e?.extra['width'] ?? ''}'),
       height = TextEditingController(text: '${e?.extra['height'] ?? ''}'),
-      transferDir = TextEditingController(text: e?.extra['transferDir'] as String? ?? '~/Desktop'),
       authType = e?.authType ?? AuthType.password,
       savePassword = e?.savePassword ?? true,
       keyUuid = e?.keyUuid,
       jumpChain = List.of(e?.jumpChain ?? const []),
       proxyType = e?.proxy.type ?? ProxyType.none,
       clipboard = e?.extra['clipboard'] != false,
-      transferHost = e?.extra['transferHost'] as String?,
-      syncEnabled = e?.syncEnabled ?? false;
+      vncSsh = e == null ? const VncSshConfig() : (VncSshConfig.fromExtra(e.extra) ?? const VncSshConfig()),
+      syncEnabled = e?.syncEnabled ?? false {
+    sshPort = TextEditingController(text: '${vncSsh.port}');
+  }
 
   final HostEntry? existing;
   HostProtocol protocol;
   String? groupUuid;
   final TextEditingController name, address, port, username, password, note;
   final TextEditingController proxyHost, proxyPort, proxyUser, proxyPass;
-  final TextEditingController domain, width, height, transferDir;
+  final TextEditingController domain, width, height;
   AuthType authType;
   bool savePassword;
   String? keyUuid;
   List<String> jumpChain;
   ProxyType proxyType;
   bool clipboard;
-  String? transferHost;
   bool syncEnabled;
+
+  /// VNC 主机内置的 SSH 配置（文件传输与剪贴板）
+  VncSshConfig vncSsh;
+  late final TextEditingController sshPort;
+
+  /// 无法无损合并的旧关联继续兼容，用户开启内置 SSH 后才替换。
+  bool preserveLegacySsh = false;
+
+  /// 旧版“关联独立 SSH 主机”迁移为内置配置：沿用其端口、认证方式与密钥（保存时移除旧字段）
+  void migrateLegacySsh(HostEntry? linked) {
+    final e = existing;
+    if (e == null || e.legacyTransferHost == null || VncSshConfig.fromExtra(e.extra) != null) return;
+    // 不同端点、凭据或跳板代理不能直接压缩为共用账户，否则编辑名称也会破坏连接。
+    preserveLegacySsh = true;
+    if (linked == null ||
+        linked.protocol != HostProtocol.ssh ||
+        linked.address != e.address ||
+        linked.username != e.username ||
+        linked.jumpChain.isNotEmpty ||
+        linked.proxy.enabled ||
+        linked.authType == AuthType.keyboard ||
+        (linked.authType == AuthType.password &&
+            (linked.password != e.password || linked.savePassword != e.savePassword))) {
+      return;
+    }
+    preserveLegacySsh = false;
+    vncSsh = VncSshConfig(
+      enabled: true,
+      port: linked.port,
+      authType: linked.authType == AuthType.key ? AuthType.key : AuthType.password,
+      keyUuid: linked.keyUuid,
+    );
+    sshPort.text = '${linked.port}';
+  }
 
   /// 修改后刷新界面
   void update(VoidCallback fn) {
@@ -53,12 +88,47 @@ class HostForm extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 切换协议时同步默认端口
-  void setProtocol(HostProtocol p) {
-    final oldDefault = '${protocol.defaultPort}';
-    protocol = p;
-    if (port.text.isEmpty || port.text == oldDefault) port.text = '${p.defaultPort}';
+  String _vncPort = '5900';
+
+  /// VNC 中启用或关闭 SSH，保留参数供再次开启，显式选择替换旧关联。
+  void setSshEnabled(bool enabled) {
+    vncSsh = vncSsh.copyWith(enabled: enabled);
+    preserveLegacySsh = false;
     notifyListeners();
+  }
+
+  /// 切换主协议时保留端口和 SSH 认证；已有 SSH 配置带入 VNC。
+  void setProtocol(HostProtocol p) {
+    if (p == protocol) return;
+    if (protocol == HostProtocol.ssh) {
+      sshPort.text = port.text;
+      vncSsh = vncSsh.copyWith(enabled: true, authType: authType, keyUuid: () => keyUuid);
+    } else if (protocol == HostProtocol.vnc) {
+      _vncPort = port.text;
+    }
+    protocol = p;
+    if (p == HostProtocol.ssh) {
+      port.text = sshPort.text;
+      authType = vncSsh.authType;
+      keyUuid = vncSsh.keyUuid;
+    } else {
+      port.text = p == HostProtocol.vnc ? _vncPort : '3389';
+    }
+    notifyListeners();
+  }
+
+  /// 校验连接参数，返回可直接翻译的错误键。
+  String? validate() {
+    if (address.text.trim().isEmpty) return 'host.address.required';
+    final hostPort = int.tryParse(port.text.trim());
+    if (hostPort == null || hostPort < 1 || hostPort > 65535) return 'host.port.invalid';
+    if (protocol == HostProtocol.vnc && vncSsh.enabled) {
+      final value = int.tryParse(sshPort.text.trim());
+      if (value == null || value < 1 || value > 65535) return 'vnc.ssh.port.invalid';
+      if (username.text.trim().isEmpty) return 'vnc.ssh.username.required';
+      if (vncSsh.authType == AuthType.key && vncSsh.keyUuid == null) return 'auth.key.required';
+    }
+    return null;
   }
 
   /// 构造主机实体
@@ -81,12 +151,17 @@ class HostForm extends ChangeNotifier {
       extra['clipboard'] = clipboard;
     }
     if (protocol == HostProtocol.vnc) {
-      if (transferHost != null) {
-        extra['transferHost'] = transferHost;
-      } else {
+      if (!preserveLegacySsh || vncSsh.enabled) {
+        vncSsh.copyWith(port: int.tryParse(sshPort.text.trim()) ?? 22).writeTo(extra);
+        // 仅在完成无损迁移或用户主动配置内置 SSH 后移除旧关联。
         extra.remove('transferHost');
       }
-      extra['transferDir'] = transferDir.text.trim();
+      // 已取消固定接收目录：上传目标由拖放位置决定
+      extra.remove('transferDir');
+    }
+    if (protocol != HostProtocol.vnc) {
+      extra.remove('ssh');
+      extra.remove('transferHost');
     }
     final name = this.name.text.trim().isEmpty ? address.text.trim() : this.name.text.trim();
     return HostEntry(
@@ -101,8 +176,8 @@ class HostForm extends ChangeNotifier {
       password: password.text.isEmpty ? null : password.text,
       savePassword: savePassword && password.text.isNotEmpty,
       keyUuid: authType == AuthType.key ? keyUuid : null,
-      jumpChain: protocol == HostProtocol.ssh ? jumpChain : const [],
-      proxy: protocol != HostProtocol.vnc
+      jumpChain: protocol == HostProtocol.ssh || vncSsh.enabled ? jumpChain : const [],
+      proxy: protocol != HostProtocol.vnc || vncSsh.enabled
           ? ProxyConfig(
               type: proxyType,
               host: proxyHost.text.trim(),
@@ -140,7 +215,7 @@ class HostForm extends ChangeNotifier {
       domain,
       width,
       height,
-      transferDir,
+      sshPort,
     ]) {
       c.dispose();
     }

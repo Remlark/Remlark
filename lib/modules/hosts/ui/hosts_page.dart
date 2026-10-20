@@ -1,141 +1,103 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../app/theme/app_palette.dart';
+import '../../../app/theme/app_theme.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../ui_kit/app_table.dart';
+import '../../../ui_kit/buttons.dart';
+import '../../../ui_kit/page_header.dart';
+import '../../../ui_kit/panel.dart';
 import '../../../utils/format_utils.dart';
-import '../../../utils/ui_utils.dart';
-import '../../sync/sync_service.dart';
-import '../../workspace/session_launcher.dart';
 import '../host_model.dart';
+import '../vnc_ssh_config.dart';
 import '../hosts_controller.dart';
 import 'group_panel.dart';
+import 'host_actions.dart';
 import 'host_card.dart';
 import 'host_editor_dialog.dart';
+import 'os_icon.dart';
+import 'protocol_tag.dart';
+import 'sync_badge.dart';
 
-/// 主机页：分组侧栏 + 顶部工具栏（搜索、协议筛选、同步、新建）+ 主机卡片网格
+/// 主机页：页头（新建主机）+ 工具栏（搜索、协议筛选、视图切换）+ 分组导航 + 主机卡片 / 列表
 class HostsPage extends StatelessWidget {
   const HostsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const GroupPanel(),
-        const VerticalDivider(width: 1),
-        Expanded(
-          child: Column(
-            children: [
-              const _Toolbar(),
-              const Divider(height: 1),
-              Expanded(child: _HostGrid()),
-            ],
+    final c = context.watch<HostsController>();
+    return PageFrame(
+      header: PageHeader(
+        title: context.tr('nav.hosts'),
+        subtitle: context.tr('host.page.subtitle'),
+        actions: [_NewHostButton(groupUuid: c.selectedGroupUuid)],
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _Toolbar(),
+          const Divider(height: 1),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const GroupPanel(),
+                Expanded(child: c.listView ? const _HostList() : const _HostGrid()),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
 
+/// 工具栏：搜索、协议筛选、卡片 / 列表切换
 class _Toolbar extends StatelessWidget {
   const _Toolbar();
 
   @override
   Widget build(BuildContext context) {
     final c = context.watch<HostsController>();
-    final sync = context.watch<SyncService>();
-    final search = TextField(
-      decoration: InputDecoration(prefixIcon: const Icon(Icons.search, size: 18), hintText: context.tr('host.search')),
-      onChanged: c.setSearch,
-    );
-    final filter = SegmentedButton<ProtocolFilter>(
-      showSelectedIcon: false,
-      segments: [
-        ButtonSegment(value: ProtocolFilter.all, label: Text(context.tr('common.all'))),
-        const ButtonSegment(value: ProtocolFilter.ssh, label: Text('SSH')),
-        const ButtonSegment(value: ProtocolFilter.rdp, label: Text('RDP')),
-        const ButtonSegment(value: ProtocolFilter.vnc, label: Text('VNC')),
-      ],
-      selected: {c.protocolFilter},
-      onSelectionChanged: (s) => c.setProtocolFilter(s.first),
-    );
-    final actions = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (sync.config.isConfigured) _SyncButton(sync: sync),
-        const SizedBox(width: 8),
-        _NewHostButton(groupUuid: c.selectedGroup),
-      ],
-    );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
-      // 宽度不足时协议筛选换到第二行，搜索框随宽度伸缩，避免溢出
-      child: LayoutBuilder(
-        builder: (context, box) {
-          if (box.maxWidth >= 760) {
-            return Row(
+      padding: const EdgeInsets.fromLTRB(AppSizes.pagePadding, 14, 24, 14),
+      child: Row(
+        children: [
+          // 左侧整体占满剩余宽度，避免 Flexible 的未用空间被留在视图按钮右侧。
+          Expanded(
+            child: Row(
               children: [
                 Flexible(
-                  child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 320), child: search),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 360),
+                    child: SearchField(hint: context.tr('host.search'), onChanged: c.setSearch),
+                  ),
                 ),
-                const SizedBox(width: 12),
-                filter,
-                const Spacer(),
-                actions,
+                const SizedBox(width: 16),
+                PillChoice<ProtocolFilter>(
+                  items: [
+                    (ProtocolFilter.all, context.tr('common.all')),
+                    (ProtocolFilter.ssh, 'SSH'),
+                    (ProtocolFilter.rdp, 'RDP'),
+                    (ProtocolFilter.vnc, 'VNC'),
+                  ],
+                  value: c.protocolFilter,
+                  onChanged: c.setProtocolFilter,
+                ),
               ],
-            );
-          }
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(child: search),
-                  const SizedBox(width: 8),
-                  actions,
-                ],
-              ),
-              const SizedBox(height: 10),
-              filter,
+            ),
+          ),
+          const SizedBox(width: 12),
+          IconToggleGroup<bool>(
+            items: [
+              (false, Icons.grid_view_rounded, context.tr('host.view.grid')),
+              (true, Icons.view_list_rounded, context.tr('host.view.list')),
             ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// 立即同步按钮（显示上次同步时间或错误）
-class _SyncButton extends StatelessWidget {
-  const _SyncButton({required this.sync});
-
-  final SyncService sync;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: sync.lastError != null
-          ? context.tr(sync.lastError!)
-          : sync.config.lastSyncAt == null
-          ? context.tr('sync.never')
-          : context.tr('sync.last', {
-              'time': FormatUtils.dateTime(DateTime.fromMillisecondsSinceEpoch(sync.config.lastSyncAt!)),
-            }),
-      child: IconButton(
-        onPressed: sync.syncing
-            ? null
-            : () async {
-                try {
-                  final r = await sync.syncNow();
-                  if (context.mounted) {
-                    UiUtils.toast(context.tr('sync.done', {'pushed': r.pushed, 'pulled': r.pulled}));
-                  }
-                } catch (e) {
-                  if (context.mounted) UiUtils.toast(context.tr(sync.lastError ?? '$e'), error: true);
-                }
-              },
-        icon: sync.syncing
-            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-            : Icon(Icons.sync, color: sync.lastError != null ? Colors.red : null),
+            value: c.listView,
+            onChanged: c.setListView,
+          ),
+        ],
       ),
     );
   }
@@ -150,6 +112,7 @@ class _NewHostButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MenuAnchor(
+      alignmentOffset: const Offset(0, 6),
       builder: (ctx, ctrl, _) => FilledButton.icon(
         onPressed: () => ctrl.isOpen ? ctrl.close() : ctrl.open(),
         icon: const Icon(Icons.add, size: 18),
@@ -164,137 +127,168 @@ class _NewHostButton extends StatelessWidget {
               HostProtocol.vnc => Icons.desktop_windows_outlined,
             }, size: 18),
             onPressed: () => HostEditorDialog.show(context, protocol: p, groupUuid: groupUuid),
-            child: Text(p.name.toUpperCase()),
+            child: Text(context.tr('host.new.${p.name}')),
           ),
       ],
     );
   }
 }
 
-class _HostGrid extends StatelessWidget {
+/// 无主机 / 无匹配时的空状态
+class _HostsEmpty extends StatelessWidget {
+  const _HostsEmpty();
+
   @override
   Widget build(BuildContext context) {
     final c = context.watch<HostsController>();
-    final hosts = c.visible;
+    return EmptyState(
+      icon: Icons.desktop_windows_outlined,
+      title: context.tr(c.all.isEmpty ? 'host.empty' : 'host.no_match'),
+      action: c.all.isEmpty
+          ? FilledButton.icon(
+              icon: const Icon(Icons.add, size: 18),
+              onPressed: () => HostEditorDialog.show(context, protocol: HostProtocol.ssh),
+              label: Text(context.tr('host.new')),
+            )
+          : null,
+    );
+  }
+}
+
+/// 卡片网格
+class _HostGrid extends StatelessWidget {
+  const _HostGrid();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.watch<HostsController>();
     if (c.loading) return const Center(child: CircularProgressIndicator());
-    if (hosts.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.dns_outlined, size: 56, color: Theme.of(context).colorScheme.outline),
-            const SizedBox(height: 12),
-            Text(context.tr(c.all.isEmpty ? 'host.empty' : 'host.no_match')),
-            if (c.all.isEmpty) ...[
-              const SizedBox(height: 16),
-              FilledButton.tonal(
-                onPressed: () => HostEditorDialog.show(context, protocol: HostProtocol.ssh),
-                child: Text(context.tr('host.new')),
-              ),
-            ],
-          ],
-        ),
-      );
-    }
-    final groupNames = {for (final g in c.groups) g.uuid: g.name};
+    final hosts = c.visible;
+    if (hosts.isEmpty) return const _HostsEmpty();
     return LayoutBuilder(
       builder: (context, box) {
-        final cols = (box.maxWidth / 340).floor().clamp(1, 6);
+        final cols = ((box.maxWidth - 40) / 300).floor().clamp(1, 6);
         return GridView.builder(
           padding: const EdgeInsets.all(20),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: cols,
-            mainAxisExtent: 84,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
+            mainAxisExtent: 204,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
           ),
           itemCount: hosts.length,
           itemBuilder: (context, i) {
             final h = hosts[i];
-            return HostCard(
-              key: ValueKey(h.uuid),
-              host: h,
-              groupName: groupNames[h.groupUuid],
-              onAction: (a) => _onAction(context, h, a),
-            );
+            return HostCard(key: ValueKey(h.uuid), host: h, onAction: (a) => HostActions.run(context, h, a));
           },
         );
       },
     );
   }
+}
 
-  Future<void> _onAction(BuildContext context, HostEntry h, HostAction a) async {
-    final c = context.read<HostsController>();
-    final sync = context.read<SyncService>();
-    switch (a) {
-      case HostAction.connect:
-        await SessionLauncher.open(context, h);
-      case HostAction.edit:
-        await HostEditorDialog.show(context, existing: h);
-      case HostAction.duplicate:
-        await c.duplicate(h);
-      case HostAction.toggleSync:
-        try {
-          if (h.syncEnabled) {
-            final ok = await UiUtils.confirm(
-              context,
-              title: context.tr('sync.remove'),
-              message: context.tr('sync.remove.message', {'name': h.name}),
-            );
-            if (ok) await sync.removeFromServer(h.uuid);
-          } else {
-            await sync.enable(h);
-            if (context.mounted && !sync.config.isConfigured) UiUtils.toast(context.tr('sync.not_configured'));
-          }
-        } catch (e) {
-          UiUtils.toast('$e', error: true);
-        }
-      case HostAction.delete:
-        await _delete(context, h, c, sync);
-    }
-  }
+/// 列表视图：紧凑表格，适合主机较多时浏览
+class _HostList extends StatelessWidget {
+  const _HostList();
 
-  Future<void> _delete(BuildContext context, HostEntry h, HostsController c, SyncService sync) async {
-    var alsoRemote = true;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          title: Text(ctx.tr('host.delete')),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(ctx.tr('host.delete.message', {'name': h.name})),
-              if (h.syncEnabled && sync.config.isConfigured)
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  value: alsoRemote,
-                  onChanged: (v) => setState(() => alsoRemote = v ?? true),
-                  title: Text(ctx.tr('host.delete.remote')),
+  @override
+  Widget build(BuildContext context) {
+    final c = context.watch<HostsController>();
+    if (c.loading) return const Center(child: CircularProgressIndicator());
+    final hosts = c.visible;
+    if (hosts.isEmpty) return const _HostsEmpty();
+    final p = context.palette;
+    return LayoutBuilder(
+      builder: (context, box) {
+        final wide = box.maxWidth > 760;
+        final cols = [
+          AppColumn(context.tr('host.name'), flex: 3),
+          AppColumn(context.tr('host.address'), flex: 3),
+          if (wide) AppColumn(context.tr('host.username'), flex: 2),
+          if (wide) AppColumn(context.tr('host.last_connected'), width: 150),
+          AppColumn(context.tr('sync.state'), width: wide ? 104 : 40),
+          const AppColumn('', width: 152),
+        ];
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: AppPanel(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                AppTableHeader(columns: cols),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: hosts.length,
+                    itemBuilder: (context, i) {
+                      final h = hosts[i];
+                      void act(HostAction a) => HostActions.run(context, h, a);
+                      return AppTableRow(
+                        key: ValueKey(h.uuid),
+                        height: 52,
+                        columns: cols,
+                        onDoubleTap: h.vncSsh == null ? () => act(HostAction.connect) : null,
+                        onSecondaryTapUp: (d) => showHostMenu(context, h, d.globalPosition, act),
+                        cells: [
+                          Row(
+                            children: [
+                              OsIcon(host: h, size: 26),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(h.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: HostProtocolTags(host: h, small: true),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            '${h.address}:${h.port}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                          ),
+                          if (wide) Text(h.username, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          if (wide)
+                            Text(
+                              h.lastConnectedAt == null
+                                  ? '—'
+                                  : FormatUtils.dateTime(DateTime.fromMillisecondsSinceEpoch(h.lastConnectedAt!)),
+                              style: TextStyle(fontSize: 13, color: p.textMuted, fontFamily: 'monospace'),
+                            ),
+                          SyncBadge(state: h.syncState, withText: wide),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              HostConnectButtons(host: h, onAction: act, compact: true),
+                              Builder(
+                                builder: (ctx) => GhostIconButton(
+                                  icon: Icons.more_horiz,
+                                  tooltip: context.tr('common.more'),
+                                  onPressed: () {
+                                    final b = ctx.findRenderObject() as RenderBox;
+                                    showHostMenu(context, h, b.localToGlobal(b.size.bottomLeft(Offset.zero)), act);
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('common.cancel'))),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.red.shade600),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(ctx.tr('common.delete')),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
-    if (ok != true) return;
-    if (h.syncEnabled && sync.config.isConfigured && alsoRemote) {
-      try {
-        await sync.removeFromServer(h.uuid);
-      } catch (e) {
-        UiUtils.toast('$e', error: true);
-      }
-    }
-    await c.deleteHost(h.uuid);
   }
 }

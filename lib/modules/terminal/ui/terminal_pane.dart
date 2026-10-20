@@ -8,9 +8,12 @@ import 'package:pasteboard/pasteboard.dart';
 import 'package:provider/provider.dart';
 import 'package:xterm/xterm.dart';
 
+import '../../../app/nav_controller.dart';
+import '../../../app/theme/app_palette.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../utils/ui_utils.dart';
 import '../../settings/settings_controller.dart';
+import '../../workspace/workspace_controller.dart';
 import '../../workspace/workspace_tab.dart';
 import '../terminal_session.dart';
 import 'terminal_themes.dart';
@@ -32,6 +35,9 @@ class _TerminalPaneState extends State<TerminalPane> {
   final _focus = FocusNode();
   bool _dragging = false;
   Timer? _copyDebounce;
+  NavController? _nav;
+  WorkspaceController? _workspace;
+  bool _visible = false;
 
   TerminalSession get s => widget.session;
 
@@ -41,6 +47,35 @@ class _TerminalPaneState extends State<TerminalPane> {
   void initState() {
     super.initState();
     s.controller.addListener(_onSelectionChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final nav = context.read<NavController>();
+    final ws = context.read<WorkspaceController>();
+    if (nav != _nav || ws != _workspace) {
+      _nav?.removeListener(_onVisibilityChanged);
+      _workspace?.removeListener(_onVisibilityChanged);
+      _nav = nav..addListener(_onVisibilityChanged);
+      _workspace = ws..addListener(_onVisibilityChanged);
+      _visible = _isVisible();
+    }
+  }
+
+  /// 本终端当前是否对用户可见且处于激活状态（工作区页 + 当前标签）
+  bool _isVisible() => _nav?.page == AppPage.sessions && _workspace?.active == s;
+
+  /// 从其他页面 / 其他标签切回本终端时，把键盘焦点还给终端；
+  /// 只在“不可见 → 可见”时触发，避免抢走 AI 输入框等其他控件的焦点
+  void _onVisibilityChanged() {
+    final v = _isVisible();
+    if (v && !_visible) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _isVisible()) _focus.requestFocus();
+      });
+    }
+    _visible = v;
   }
 
   @override
@@ -55,6 +90,8 @@ class _TerminalPaneState extends State<TerminalPane> {
   @override
   void dispose() {
     s.controller.removeListener(_onSelectionChanged);
+    _nav?.removeListener(_onVisibilityChanged);
+    _workspace?.removeListener(_onVisibilityChanged);
     _copyDebounce?.cancel();
     _focus.dispose();
     super.dispose();
@@ -130,7 +167,7 @@ class _TerminalPaneState extends State<TerminalPane> {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsController>();
-    final theme = TerminalThemesX.byId(settings.terminalTheme);
+    final theme = TerminalThemesX.byId(settings.terminalTheme, Theme.of(context).brightness);
     final family = settings.terminalFontFamily.trim();
     return DropTarget(
       onDragEntered: (_) => setState(() => _dragging = true),
@@ -139,7 +176,10 @@ class _TerminalPaneState extends State<TerminalPane> {
         setState(() => _dragging = false);
         UploadHelper.upload(context, s, d.files.map((f) => f.path).toList());
       },
+      // 必须撑满父级：连接成功后遮罩返回非定位的 SizedBox.shrink，
+      // 若 Stack 按子组件定尺寸，在 Row 等宽松约束下高度会塌缩为 0，终端内容溢出绘制到中间且无法点击聚焦
       child: Stack(
+        fit: StackFit.expand,
         children: [
           Positioned.fill(
             child: Container(
@@ -169,14 +209,14 @@ class _TerminalPaneState extends State<TerminalPane> {
                 child: Container(
                   margin: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withValues(alpha: 0.12),
-                    border: Border.all(color: Colors.blue, width: 2),
-                    borderRadius: BorderRadius.circular(10),
+                    color: context.palette.accent.withValues(alpha: 0.10),
+                    border: Border.all(color: context.palette.accent, width: 1.5),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   alignment: Alignment.center,
                   child: Text(
                     context.tr('upload.drop_here'),
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                    style: TextStyle(color: context.palette.text, fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
@@ -200,14 +240,30 @@ class _StateOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final st = session.state;
+    final p = context.palette;
     if (st == SessionState.connected) return const SizedBox.shrink();
     if (st == SessionState.connecting) {
       return Positioned(
         right: 16,
         top: 12,
-        child: Chip(
-          avatar: const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-          label: Text(context.tr('terminal.connecting', {'name': session.progress ?? session.host.name})),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: p.panelRaised,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: p.borderStrong),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+              const SizedBox(width: 10),
+              Text(
+                context.tr('terminal.connecting', {'name': session.progress ?? session.host.name}),
+                style: TextStyle(fontSize: 13, color: p.text),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -218,8 +274,12 @@ class _StateOverlay extends StatelessWidget {
       bottom: 24,
       child: Center(
         child: Material(
-          elevation: 4,
-          borderRadius: BorderRadius.circular(10),
+          elevation: 6,
+          color: p.panelRaised,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: p.borderStrong),
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
@@ -227,7 +287,7 @@ class _StateOverlay extends StatelessWidget {
               children: [
                 Icon(
                   st == SessionState.failed ? Icons.error_outline : Icons.link_off,
-                  color: st == SessionState.failed ? Colors.red : Colors.orange,
+                  color: st == SessionState.failed ? p.danger : p.warning,
                 ),
                 const SizedBox(width: 10),
                 ConstrainedBox(
@@ -241,7 +301,7 @@ class _StateOverlay extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
-                FilledButton.tonalIcon(
+                FilledButton.icon(
                   icon: const Icon(Icons.refresh, size: 16),
                   label: Text(context.tr('terminal.reconnect')),
                   onPressed: session.reconnect,

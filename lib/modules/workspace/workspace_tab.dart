@@ -26,6 +26,12 @@ abstract class WorkspaceTab extends ChangeNotifier {
   /// 标签标题
   String get title => host.name;
 
+  /// 标签上显示的类型（SSH / RDP / VNC / SFTP）
+  String get kindLabel => host.protocol.name.toUpperCase();
+
+  /// 本次连接成功的时间（状态栏显示连接时长）
+  DateTime? connectedAt;
+
   /// 进度提示（例如正在连接的跳板名）
   String? progress;
 
@@ -40,6 +46,10 @@ abstract class WorkspaceTab extends ChangeNotifier {
 
   /// 修改状态并通知
   void setState(SessionState s, {String? error}) {
+    if (s == SessionState.connected && state != SessionState.connected) {
+      connectedAt = DateTime.now();
+    }
+    if (s != SessionState.connected) connectedAt = null;
     state = s;
     this.error = error;
     notifyListeners();

@@ -1,77 +1,48 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../app/theme/app_palette.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../ui_kit/buttons.dart';
+import '../../../ui_kit/nav_tile.dart';
 import '../../../utils/id_utils.dart';
 import '../../../utils/ui_utils.dart';
 import '../host_model.dart';
 import '../hosts_controller.dart';
 
-/// 分组侧栏：全部 / 各分组，支持新建、重命名、删除
+/// 主机分组二级导航：全部主机 / 各分组 / 未分组，支持新建；分组右键重命名、删除
 class GroupPanel extends StatelessWidget {
   const GroupPanel({super.key});
 
   @override
   Widget build(BuildContext context) {
     final c = context.watch<HostsController>();
-    final scheme = Theme.of(context).colorScheme;
-    return SizedBox(
-      width: 200,
-      child: Material(
-        color: scheme.surfaceContainerLow,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      context.tr('group.title'),
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(color: scheme.onSurfaceVariant),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: context.tr('group.new'),
-                    icon: const Icon(Icons.create_new_folder_outlined, size: 18),
-                    onPressed: () => _newGroup(context, c),
-                  ),
-                ],
-              ),
-            ),
-            _tile(context, null, Icons.all_inbox_outlined, context.tr('group.all'), c.countInGroup(null), c),
-            Expanded(
-              child: ListView(
-                children: [
-                  for (final g in c.groups) _tile(context, g, Icons.folder_outlined, g.name, c.countInGroup(g.uuid), c),
-                ],
-              ),
-            ),
-          ],
-        ),
+    final ungrouped = c.countInGroup(HostsController.ungrouped);
+    return SubNav(
+      title: context.tr('group.title'),
+      titleAction: GhostIconButton(
+        icon: Icons.add,
+        tooltip: context.tr('group.new'),
+        onPressed: () => _newGroup(context, c),
       ),
+      children: [
+        _tile(context, c, null, Icons.desktop_windows_outlined, context.tr('group.all')),
+        for (final g in c.groups) _tile(context, c, g, Icons.layers_outlined, g.name),
+        if (ungrouped > 0 && c.groups.isNotEmpty)
+          _tile(context, c, null, Icons.folder_outlined, context.tr('group.none'), id: HostsController.ungrouped),
+      ],
     );
   }
 
-  Widget _tile(BuildContext context, GroupEntry? g, IconData icon, String name, int count, HostsController c) {
-    final selected = c.selectedGroup == g?.uuid;
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-      child: GestureDetector(
-        onSecondaryTapUp: g == null ? null : (d) => _menu(context, d.globalPosition, g, c),
-        child: ListTile(
-          dense: true,
-          selected: selected,
-          selectedTileColor: scheme.primaryContainer.withValues(alpha: 0.6),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          leading: Icon(icon, size: 18),
-          title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
-          trailing: Text('$count', style: Theme.of(context).textTheme.labelSmall),
-          onTap: () => c.setGroup(g?.uuid),
-        ),
-      ),
+  Widget _tile(BuildContext context, HostsController c, GroupEntry? g, IconData icon, String name, {String? id}) {
+    final key = id ?? g?.uuid;
+    return NavTile(
+      icon: icon,
+      label: name,
+      selected: c.selectedGroup == key,
+      trailing: Text('${c.countInGroup(key)}'),
+      onTap: () => c.setGroup(key),
+      onSecondaryTapUp: g == null ? null : (d) => _menu(context, d.globalPosition, g, c),
     );
   }
 
@@ -82,6 +53,7 @@ class GroupPanel extends StatelessWidget {
   }
 
   Future<void> _menu(BuildContext context, Offset pos, GroupEntry g, HostsController c) async {
+    final p = context.palette;
     final r = await showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(pos.dx, pos.dy, pos.dx + 1, pos.dy + 1),
@@ -89,13 +61,18 @@ class GroupPanel extends StatelessWidget {
         PopupMenuItem(value: 'rename', child: Text(context.tr('common.rename'))),
         PopupMenuItem(
           value: 'delete',
-          child: Text(context.tr('common.delete'), style: const TextStyle(color: Colors.red)),
+          child: Text(context.tr('common.delete'), style: TextStyle(color: p.danger)),
         ),
       ],
     );
     if (!context.mounted) return;
     if (r == 'rename') {
-      final name = await UiUtils.prompt(context, title: context.tr('common.rename'), initial: g.name);
+      final name = await UiUtils.prompt(
+        context,
+        title: context.tr('group.rename'),
+        label: context.tr('group.name'),
+        initial: g.name,
+      );
       if (name != null && name.trim().isNotEmpty) {
         await c.saveGroup(GroupEntry(uuid: g.uuid, name: name.trim(), sortOrder: g.sortOrder));
       }

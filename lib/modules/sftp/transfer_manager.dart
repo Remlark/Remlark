@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../../utils/app_log.dart';
 import '../../utils/id_utils.dart';
 import '../../utils/shell_utils.dart';
 import 'sftp_service.dart';
@@ -16,8 +17,14 @@ enum TransferStatus { queued, running, done, failed, cancelled }
 
 /// 一个传输任务（可能包含多个文件，例如上传整个目录）
 class TransferTask extends ChangeNotifier {
-  TransferTask({required this.direction, required this.name, required this.source, required this.target, this.remote})
-    : id = IdUtils.newId();
+  TransferTask({
+    required this.direction,
+    required this.name,
+    required this.source,
+    required this.target,
+    this.remote,
+    this.targetName,
+  }) : id = IdUtils.newId();
 
   final String id;
   final TransferDirection direction;
@@ -26,7 +33,10 @@ class TransferTask extends ChangeNotifier {
   final String target;
 
   /// 下载任务的远程文件信息
-  final RemoteFile? remote;
+  final FileEntry? remote;
+
+  /// 上传到目标目录后使用的名称（重名时改名，如“文件 2.txt”）；为空保持原名
+  final String? targetName;
 
   TransferStatus status = TransferStatus.queued;
   int total = 0;
@@ -44,6 +54,15 @@ class TransferTask extends ChangeNotifier {
 
   bool get isActive => status == TransferStatus.queued || status == TransferStatus.running;
 
+  /// 是否失败（含取消），可重试
+  bool get isFailed => status == TransferStatus.failed || status == TransferStatus.cancelled;
+
+  /// 预计剩余时间（速度未知时为 null）
+  Duration? get remaining {
+    if (status != TransferStatus.running || speed <= 0 || total <= 0) return null;
+    return Duration(seconds: ((total - transferred) / speed).ceil());
+  }
+
   void _update() {
     final started = _startedAt;
     if (started != null) {
@@ -56,11 +75,15 @@ class TransferTask extends ChangeNotifier {
 
 /// 传输管理器：串行执行队列中的任务，提供进度反馈
 class TransferManager extends ChangeNotifier {
-  TransferManager(this._sftp);
+  /// [autoRemoveDoneAfter] 非空时，成功完成的任务在该时长后自动从列表移除
+  /// （用于远程桌面上的浮动传输框；SFTP 标签保留历史，不设置）
+  TransferManager(this._sftp, {this.autoRemoveDoneAfter});
 
   final SftpService _sftp;
+  final Duration? autoRemoveDoneAfter;
   final List<TransferTask> tasks = [];
   bool _running = false;
+  bool _disposed = false;
 
   /// 传输完成回调（例如刷新 SFTP 目录）
   final List<void Function(TransferTask)> _onComplete = [];
@@ -71,20 +94,21 @@ class TransferManager extends ChangeNotifier {
   /// 活跃任务数量
   int get activeCount => tasks.where((t) => t.isActive).length;
 
-  /// 上传本地文件或目录到远程目录
-  TransferTask upload(String localPath, String remoteDir) {
+  /// 上传本地文件或目录到远程目录；[asName] 指定远程名称（为空保持原名）
+  TransferTask upload(String localPath, String remoteDir, {String? asName}) {
     final task = TransferTask(
       direction: TransferDirection.upload,
-      name: p.basename(localPath),
+      name: asName ?? p.basename(localPath),
       source: localPath,
       target: remoteDir,
+      targetName: asName,
     );
     _enqueue(task);
     return task;
   }
 
   /// 下载远程文件或目录到本地目录
-  TransferTask download(RemoteFile file, String localDir) {
+  TransferTask download(FileEntry file, String localDir) {
     final task = TransferTask(
       direction: TransferDirection.download,
       name: file.name,
@@ -97,6 +121,7 @@ class TransferManager extends ChangeNotifier {
   }
 
   void _enqueue(TransferTask t) {
+    AppLog.i('transfer', '排队 ${t.direction.name} ${t.source} → ${t.target}');
     tasks.insert(0, t);
     notifyListeners();
     _pump();
@@ -112,10 +137,37 @@ class TransferManager extends ChangeNotifier {
     }
   }
 
-  /// 清除已结束的任务
+  /// 等待一组任务全部结束，返回是否全部成功
+  static Future<bool> waitAll(List<TransferTask> tasks) async {
+    while (tasks.any((t) => t.isActive)) {
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    return tasks.every((t) => t.status == TransferStatus.done);
+  }
+
+  /// 清除已完成的任务（保留失败任务以便重试）
   void clearFinished() {
-    tasks.removeWhere((t) => !t.isActive);
+    tasks.removeWhere((t) => t.status == TransferStatus.done);
     notifyListeners();
+  }
+
+  /// 成功的任务按 [autoRemoveDoneAfter] 延时移除；失败任务保留以便查看与重试
+  void _scheduleAutoRemove(TransferTask t) {
+    final delay = autoRemoveDoneAfter;
+    if (delay == null || t.status != TransferStatus.done) return;
+    Timer(delay, () {
+      if (_disposed || !tasks.remove(t)) return;
+      notifyListeners();
+    });
+  }
+
+  /// 重试失败 / 已取消的任务：以相同参数重新排队
+  TransferTask? retry(TransferTask t) {
+    if (!t.isFailed) return null;
+    tasks.remove(t);
+    final remote = t.remote;
+    if (t.direction == TransferDirection.download && remote != null) return download(remote, t.target);
+    return upload(t.source, t.target, asName: t.targetName);
   }
 
   /// 依次执行队列
@@ -130,6 +182,7 @@ class TransferManager extends ChangeNotifier {
         for (final l in List.of(_onComplete)) {
           l(next);
         }
+        _scheduleAutoRemove(next);
         notifyListeners();
       }
     } finally {
@@ -149,11 +202,15 @@ class TransferManager extends ChangeNotifier {
         await _runDownload(t);
       }
       t.status = TransferStatus.done;
+      final ms = DateTime.now().difference(t._startedAt!).inMilliseconds;
+      AppLog.i('transfer', '完成 ${t.name}：${t.fileCount} 个文件 ${t.total} 字节，耗时 ${ms}ms');
     } on TransferCancelled {
       t.status = TransferStatus.cancelled;
-    } catch (e) {
+      AppLog.i('transfer', '已取消 ${t.name}');
+    } catch (e, st) {
       t.status = t.cancelToken.isCancelled ? TransferStatus.cancelled : TransferStatus.failed;
       t.error = '$e';
+      AppLog.e('transfer', '失败 ${t.name}（${t.source} → ${t.target}）', e, st);
     }
     t._update();
   }
@@ -166,7 +223,14 @@ class TransferManager extends ChangeNotifier {
     var base = 0;
     for (final (local, rel, size) in files) {
       if (t.cancelToken.isCancelled) throw TransferCancelled();
-      final remotePath = ShellUtils.joinRemote(t.target, rel.replaceAll('\\', '/'));
+      var relPath = rel.replaceAll('\\', '/');
+      // 指定了目标名称时替换最外层名称（文件名或目录名）
+      final rename = t.targetName;
+      if (rename != null) {
+        final slash = relPath.indexOf('/');
+        relPath = slash < 0 ? rename : '$rename${relPath.substring(slash)}';
+      }
+      final remotePath = ShellUtils.joinRemote(t.target, relPath);
       await _sftp.ensureRemoteDir(ShellUtils.parentRemote(remotePath));
       final start = base;
       await _sftp.uploadFile(
@@ -215,6 +279,7 @@ class TransferManager extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     for (final t in tasks) {
       t.cancelToken.cancel();
     }

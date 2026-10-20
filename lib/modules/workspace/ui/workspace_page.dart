@@ -2,22 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../app/nav_controller.dart';
+import '../../../app/theme/app_palette.dart';
+import '../../../app/theme/app_theme.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../ui_kit/page_header.dart';
 import '../../hosts/hosts_controller.dart';
-import '../../hosts/ui/os_icon.dart';
-import '../../remote_desktop/rdp/rdp_session.dart';
-import '../../remote_desktop/ui/rdp_view.dart';
-import '../../remote_desktop/ui/vnc_view.dart';
-import '../../remote_desktop/vnc/vnc_session.dart';
-import '../../terminal/terminal_session.dart';
-import '../../terminal/ui/terminal_pane.dart';
-import '../../terminal/ui/terminal_tab_view.dart';
-import '../session_launcher.dart';
+import '../../hosts/ui/host_actions.dart';
+import '../../hosts/ui/host_card.dart';
 import '../workspace_controller.dart';
-import '../workspace_tab.dart';
+import 'session_canvas.dart';
 import 'workspace_tab_bar.dart';
 
-/// 会话工作区：标签栏 + 当前会话视图；平铺模式下同时显示所有终端
+/// 工作区：无会话时显示完整页头与最近连接；有会话时页头收缩为一行会话栏，
+/// 内容区独立选择单窗口或混合协议网格，广播不改变布局。
 class WorkspacePage extends StatelessWidget {
   const WorkspacePage({super.key});
 
@@ -25,163 +22,203 @@ class WorkspacePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final w = context.watch<WorkspaceController>();
     if (w.tabs.isEmpty) return const _EmptyWorkspace();
-    final showTiled = w.tiled && w.terminals.length > 1;
-    return Column(
-      children: [
-        const WorkspaceTabBar(),
-        if (w.broadcast)
-          Container(
-            width: double.infinity,
-            color: Colors.orange.withValues(alpha: 0.15),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Text(
-              context.tr('workspace.broadcast.on', {'n': w.broadcastTargets.length}),
-              style: const TextStyle(fontSize: 12),
-            ),
-          ),
-        Expanded(
-          child: showTiled
-              ? _TiledView(terminals: w.terminals)
-              : IndexedStack(
-                  index: w.tabs.indexOf(w.active!),
-                  children: [for (final t in w.tabs) _TabBody(key: ValueKey(t.id), tab: t)],
-                ),
-        ),
-      ],
+    return ColoredBox(
+      color: context.palette.canvas,
+      child: Column(
+        children: [
+          const WorkspaceTabBar(),
+          const Expanded(child: SessionCanvas()),
+        ],
+      ),
     );
   }
 }
 
-/// 根据标签类型选择视图
-class _TabBody extends StatelessWidget {
-  const _TabBody({super.key, required this.tab});
-
-  final WorkspaceTab tab;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = tab;
-    if (t is TerminalSession) return TerminalTabView(session: t);
-    if (t is VncSession) return VncView(session: t);
-    if (t is RdpSession) return RdpView(session: t);
-    return const SizedBox.shrink();
-  }
-}
-
-/// 平铺视图：网格显示多个终端，点击标题切换焦点
-class _TiledView extends StatelessWidget {
-  const _TiledView({required this.terminals});
-
-  final List<TerminalSession> terminals;
-
-  @override
-  Widget build(BuildContext context) {
-    final w = context.read<WorkspaceController>();
-    final n = terminals.length;
-    final cols = n <= 2 ? n : (n <= 4 ? 2 : 3);
-    final rows = (n / cols).ceil();
-    final scheme = Theme.of(context).colorScheme;
-    return Column(
-      children: [
-        for (var r = 0; r < rows; r++)
-          Expanded(
-            child: Row(
-              children: [
-                for (var c = 0; c < cols; c++)
-                  Expanded(
-                    child: r * cols + c < n
-                        ? Container(
-                            margin: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: w.active == terminals[r * cols + c] ? scheme.primary : scheme.outlineVariant,
-                              ),
-                            ),
-                            child: Column(
-                              children: [
-                                GestureDetector(
-                                  onTap: () => w.activate(terminals[r * cols + c].id),
-                                  child: Container(
-                                    color: scheme.surfaceContainerHigh,
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                    child: Row(
-                                      children: [
-                                        OsIcon(host: terminals[r * cols + c].host, size: 14),
-                                        const SizedBox(width: 6),
-                                        Expanded(
-                                          child: Text(
-                                            terminals[r * cols + c].title,
-                                            style: const TextStyle(fontSize: 12),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: TerminalPane(
-                                    key: ValueKey('tile-${terminals[r * cols + c].id}'),
-                                    session: terminals[r * cols + c],
-                                    autofocus: false,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// 无会话时：提示与最近连接
+/// 无会话时：开始会话的引导与最近连接
 class _EmptyWorkspace extends StatelessWidget {
   const _EmptyWorkspace();
 
   @override
   Widget build(BuildContext context) {
-    final recent = context.watch<HostsController>().recent();
-    final theme = Theme.of(context);
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.terminal, size: 56, color: theme.colorScheme.outline),
-            const SizedBox(height: 12),
-            Text(context.tr('workspace.empty'), style: theme.textTheme.titleMedium),
-            const SizedBox(height: 16),
-            if (recent.isNotEmpty) ...[
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(context.tr('workspace.recent'), style: theme.textTheme.labelLarge),
+    final p = context.palette;
+    final recent = context.watch<HostsController>().recent(3);
+    final nav = context.read<NavController>();
+    return PageFrame(
+      header: PageHeader(
+        title: context.tr('nav.sessions'),
+        subtitle: context.tr('workspace.subtitle'),
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const _TerminalIllustration(),
+                    const SizedBox(height: 28),
+                    Text(
+                      context.tr('workspace.empty'),
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        color: p.text,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      context.tr('workspace.empty.hint'),
+                      style: TextStyle(fontSize: 14, color: p.textMuted),
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(200, 48),
+                      ),
+                      icon: const Icon(
+                        Icons.desktop_windows_outlined,
+                        size: 18,
+                      ),
+                      label: Text(context.tr('workspace.go_hosts')),
+                      onPressed: () => nav.go(AppPage.hosts),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 8),
-              for (final h in recent)
-                Card(
-                  margin: const EdgeInsets.only(bottom: 6),
-                  child: ListTile(
-                    dense: true,
-                    leading: OsIcon(host: h, size: 28),
-                    title: Text(h.name),
-                    subtitle: Text(h.endpoint),
-                    trailing: const Icon(Icons.play_arrow_rounded),
-                    onTap: () => SessionLauncher.open(context, h),
+            ),
+          ),
+          if (recent.isNotEmpty) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSizes.pagePadding,
+                18,
+                24,
+                22,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        context.tr('workspace.recent'),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: p.text,
+                        ),
+                      ),
+                      const Spacer(),
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          foregroundColor: p.textMuted,
+                        ),
+                        onPressed: () => nav.go(AppPage.hosts),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(context.tr('workspace.view_all')),
+                            const Icon(Icons.chevron_right, size: 18),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 204,
+                    child: Row(
+                      children: [
+                        for (var i = 0; i < 3; i++) ...[
+                          if (i > 0) const SizedBox(width: 16),
+                          Expanded(
+                            child: i < recent.length
+                                ? HostCard(
+                                    host: recent[i],
+                                    showSync: false,
+                                    onAction: (a) =>
+                                        HostActions.run(context, recent[i], a),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// 空工作区插画：简化的终端窗口
+class _TerminalIllustration extends StatelessWidget {
+  const _TerminalIllustration();
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Container(
+      width: 200,
+      height: 140,
+      decoration: BoxDecoration(
+        color: p.panel,
+        borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
+        border: Border.all(color: p.borderStrong),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            height: 28,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: p.hover,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(AppSizes.radiusLarge),
+              ),
+            ),
+            child: Row(
+              children: [
+                for (var i = 0; i < 3; i++)
+                  Container(
+                    width: 8,
+                    height: 8,
+                    margin: const EdgeInsets.only(right: 6),
+                    decoration: BoxDecoration(
+                      color: p.textFaint,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(left: 30),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '>_',
+                  style: TextStyle(
+                    fontSize: 34,
+                    fontWeight: FontWeight.w700,
+                    color: p.accent,
+                    fontFamily: 'monospace',
                   ),
                 ),
-            ] else
-              FilledButton.tonal(
-                onPressed: () => context.read<NavController>().go(AppPage.hosts),
-                child: Text(context.tr('workspace.go_hosts')),
               ),
-          ],
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }

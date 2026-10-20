@@ -5,11 +5,14 @@ import 'package:provider/provider.dart';
 
 import '../../../app/app_services.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../ui_kit/app_dialog.dart';
+import '../../../utils/app_log.dart';
 import '../../../utils/format_utils.dart';
 import '../../../utils/platform_utils.dart';
 import '../../../utils/ui_utils.dart';
 import '../../import_export/import_export_service.dart';
 import 'settings_card.dart';
+import '../../../ui_kit/check_label.dart';
 
 /// 数据：批量导出 / 导入（JSON，可选口令加密），从 ~/.ssh/config 导入
 class DataSection extends StatelessWidget {
@@ -22,19 +25,18 @@ class DataSection extends StatelessWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          title: Text(ctx.tr('data.export')),
+        builder: (ctx, setState) => AppDialog(
+          title: ctx.tr('data.export'),
+          icon: Icons.upload_file_outlined,
           content: SizedBox(
             width: 420,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
+                CheckLabel(
                   value: withSecrets,
-                  onChanged: (v) => setState(() => withSecrets = v ?? false),
-                  title: Text(ctx.tr('data.export.secrets')),
+                  onChanged: (v) => setState(() => withSecrets = v),
+                  label: ctx.tr('data.export.secrets'),
                 ),
                 TextField(
                   controller: pass,
@@ -48,7 +50,7 @@ class DataSection extends StatelessWidget {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('common.cancel'))),
+            OutlinedButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('common.cancel'))),
             FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ctx.tr('data.export'))),
           ],
         ),
@@ -98,7 +100,7 @@ class DataSection extends StatelessWidget {
     final f = await openFile(initialDirectory: p.dirname(path));
     if (f == null) return;
     try {
-      final r = await services.importExport.importSshConfig(f.path, groupUuid: services.hosts.selectedGroup);
+      final r = await services.importExport.importSshConfig(f.path, groupUuid: services.hosts.selectedGroupUuid);
       await services.hosts.load();
       _report(r);
     } catch (e) {
@@ -119,29 +121,37 @@ class DataSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Widget action(IconData icon, String key, VoidCallback onPressed) =>
+        OutlinedButton.icon(icon: Icon(icon, size: 17), label: Text(context.tr(key)), onPressed: onPressed);
     return SettingsCard(
       title: context.tr('settings.data'),
+      description: context.tr('settings.data.desc'),
       children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            OutlinedButton.icon(
-              icon: const Icon(Icons.upload_file, size: 16),
-              label: Text(context.tr('data.export')),
-              onPressed: () => _export(context),
-            ),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.download, size: 16),
-              label: Text(context.tr('data.import')),
-              onPressed: () => _import(context),
-            ),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.terminal, size: 16),
-              label: Text(context.tr('data.import_ssh_config')),
-              onPressed: () => _importSshConfig(context),
-            ),
-          ],
+        SettingsRow(
+          label: context.tr('data.export'),
+          description: context.tr('data.export.desc'),
+          child: action(Icons.upload_file_outlined, 'data.export', () => _export(context)),
+        ),
+        SettingsRow(
+          label: context.tr('data.import'),
+          description: context.tr('data.import.desc'),
+          child: action(Icons.file_download_outlined, 'data.import', () => _import(context)),
+        ),
+        SettingsRow(
+          label: context.tr('data.import_ssh_config'),
+          description: context.tr('data.import_ssh_config.desc'),
+          child: action(Icons.terminal_rounded, 'data.import_ssh_config.button', () => _importSshConfig(context)),
+        ),
+        // 运行日志：排查连接、远程桌面卡顿、上传等问题时打开日志文件夹
+        SettingsRow(
+          label: context.tr('data.logs'),
+          description: context.tr('data.logs.desc', {'path': AppLog.directory?.path ?? '-'}),
+          child: action(Icons.article_outlined, 'data.logs.open', () async {
+            final dir = AppLog.directory;
+            if (dir == null) return;
+            await AppLog.flush();
+            await PlatformUtils.openInFileManager(dir.path);
+          }),
         ),
       ],
     );

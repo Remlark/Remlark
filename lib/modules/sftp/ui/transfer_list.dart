@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/theme/app_palette.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../utils/format_utils.dart';
 import '../transfer_manager.dart';
@@ -62,15 +63,16 @@ class _TaskRow extends StatelessWidget {
       builder: (context, _) {
         final t = task;
         final theme = Theme.of(context);
+        final p = context.palette;
         final (statusText, color) = switch (t.status) {
-          TransferStatus.queued => (context.tr('transfer.queued'), theme.colorScheme.outline),
+          TransferStatus.queued => (context.tr('transfer.queued'), p.textFaint),
           TransferStatus.running => (
             '${FormatUtils.bytes(t.transferred)} / ${FormatUtils.bytes(t.total)} · ${FormatUtils.speed(t.speed)}',
-            theme.colorScheme.primary,
+            p.accent,
           ),
-          TransferStatus.done => (context.tr('transfer.done'), Colors.green),
-          TransferStatus.failed => (t.error ?? context.tr('transfer.failed'), Colors.red),
-          TransferStatus.cancelled => (context.tr('transfer.cancelled'), theme.colorScheme.outline),
+          TransferStatus.done => (context.tr('transfer.done'), p.success),
+          TransferStatus.failed => (t.error ?? context.tr('transfer.failed'), p.danger),
+          TransferStatus.cancelled => (context.tr('transfer.cancelled'), p.textFaint),
         };
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),

@@ -2,8 +2,11 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
+import '../../../app/theme/app_palette.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../ui_kit/buttons.dart';
 import '../../../utils/ui_utils.dart';
+import '../../workspace/ui/session_status_bar.dart';
 import '../../workspace/workspace_tab.dart';
 import '../rdp/rdp_session.dart';
 import 'desktop_status.dart';
@@ -12,9 +15,12 @@ import 'remote_screen.dart';
 /// RDP 视图：应用内渲染远程桌面，工具栏提供特殊按键、共享文件夹与重新连接；
 /// 拖入的文件放入共享文件夹并写入远程剪贴板，可在远程直接粘贴
 class RdpView extends StatefulWidget {
-  const RdpView({super.key, required this.session});
+  const RdpView({super.key, required this.session, this.compact = false});
 
   final RdpSession session;
+
+  /// 网格中隐藏工具与状态栏，保留画面及输入。
+  final bool compact;
 
   @override
   State<RdpView> createState() => _RdpViewState();
@@ -64,9 +70,10 @@ class _RdpViewState extends State<RdpView> {
       listenable: s,
       builder: (context, _) => Column(
         children: [
-          _toolbar(context),
-          const Divider(height: 1),
+          if (!widget.compact) _toolbar(context),
+          if (!widget.compact) const Divider(height: 1),
           Expanded(
+            key: const ValueKey('desktop-content'),
             child: s.state != SessionState.connected
                 ? DesktopStatus(tab: s)
                 : DropTarget(
@@ -79,33 +86,39 @@ class _RdpViewState extends State<RdpView> {
                     child: Stack(
                       children: [
                         Positioned.fill(child: RemoteScreen(display: s)),
-                        if (_dragging) DropHint(text: context.tr('rdp.drop_hint')),
-                        if (s.filesTotalKb > 0)
-                          Positioned(
-                            right: 12,
-                            bottom: 12,
-                            width: 280,
-                            child: Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(10),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      context.tr('rdp.files_downloading'),
-                                      style: Theme.of(context).textTheme.labelMedium,
-                                    ),
-                                    const SizedBox(height: 6),
-                                    LinearProgressIndicator(value: s.filesDoneKb / s.filesTotalKb),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
+                        if (_dragging)
+                          DropHint(text: context.tr('rdp.drop_hint')),
                       ],
                     ),
                   ),
           ),
+          if (!widget.compact)
+            SessionStatusBar(
+              tab: s,
+              detail: s.state == SessionState.connected
+                  ? '${s.frameWidth} × ${s.frameHeight}'
+                  : null,
+              trailing: [
+                // 远程复制的文件正在下载到本地
+                if (s.filesTotalKb > 0) ...[
+                  Text(
+                    context.tr('rdp.files_downloading'),
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: context.palette.textMuted,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 120,
+                    child: LinearProgressIndicator(
+                      value: s.filesDoneKb / s.filesTotalKb,
+                      minHeight: 4,
+                    ),
+                  ),
+                ],
+              ],
+            ),
         ],
       ),
     );
@@ -113,31 +126,34 @@ class _RdpViewState extends State<RdpView> {
 
   Widget _toolbar(BuildContext context) {
     final connected = s.state == SessionState.connected;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
-          Expanded(
-            child: Text(
-              '${s.host.endpoint}${connected ? '  ${s.frameWidth}×${s.frameHeight}' : ''}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelMedium,
-            ),
-          ),
-          TextButton.icon(
-            icon: const Icon(Icons.keyboard, size: 16),
-            label: const Text('Ctrl+Alt+Del'),
+          ToolButton(
+            compact: true,
+            icon: Icons.keyboard_outlined,
+            label: 'Ctrl + Alt + Del',
             onPressed: connected ? s.sendCtrlAltDel : null,
           ),
-          IconButton(
-            tooltip: context.tr('rdp.win_key'),
-            icon: const Icon(Icons.window, size: 18),
+          const SizedBox(width: 8),
+          ToolButton(
+            compact: true,
+            icon: Icons.window,
+            label: context.tr('rdp.win_key'),
             onPressed: connected ? s.sendWinKey : null,
           ),
-          IconButton(
-            tooltip: context.tr('rdp.send_files'),
-            icon: const Icon(Icons.upload_file, size: 18),
+          Container(
+            width: 1,
+            height: 20,
+            margin: const EdgeInsets.symmetric(horizontal: 10),
+            color: context.palette.border,
+          ),
+          ToolButton(
+            compact: true,
+            icon: Icons.upload_file_outlined,
+            label: context.tr('rdp.send_files'),
             onPressed: connected
                 ? () async {
                     final files = await openFiles();
@@ -145,14 +161,18 @@ class _RdpViewState extends State<RdpView> {
                   }
                 : null,
           ),
-          IconButton(
-            tooltip: context.tr('rdp.open_folder'),
-            icon: const Icon(Icons.folder_open, size: 18),
+          const SizedBox(width: 8),
+          ToolButton(
+            compact: true,
+            icon: Icons.folder_open_outlined,
+            label: context.tr('rdp.open_folder'),
             onPressed: s.openSharedDir,
           ),
-          IconButton(
-            tooltip: context.tr('terminal.reconnect'),
-            icon: const Icon(Icons.refresh, size: 18),
+          const SizedBox(width: 8),
+          ToolButton(
+            compact: true,
+            icon: Icons.refresh,
+            label: context.tr('terminal.reconnect'),
             onPressed: s.state == SessionState.connecting ? null : s.reconnect,
           ),
         ],

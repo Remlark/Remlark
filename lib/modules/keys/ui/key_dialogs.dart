@@ -5,12 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../app/app_services.dart';
+import '../../../app/theme/app_palette.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../ui_kit/app_dialog.dart';
 import '../../../utils/id_utils.dart';
 import '../../../utils/platform_utils.dart';
 import '../../../utils/ui_utils.dart';
 import '../key_model.dart';
 import '../key_utils.dart';
+import '../../../ui_kit/check_label.dart';
 
 /// 密钥相关对话框：生成、导入
 class KeyDialogs {
@@ -92,10 +95,12 @@ class _ImportKeyDialogState extends State<_ImportKeyDialog> {
   @override
   Widget build(BuildContext context) {
     final encrypted = _pem.text.isNotEmpty && KeyUtils.isEncrypted(_pem.text.trim());
-    return AlertDialog(
-      title: Text(context.tr('key.import')),
+    return AppDialog(
+      icon: Icons.file_download_outlined,
+      title: context.tr('key.import'),
+      width: 620,
       content: SizedBox(
-        width: 560,
+        width: 572,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -130,24 +135,22 @@ class _ImportKeyDialogState extends State<_ImportKeyDialog> {
                 obscureText: true,
                 decoration: InputDecoration(labelText: context.tr('ssh.passphrase')),
               ),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
+              CheckLabel(
                 value: _savePass,
-                onChanged: (v) => setState(() => _savePass = v ?? true),
-                title: Text(context.tr('key.save_passphrase')),
+                onChanged: (v) => setState(() => _savePass = v),
+                label: context.tr('key.save_passphrase'),
               ),
             ],
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text(_error!, style: const TextStyle(color: Colors.red)),
+                child: Text(_error!, style: TextStyle(color: context.palette.danger)),
               ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text(context.tr('common.cancel'))),
+        OutlinedButton(onPressed: () => Navigator.pop(context), child: Text(context.tr('common.cancel'))),
         FilledButton(onPressed: _pem.text.trim().isEmpty ? null : _save, child: Text(context.tr('key.import'))),
       ],
     );

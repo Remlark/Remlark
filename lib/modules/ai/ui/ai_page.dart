@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../app/nav_controller.dart';
+import '../../../app/theme/app_theme.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../ui_kit/page_header.dart';
 import 'chat_history_view.dart';
 import 'token_stats_view.dart';
 
@@ -25,32 +27,21 @@ class _AiPageState extends State<AiPage> {
     _lastPage = page;
     return DefaultTabController(
       length: 2,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
-            child: Row(
-              children: [
-                Text(context.tr('nav.ai'), style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(width: 24),
-                Expanded(
-                  child: TabBar(
-                    isScrollable: true,
-                    tabAlignment: TabAlignment.start,
-                    tabs: [
-                      Tab(text: context.tr('ai.tab.stats')),
-                      Tab(text: context.tr('ai.tab.history')),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+      child: PageFrame(
+        header: PageHeader(title: context.tr('nav.ai'), subtitle: context.tr('ai.page.subtitle')),
+        headerBottom: Padding(
+          padding: const EdgeInsets.only(left: AppSizes.pagePadding - 12),
+          child: TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+            tabs: [
+              Tab(height: 42, text: context.tr('ai.tab.stats')),
+              Tab(height: 42, text: context.tr('ai.tab.history')),
+            ],
           ),
-          const Divider(height: 1),
-          Expanded(
-            child: TabBarView(key: ValueKey(_generation), children: const [TokenStatsView(), ChatHistoryView()]),
-          ),
-        ],
+        ),
+        body: TabBarView(key: ValueKey(_generation), children: const [TokenStatsView(), ChatHistoryView()]),
       ),
     );
   }

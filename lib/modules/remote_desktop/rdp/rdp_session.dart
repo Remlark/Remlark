@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart' show KeyEventResult;
 import 'package:pasteboard/pasteboard.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../utils/app_log.dart';
 import '../../../utils/platform_utils.dart';
 import '../../hosts/host_model.dart';
 import '../../hosts/host_repository.dart';
@@ -54,6 +55,7 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
   String? _lastClipText;
   String _lastClipFiles = '';
   int _buttons = 0;
+  int _lastX = 0, _lastY = 0;
   Size? _viewSize;
   final Completer<void> _viewSizeKnown = Completer<void>();
   final Set<PhysicalKeyboardKey> _downKeys = {};
@@ -87,7 +89,9 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
         password = input.password;
         remember = input.remember;
       }
+      AppLog.i('rdp', '连接「${host.name}」${host.endpoint}（第 ${attempt + 1} 次）');
       final (result, detail) = await _attempt(password);
+      AppLog.i('rdp', '连接结果 ${result.name}${detail == null ? '' : '：$detail'}');
       switch (result) {
         case _Attempt.connected:
           if (remember) await _hosts.updatePassword(host.uuid, password, true);
@@ -278,13 +282,7 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
   Future<void> openSharedDir() async {
     final d = sharedDir ?? await _prepareSharedDir();
     sharedDir = d;
-    if (Platform.isMacOS) {
-      await Process.run('open', [d]);
-    } else if (Platform.isWindows) {
-      await Process.run('explorer', [d]);
-    } else {
-      await Process.run('xdg-open', [d]);
-    }
+    await PlatformUtils.openInFileManager(d);
   }
 
   // ---------- 特殊按键 ----------
@@ -319,10 +317,22 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
   int get frameHeight => _client?.height ?? 0;
 
   @override
-  Uint8List? readFrame() => _client?.copyFrame();
+  FrameUpdate? takeFrame() {
+    final c = _client;
+    final px = c?.copyFrame();
+    if (c == null || px == null) return null;
+    // RDP 原生库不提供变化区域，每次整屏
+    return FrameUpdate.fullFrame(frameWidth, frameHeight, px);
+  }
+
+  /// 远程指针形状暂未同步，使用系统指针
+  @override
+  RemoteCursor? get cursor => null;
 
   @override
   void pointerEvent(int x, int y, int buttons) {
+    _lastX = x;
+    _lastY = y;
     final c = _client;
     if (c == null) return;
     final changed = buttons ^ _buttons;
@@ -339,10 +349,12 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
   }
 
   @override
-  void scrollEvent(int x, int y, double dy) {
-    // 滚轮单位 120；向下为负，使用 9 位补码表示
-    final flags = dy < 0 ? (RdpPointer.wheel | 0x78) : (RdpPointer.wheel | RdpPointer.wheelNegative | 0x88);
-    _client?.sendMouse(flags, x, y);
+  void scrollEvent(int x, int y, int steps) {
+    // 滚轮每格 120；向下为负，使用 9 位补码表示；每格发送一次
+    final flags = steps < 0 ? (RdpPointer.wheel | 0x78) : (RdpPointer.wheel | RdpPointer.wheelNegative | 0x88);
+    for (var i = 0; i < steps.abs(); i++) {
+      _client?.sendMouse(flags, x, y);
+    }
   }
 
   @override
@@ -372,6 +384,21 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
 
   @override
   void displayFocused() => syncClipboard();
+
+  @override
+  void displayBlurred() {
+    final c = _client;
+    if (c == null) return;
+    if (_downKeys.isNotEmpty) {
+      AppLog.i('rdp', '失去焦点，释放 ${_downKeys.length} 个按键');
+      for (final k in _downKeys) {
+        final sc = RdpScancode.fromKey(k, metaAsCtrl: metaAsCtrl);
+        if (sc != null) c.sendKey(sc, false);
+      }
+      _downKeys.clear();
+    }
+    if (_buttons != 0) pointerEvent(_lastX, _lastY, 0);
+  }
 
   @override
   void viewResized(int width, int height) {

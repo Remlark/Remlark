@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 
 import '../../../app/app_services.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../ui_kit/check_label.dart';
+import '../../../ui_kit/panel.dart';
 import '../../keys/key_model.dart';
 import '../../keys/ui/key_dialogs.dart';
 import '../host_model.dart';
@@ -18,16 +20,15 @@ class SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 18, bottom: 10),
+    padding: const EdgeInsets.only(top: 22, bottom: 12),
     child: Text(
       text,
-      style: Theme.of(context).textTheme.titleSmall
-          ?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600),
+      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface),
     ),
   );
 }
 
-/// 密码输入 + 记住密码
+/// 密码输入 + 下方“记住密码”选项
 class PasswordFields extends StatefulWidget {
   const PasswordFields({super.key, required this.form});
 
@@ -43,15 +44,15 @@ class _PasswordFieldsState extends State<PasswordFields> {
   @override
   Widget build(BuildContext context) {
     final f = widget.form;
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
+        LabeledField(
+          label: context.tr('host.password'),
           child: TextField(
             controller: f.password,
             obscureText: _obscure,
             decoration: InputDecoration(
-              labelText: context.tr('host.password'),
-              helperText: context.tr('host.password.helper'),
               suffixIcon: IconButton(
                 icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off, size: 18),
                 onPressed: () => setState(() => _obscure = !_obscure),
@@ -59,17 +60,12 @@ class _PasswordFieldsState extends State<PasswordFields> {
             ),
           ),
         ),
-        const SizedBox(width: 12),
-        SizedBox(
-          width: 160,
-          child: CheckboxListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            value: f.savePassword,
-            onChanged: (v) => f.update(() => f.savePassword = v ?? false),
-            title: Text(context.tr('host.remember_password')),
-          ),
+        const SizedBox(height: 6),
+        CheckLabel(
+          value: f.savePassword,
+          onChanged: (v) => f.update(() => f.savePassword = v),
+          label: context.tr('host.remember_password'),
+          helper: context.tr('host.password.helper'),
         ),
       ],
     );
@@ -129,6 +125,7 @@ class _SshAuthSectionState extends State<SshAuthSection> {
         ),
         const SizedBox(height: 14),
         if (f.authType != AuthType.key) PasswordFields(form: f),
+        if (f.authType == AuthType.key) FieldLabel(context.tr('auth.key.select')),
         if (f.authType == AuthType.key)
           Row(
             children: [
@@ -136,7 +133,6 @@ class _SshAuthSectionState extends State<SshAuthSection> {
                 child: DropdownButtonFormField<String>(
                   isExpanded: true,
                   initialValue: _keys.any((k) => k.uuid == f.keyUuid) ? f.keyUuid : null,
-                  decoration: InputDecoration(labelText: context.tr('auth.key.select')),
                   items: [
                     for (final k in _keys)
                       DropdownMenuItem(
@@ -292,6 +288,7 @@ class ProxySection extends StatelessWidget {
   Widget build(BuildContext context) {
     final f = form;
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SegmentedButton<ProxyType>(
           segments: [
@@ -305,40 +302,43 @@ class ProxySection extends StatelessWidget {
         if (f.proxyType != ProxyType.none) ...[
           const SizedBox(height: 12),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 flex: 3,
-                child: TextField(
-                  controller: f.proxyHost,
-                  decoration: InputDecoration(labelText: context.tr('proxy.host')),
+                child: LabeledField(
+                  label: context.tr('proxy.host'),
+                  child: TextField(controller: f.proxyHost),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
               Expanded(
-                child: TextField(
-                  controller: f.proxyPort,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: InputDecoration(labelText: context.tr('host.port')),
+                child: LabeledField(
+                  label: context.tr('host.port'),
+                  child: TextField(
+                    controller: f.proxyPort,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: TextField(
-                  controller: f.proxyUser,
-                  decoration: InputDecoration(labelText: context.tr('proxy.user')),
+                child: LabeledField(
+                  label: context.tr('proxy.user'),
+                  child: TextField(controller: f.proxyUser),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
               Expanded(
-                child: TextField(
-                  controller: f.proxyPass,
-                  obscureText: true,
-                  decoration: InputDecoration(labelText: context.tr('proxy.password')),
+                child: LabeledField(
+                  label: context.tr('proxy.password'),
+                  child: TextField(controller: f.proxyPass, obscureText: true),
                 ),
               ),
             ],
@@ -359,43 +359,38 @@ class RdpSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final f = form;
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         PasswordFields(form: f),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: TextField(
-                controller: f.domain,
-                decoration: InputDecoration(labelText: context.tr('rdp.domain')),
+              child: LabeledField(
+                label: context.tr('rdp.domain'),
+                child: TextField(controller: f.domain),
               ),
             ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 100,
-              child: TextField(
-                controller: f.width,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: InputDecoration(labelText: context.tr('rdp.width')),
-              ),
-            ),
-            const Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Text('×')),
-            SizedBox(
-              width: 100,
-              child: TextField(
-                controller: f.height,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: InputDecoration(labelText: context.tr('rdp.height')),
+            const SizedBox(width: 16),
+            Expanded(
+              child: LabeledField(
+                label: '${context.tr('rdp.width')} × ${context.tr('rdp.height')}',
+                helper: context.tr('rdp.resolution.helper'),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(controller: f.width, inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+                    ),
+                    const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('×')),
+                    Expanded(
+                      child: TextField(controller: f.height, inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
-        ),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Text(context.tr('rdp.resolution.helper'), style: Theme.of(context).textTheme.bodySmall),
-          ),
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
@@ -409,54 +404,122 @@ class RdpSection extends StatelessWidget {
   }
 }
 
-/// VNC 选项分区：密码与文件传输（经关联 SSH 主机）
+/// VNC 凭据及可选 SSH：开启后显示 SSH 参数并提供独立终端入口。
 class VncSection extends StatelessWidget {
   const VncSection({super.key, required this.form});
+  final HostForm form;
+
+  /// 显示共用密码及单协议能力说明。
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      PasswordFields(form: form),
+      SwitchListTile(
+        key: const ValueKey('vnc-enable-ssh'),
+        contentPadding: EdgeInsets.zero,
+        title: Text(context.tr('vnc.ssh.enable')),
+        subtitle: Text(context.tr(form.vncSsh.enabled ? 'host.connections.shared' : 'vnc.only.helper')),
+        value: form.vncSsh.enabled,
+        onChanged: form.setSshEnabled,
+      ),
+      if (form.vncSsh.enabled) HostSshSection(form: form),
+      if (form.preserveLegacySsh && !form.vncSsh.enabled) FieldHelper(context.tr('vnc.ssh.legacy')),
+    ],
+  );
+}
+
+/// 双协议主机的独立 SSH 配置分区：终端和文件传输共用。
+class HostSshSection extends StatefulWidget {
+  const HostSshSection({super.key, required this.form});
 
   final HostForm form;
 
   @override
+  State<HostSshSection> createState() => _HostSshSectionState();
+}
+
+class _HostSshSectionState extends State<HostSshSection> {
+  List<KeyEntry> _keys = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadKeys();
+  }
+
+  Future<void> _loadKeys() async {
+    final keys = await context.read<AppServices>().keyRepo.list();
+    if (mounted) setState(() => _keys = keys);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final f = form;
-    final ssh = context.read<HostsController>().sshHosts;
+    final f = widget.form;
+    final ssh = f.vncSsh;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        PasswordFields(form: f),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: DropdownButtonFormField<String?>(
-                isExpanded: true,
-                initialValue: ssh.any((h) => h.uuid == f.transferHost) ? f.transferHost : null,
-                decoration: InputDecoration(
-                  labelText: context.tr('vnc.transfer_host'),
-                  helperText: context.tr('vnc.transfer_host.helper'),
-                ),
-                items: [
-                  DropdownMenuItem(
-                    value: null,
-                    child: Text(context.tr('common.none'), overflow: TextOverflow.ellipsis),
+        if (ssh.enabled) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 120,
+                child: LabeledField(
+                  label: context.tr('vnc.ssh.port'),
+                  child: TextField(
+                    controller: f.sshPort,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   ),
-                  for (final h in ssh)
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: LabeledField(
+                  label: context.tr('vnc.ssh.auth'),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: DropdownButtonFormField<AuthType>(
+                      isExpanded: true,
+                      initialValue: ssh.authType,
+                      items: [
+                        for (final type in AuthType.values)
+                          DropdownMenuItem(value: type, child: Text(context.tr('auth.${type.name}'))),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) f.update(() => f.vncSsh = ssh.copyWith(authType: v));
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (ssh.authType == AuthType.key) ...[
+            const SizedBox(height: 14),
+            LabeledField(
+              label: context.tr('auth.key.select'),
+              child: DropdownButtonFormField<String>(
+                isExpanded: true,
+                initialValue: _keys.any((k) => k.uuid == ssh.keyUuid) ? ssh.keyUuid : null,
+                items: [
+                  for (final k in _keys)
                     DropdownMenuItem(
-                      value: h.uuid,
-                      child: Text('${h.name}  ${h.endpoint}', overflow: TextOverflow.ellipsis),
+                      value: k.uuid,
+                      child: Text('${k.name}  (${k.keyType})', overflow: TextOverflow.ellipsis),
                     ),
                 ],
-                onChanged: (v) => f.update(() => f.transferHost = v),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextField(
-                controller: f.transferDir,
-                decoration: InputDecoration(labelText: context.tr('vnc.transfer_dir')),
+                onChanged: (v) => f.update(() => f.vncSsh = ssh.copyWith(keyUuid: () => v)),
               ),
             ),
           ],
-        ),
+          SectionTitle(context.tr('host.section.jump')),
+          JumpChainSection(form: f),
+          SectionTitle(context.tr('host.section.proxy')),
+          ProxySection(form: f),
+        ],
       ],
     );
   }

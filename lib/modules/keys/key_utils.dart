@@ -109,4 +109,16 @@ class KeyUtils {
     final type = _blobType(blob);
     return (publicLine: '$type ${base64Encode(blob)} $comment'.trim(), keyType: type);
   }
+
+  /// 公钥指纹（与 ssh-keygen -l 一致）：SHA256:无填充 base64
+  static Future<String> fingerprint(String publicLine) async {
+    final parts = publicLine.trim().split(RegExp(r'\s+'));
+    if (parts.length < 2) return '';
+    try {
+      final digest = await CryptoUtils.sha256(base64Decode(parts[1]));
+      return 'SHA256:${base64Encode(digest).replaceAll('=', '')}';
+    } catch (_) {
+      return '';
+    }
+  }
 }

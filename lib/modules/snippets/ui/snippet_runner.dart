@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../app/app_services.dart';
+import '../../../app/theme/app_palette.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../terminal/terminal_session.dart';
 import '../snippet_action.dart';
@@ -66,12 +67,13 @@ class _ActionProgressDialogState extends State<_ActionProgressDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return AlertDialog(
       title: Row(
         children: [
           if (!_done) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
           if (_done)
-            Icon(_error == null ? Icons.check_circle : Icons.error, color: _error == null ? Colors.green : Colors.red),
+            Icon(_error == null ? Icons.check_circle : Icons.error, color: _error == null ? p.success : p.danger),
           const SizedBox(width: 10),
           Expanded(child: Text(widget.title)),
         ],
@@ -80,10 +82,14 @@ class _ActionProgressDialogState extends State<_ActionProgressDialog> {
         width: 520,
         constraints: const BoxConstraints(minHeight: 120),
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
+        decoration: BoxDecoration(
+          color: p.input,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: p.borderStrong),
+        ),
         child: SelectableText(
           [..._lines, if (_error != null) '✗ $_error'].join('\n'),
-          style: const TextStyle(fontFamily: 'monospace', color: Colors.white, fontSize: 12),
+          style: TextStyle(fontFamily: 'monospace', color: p.text, fontSize: 12),
         ),
       ),
       actions: [

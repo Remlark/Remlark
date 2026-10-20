@@ -176,6 +176,13 @@ class HostRepository {
     );
   }
 
+  /// 更新用户名（如连接时在对话框中填写）；属于配置变更，会刷新 updatedAt
+  Future<void> updateUsername(String uuid, String username) async {
+    await (_db.update(
+      _db.hosts,
+    )..where((t) => t.uuid.equals(uuid))).write(HostsCompanion(username: Value(username), updatedAt: Value(now())));
+  }
+
   /// 设置同步状态（不影响 updatedAt）
   Future<void> setSyncState(String uuid, {required bool enabled, int? syncedAt}) async {
     await (_db.update(

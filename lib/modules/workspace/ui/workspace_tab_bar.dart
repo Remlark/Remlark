@@ -1,128 +1,202 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../app/theme/app_palette.dart';
+import '../../../app/theme/app_theme.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../ui_kit/buttons.dart';
 import '../../hosts/ui/os_icon.dart';
-import '../../terminal/terminal_session.dart';
+import '../../hosts/ui/protocol_tag.dart';
+import '../session_launcher.dart';
 import '../workspace_controller.dart';
 import '../workspace_tab.dart';
+import 'workspace_actions.dart';
+import 'host_picker.dart';
 
-/// 会话标签栏：系统图标、标题、状态点、广播勾选、关闭；右侧为平铺与广播开关
+/// 单行会话栏：左侧管理会话，右侧独立广播与布局，不再用广播条替换标签。
 class WorkspaceTabBar extends StatelessWidget {
   const WorkspaceTabBar({super.key});
 
   @override
   Widget build(BuildContext context) {
     final w = context.watch<WorkspaceController>();
-    final scheme = Theme.of(context).colorScheme;
+    final p = context.palette;
     return Container(
-      height: 42,
-      color: scheme.surfaceContainerLow,
+      height: 56,
+      decoration: BoxDecoration(
+        color: p.canvas,
+        border: Border(
+          bottom: BorderSide(
+            color: w.broadcast ? p.warning.withValues(alpha: 0.5) : p.border,
+          ),
+        ),
+      ),
       child: Row(
         children: [
-          Expanded(
-            child: ReorderableListView(
-              scrollDirection: Axis.horizontal,
-              buildDefaultDragHandles: false,
-              onReorderItem: (a, b) {
-                final t = w.tabs.removeAt(a);
-                w.tabs.insert(b, t);
-                w.activate(t.id);
-              },
-              children: [
-                for (var i = 0; i < w.tabs.length; i++)
-                  ReorderableDragStartListener(
-                    key: ValueKey(w.tabs[i].id),
-                    index: i,
-                    child: _TabChip(tab: w.tabs[i], active: w.active == w.tabs[i]),
-                  ),
-              ],
+          Padding(
+            padding: const EdgeInsets.only(left: 20, right: 16),
+            child: Text(
+              context.tr('nav.sessions'),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: p.text,
+              ),
             ),
           ),
-          if (w.terminals.length > 1) ...[
-            Tooltip(
-              message: context.tr('workspace.tiled'),
-              child: IconButton(
-                isSelected: w.tiled,
-                icon: const Icon(Icons.grid_view, size: 18),
-                selectedIcon: Icon(Icons.grid_view, size: 18, color: scheme.primary),
-                onPressed: () => w.setTiled(!w.tiled),
-              ),
-            ),
-            Tooltip(
-              message: context.tr('workspace.broadcast'),
-              child: IconButton(
-                isSelected: w.broadcast,
-                icon: const Icon(Icons.campaign_outlined, size: 18),
-                selectedIcon: const Icon(Icons.campaign, size: 18, color: Colors.orange),
-                onPressed: () => w.setBroadcast(!w.broadcast),
-              ),
-            ),
-          ],
-          const SizedBox(width: 6),
+          Container(width: 1, height: 22, color: p.borderStrong),
+          const SizedBox(width: 8),
+          const Expanded(child: _Tabs()),
+          const SizedBox(width: 16),
+          const WorkspaceActions(),
+          const SizedBox(width: 16),
         ],
       ),
     );
   }
 }
 
-class _TabChip extends StatelessWidget {
+/// 标签页列表与新建会话，右侧留白由父级占满。
+class _Tabs extends StatelessWidget {
+  const _Tabs();
+
+  /// 选择主机并新建独立会话，不自动加入广播。
+  Future<void> _newSession(BuildContext context) async {
+    final pick = await HostPicker.show(
+      context,
+      title: context.tr('workspace.new_session'),
+    );
+    final h = pick?.host;
+    if (h != null && context.mounted) await SessionLauncher.open(context, h);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final w = context.watch<WorkspaceController>();
+    return Row(
+      children: [
+        Flexible(
+          child: ReorderableListView(
+            scrollDirection: Axis.horizontal,
+            buildDefaultDragHandles: false,
+            shrinkWrap: true,
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            onReorderItem: (a, b) {
+              final t = w.tabs.removeAt(a);
+              w.tabs.insert(b, t);
+              w.activate(t.id);
+            },
+            children: [
+              for (var i = 0; i < w.tabs.length; i++)
+                ReorderableDragStartListener(
+                  key: ValueKey(w.tabs[i].id),
+                  index: i,
+                  child: _TabChip(
+                    tab: w.tabs[i],
+                    active: w.active == w.tabs[i],
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 4),
+        ToolButton(
+          compact: true,
+          icon: Icons.add,
+          label: context.tr('workspace.new_session'),
+          tooltip: context.tr('workspace.new_session'),
+          onPressed: () => _newSession(context),
+        ),
+      ],
+    );
+  }
+}
+
+/// 单个会话标签：系统图标、名称、协议、未连接时的状态点、关闭
+class _TabChip extends StatefulWidget {
   const _TabChip({required this.tab, required this.active});
 
   final WorkspaceTab tab;
   final bool active;
 
   @override
+  State<_TabChip> createState() => _TabChipState();
+}
+
+class _TabChipState extends State<_TabChip> {
+  bool _hover = false;
+
+  @override
   Widget build(BuildContext context) {
     final w = context.read<WorkspaceController>();
-    final scheme = Theme.of(context).colorScheme;
+    final p = context.palette;
+    final tab = widget.tab;
+    final active = widget.active;
     final dot = switch (tab.state) {
-      SessionState.connecting => Colors.amber,
-      SessionState.connected => Colors.green,
-      SessionState.disconnected => Colors.grey,
-      SessionState.failed => Colors.red,
+      SessionState.connecting => p.warning,
+      SessionState.connected => null,
+      SessionState.disconnected => p.textFaint,
+      SessionState.failed => p.danger,
     };
-    final isTerm = tab is TerminalSession;
-    return GestureDetector(
-      onTap: () => w.activate(tab.id),
-      onTertiaryTapUp: (_) => w.closeTab(tab),
-      child: Container(
-        margin: const EdgeInsets.only(left: 4, top: 5, bottom: 0),
-        padding: const EdgeInsets.only(left: 10, right: 2),
-        constraints: const BoxConstraints(maxWidth: 240),
-        decoration: BoxDecoration(
-          color: active ? Theme.of(context).scaffoldBackgroundColor : Colors.transparent,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-          border: active ? Border(top: BorderSide(color: scheme.primary, width: 2)) : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (w.broadcast && isTerm)
-              SizedBox(
-                width: 22,
-                child: Checkbox(
-                  visualDensity: VisualDensity.compact,
-                  value: w.broadcastTargets.contains(tab.id),
-                  onChanged: (_) => w.toggleBroadcastTarget(tab.id),
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: () => w.selectTab(tab.id),
+        // 鼠标中键关闭
+        onTertiaryTapUp: (_) => w.closeTab(tab),
+        child: Container(
+          margin: const EdgeInsets.only(right: 6),
+          padding: const EdgeInsets.only(left: 10, right: 4),
+          constraints: const BoxConstraints(maxWidth: 240),
+          decoration: BoxDecoration(
+            color: active ? p.panel : (_hover ? p.hover : Colors.transparent),
+            borderRadius: BorderRadius.circular(AppSizes.radius),
+            border: Border.all(
+              color: active ? p.accent.withValues(alpha: 0.6) : p.border,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              tab.kindLabel == 'SFTP'
+                  ? Icon(
+                      Icons.folder_open_outlined,
+                      size: 17,
+                      color: p.textMuted,
+                    )
+                  : OsIcon(host: tab.host, size: 18),
+              const SizedBox(width: 8),
+              if (dot != null) ...[
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 6),
+              ],
+              Flexible(
+                child: Text(
+                  tab.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: active ? p.text : p.textMuted,
+                    fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                  ),
                 ),
               ),
-            OsIcon(host: tab.host, size: 18),
-            const SizedBox(width: 6),
-            Container(
-              width: 7,
-              height: 7,
-              decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 6),
-            Flexible(child: Text(tab.title, maxLines: 1, overflow: TextOverflow.ellipsis)),
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              iconSize: 14,
-              icon: const Icon(Icons.close),
-              onPressed: () => w.closeTab(tab),
-            ),
-          ],
+              const SizedBox(width: 8),
+              ProtocolTag(tab.kindLabel, small: true),
+              GhostIconButton(
+                icon: Icons.close,
+                size: 26,
+                tooltip: context.tr('workspace.close_tab'),
+                onPressed: () => w.closeTab(tab),
+              ),
+            ],
+          ),
         ),
       ),
     );

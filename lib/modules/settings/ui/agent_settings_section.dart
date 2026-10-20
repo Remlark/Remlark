@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../app/theme/app_palette.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../ui_kit/app_dialog.dart';
+import '../../../ui_kit/buttons.dart';
+import '../../../ui_kit/panel.dart';
+import '../../../ui_kit/tags.dart';
 import '../../../utils/id_utils.dart';
 import '../../../utils/ui_utils.dart';
 import '../../ai/agent_config.dart';
@@ -15,48 +20,91 @@ class AgentSettingsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.watch<AgentsController>();
+    final p = context.palette;
     final active = c.active;
     return SettingsCard(
       title: context.tr('settings.agents'),
-      trailing: TextButton.icon(
-        icon: const Icon(Icons.add, size: 16),
+      description: context.tr('settings.agents.desc'),
+      trailing: FilledButton.icon(
+        icon: const Icon(Icons.add, size: 18),
         label: Text(context.tr('agent.new')),
         onPressed: () => _edit(context),
       ),
       children: [
-        if (c.agents.isEmpty) Text(context.tr('agent.empty'), style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 16),
+        if (c.agents.isEmpty)
+          AppPanel(
+            child: EmptyState(icon: Icons.auto_awesome_outlined, title: context.tr('agent.empty')),
+          ),
         RadioGroup<String>(
           groupValue: active?.uuid,
           onChanged: (v) => v == null ? null : c.setActive(v),
           child: Column(
             children: [
               for (final a in c.agents)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Radio<String>(value: a.uuid),
-                  title: Text(a.name),
-                  subtitle: Text(
-                    a.kind == AgentKind.deepseekCli
-                        ? 'DeepSeek Harness CLI · ${a.command.isEmpty ? 'dsh' : a.command}'
-                        : 'OpenAI API · ${a.model.isEmpty ? 'deepseek-chat' : a.model}',
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(icon: const Icon(Icons.edit_outlined, size: 18), onPressed: () => _edit(context, a)),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, size: 18),
-                        onPressed: () async {
-                          final ok = await UiUtils.confirm(
-                            context,
-                            title: context.tr('agent.delete'),
-                            message: a.name,
-                            danger: true,
-                          );
-                          if (ok) await c.delete(a.uuid);
-                        },
-                      ),
-                    ],
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: AppPanel(
+                    highlighted: a.uuid == active?.uuid,
+                    padding: const EdgeInsets.fromLTRB(10, 12, 12, 12),
+                    child: Row(
+                      children: [
+                        Radio<String>(value: a.uuid),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      a.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: p.text),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Tag(a.kind == AgentKind.deepseekCli ? 'CLI' : 'API', color: p.info),
+                                  if (a.uuid == active?.uuid) ...[
+                                    const SizedBox(width: 8),
+                                    Tag(context.tr('agent.active'), color: p.accent),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                a.kind == AgentKind.deepseekCli
+                                    ? 'DeepSeek Harness CLI · ${a.command.isEmpty ? 'dsh' : a.command}'
+                                    : 'OpenAI API · ${a.model.isEmpty ? 'deepseek-chat' : a.model}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 13, color: p.textMuted, fontFamily: 'monospace'),
+                              ),
+                            ],
+                          ),
+                        ),
+                        GhostIconButton(
+                          icon: Icons.edit_outlined,
+                          tooltip: context.tr('common.edit'),
+                          onPressed: () => _edit(context, a),
+                        ),
+                        GhostIconButton(
+                          icon: Icons.delete_outline,
+                          tooltip: context.tr('common.delete'),
+                          onPressed: () async {
+                            final ok = await UiUtils.confirm(
+                              context,
+                              title: context.tr('agent.delete'),
+                              message: a.name,
+                              danger: true,
+                            );
+                            if (ok) await c.delete(a.uuid);
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ),
             ],
@@ -97,10 +145,11 @@ class _AgentDialogState extends State<_AgentDialog> {
   @override
   Widget build(BuildContext context) {
     final cli = _kind == AgentKind.deepseekCli;
-    return AlertDialog(
-      title: Text(context.tr(widget.existing == null ? 'agent.new' : 'agent.edit')),
+    return AppDialog(
+      title: context.tr(widget.existing == null ? 'agent.new' : 'agent.edit'),
+      width: 580,
       content: SizedBox(
-        width: 520,
+        width: 532,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -170,7 +219,7 @@ class _AgentDialogState extends State<_AgentDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text(context.tr('common.cancel'))),
+        OutlinedButton(onPressed: () => Navigator.pop(context), child: Text(context.tr('common.cancel'))),
         FilledButton(
           onPressed: () {
             if (_name.text.trim().isEmpty) return;

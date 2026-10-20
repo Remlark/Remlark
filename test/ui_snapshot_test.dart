@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:remlark/app/app.dart';
@@ -12,6 +13,13 @@ import 'package:remlark/app/nav_controller.dart';
 import 'package:remlark/data/database.dart';
 import 'package:remlark/modules/hosts/host_model.dart';
 import 'package:remlark/modules/hosts/ui/host_editor_dialog.dart';
+import 'package:remlark/modules/keys/key_model.dart';
+import 'package:remlark/modules/remote_desktop/vnc/vnc_session.dart';
+import 'package:remlark/modules/remote_desktop/rdp/rdp_session.dart';
+import 'package:remlark/modules/ssh/ui/ssh_dialogs.dart';
+import 'package:remlark/modules/terminal/terminal_session.dart';
+import 'package:remlark/modules/terminal/ui/terminal_tab_view.dart';
+import 'package:remlark/modules/workspace/workspace_tab.dart';
 import 'package:remlark/utils/crypto_utils.dart';
 import 'package:remlark/utils/id_utils.dart';
 import 'package:remlark/utils/secret_store.dart';
@@ -21,11 +29,21 @@ import 'package:provider/provider.dart';
 import 'helpers/test_fonts.dart';
 
 Future<void> _shot(WidgetTester tester, String name) async {
-  await tester.pumpAndSettle(const Duration(milliseconds: 300));
+  // 不用 pumpAndSettle：连接中的转圈动画不会结束
+  for (var i = 0; i < 4; i++) {
+    await tester.runAsync(
+      () => Future.delayed(const Duration(milliseconds: 80)),
+    );
+    await tester.pump(const Duration(milliseconds: 120));
+  }
   final dir = Platform.environment['SNAPSHOT_DIR']!;
-  final boundary = tester.renderObject<RenderRepaintBoundary>(find.byType(RepaintBoundary).first);
+  final boundary = tester.renderObject<RenderRepaintBoundary>(
+    find.byType(RepaintBoundary).first,
+  );
   final image = await tester.runAsync(() => boundary.toImage(pixelRatio: 1));
-  final bytes = await tester.runAsync(() => image!.toByteData(format: ui.ImageByteFormat.png));
+  final bytes = await tester.runAsync(
+    () => image!.toByteData(format: ui.ImageByteFormat.png),
+  );
   File('$dir/$name.png').writeAsBytesSync(bytes!.buffer.asUint8List());
 }
 
@@ -46,7 +64,13 @@ void main() {
       final now = DateTime.now().millisecondsSinceEpoch;
       final samples = [
         ('web-01', 'ubuntu', 'Ubuntu 22.04.3 LTS', HostProtocol.ssh, true),
-        ('db-master', 'rhel', 'Red Hat Enterprise Linux 9.2', HostProtocol.ssh, true),
+        (
+          'db-master',
+          'rhel',
+          'Red Hat Enterprise Linux 9.2',
+          HostProtocol.ssh,
+          true,
+        ),
         ('k8s-node', 'centos', 'CentOS Stream 9', HostProtocol.ssh, false),
         ('bastion', 'debian', 'Debian GNU/Linux 12', HostProtocol.ssh, false),
         ('win-server', null, null, HostProtocol.rdp, false),
@@ -62,6 +86,11 @@ void main() {
             address: '10.0.1.${name.length}',
             port: proto.defaultPort,
             username: 'root',
+            extra: proto == HostProtocol.vnc
+                ? {
+                    'ssh': {'enabled': true, 'port': 22},
+                  }
+                : const {},
             osId: os,
             osName: osName,
             syncEnabled: sync,
@@ -73,21 +102,179 @@ void main() {
           touch: false,
         );
       }
+      await services.keyRepo.save(
+        KeyEntry(
+          uuid: 'k1',
+          name: 'production-ed25519',
+          keyType: 'ssh-ed25519',
+          privateKey: 'x',
+          publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ7h3K9pQ1mV4zF8nD6rT2wL0cJ5sG7kP9dQ1mN8xY2zA prod@server',
+          createdAt: now,
+        ),
+      );
+      await services.hosts.load();
+      await services.hostRepo.save(
+        services.hosts.all.first.copyWith(lastConnectedAt: () => now),
+        touch: false,
+      );
       await services.hosts.load();
     });
-    await tester.pumpWidget(RepaintBoundary(child: RemlarkApp(services: services)));
+    await tester.pumpWidget(
+      RepaintBoundary(child: RemlarkApp(services: services)),
+    );
+    NavController nav() =>
+        UiUtils.navigatorKey.currentContext!.read<NavController>();
     await _shot(tester, '01_hosts');
-    UiUtils.navigatorKey.currentContext!.read<NavController>().go(AppPage.settings);
+    nav().go(AppPage.sessions);
+    await _shot(tester, '06_workspace_empty');
+    nav().go(AppPage.keys);
+    await _shot(tester, '07_keys');
+    nav().goSettings(SettingsSection.sync);
+    await _shot(tester, '08_settings_sync');
+    // 工作区：打开多个终端（不实际连接）
+    final ui = DialogInteraction();
+    final ssh = services.hosts.all
+        .where((h) => h.protocol == HostProtocol.ssh)
+        .toList();
+    for (var i = 0; i < 4; i++) {
+      final t = TerminalSession(ssh[i], services.connector, ui);
+      t.setState(SessionState.connected);
+      t.terminal.write(
+        '\x1b[32mroot@${ssh[i].name}\x1b[0m:~# uptime\r\n 14:28:17 up 6 days,  2:41,  3 users,  load average: 0.12, 0.08, 0.05\r\n\x1b[32mroot@${ssh[i].name}\x1b[0m:~# ',
+      );
+      services.workspace.add(t);
+    }
+    final first = services.workspace.terminals.first;
+    first.uiState['panel'] = SidePanel.ai;
+    services.workspace.activate(first.id);
+    nav().go(AppPage.sessions);
+    await _shot(tester, '09_terminal_ai');
+    services.workspace.openSftp(first);
+    await _shot(tester, '10_sftp');
+    services.workspace.showGrid();
+    services.workspace.startBroadcast();
+    await _shot(tester, '11_broadcast');
+    services.workspace.stopBroadcast();
+    await tester.runAsync(
+      () => services.settings.setThemeMode(ThemeMode.light),
+    );
+    nav().go(AppPage.hosts);
+    await _shot(tester, '12_hosts_light');
+    // 真实鼠标悬停验证终端按钮反馈，截图后移开以免影响后续页面。
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(find.byTooltip('连接 SSH 终端').first));
+    await _shot(tester, '16_ssh_button_hover');
+    await mouse.removePointer();
+    nav().go(AppPage.sessions);
+    services.workspace.activate(first.id);
+    await _shot(tester, '13_terminal_light');
+    // 第三版布局的混合协议、聚焦恢复及广播锁定快照。
+    final w = services.workspace;
+    final vnc = VncSession(
+      services.hosts.all.firstWhere((h) => h.protocol == HostProtocol.vnc),
+      services.hostRepo,
+      services.connector,
+      ui,
+      ui,
+    );
+    final rdp = RdpSession(
+      services.hosts.all.firstWhere((h) => h.protocol == HostProtocol.rdp),
+      services.hostRepo,
+      ui,
+    );
+    vnc.setState(SessionState.disconnected);
+    rdp.setState(SessionState.disconnected);
+    w.add(vnc);
+    w.add(rdp);
+    final gridIds = [first.id, w.terminals[1].id, vnc.id, rdp.id];
+    w.showGrid(gridIds);
+    await _shot(tester, '17_workspace_mixed_grid');
+    final terminalElement = tester.element(find.byType(TerminalTabView).first);
+    final header = find.byKey(ValueKey('grid-header-${first.id}'));
+    await tester.tap(header);
+    await tester.pump(const Duration(milliseconds: 80));
+    await tester.tap(header);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(w.focusedGridId, first.id);
+    expect(
+      tester.element(find.byType(TerminalTabView).first),
+      same(terminalElement),
+    );
+    await _shot(tester, '18_workspace_focused');
+    await tester.tap(find.text('返回网格'));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(w.showingGrid, isTrue);
+    expect(w.gridIds, gridIds);
+    w.startBroadcast(ids: [first.id, w.terminals[1].id]);
+    await _shot(tester, '19_workspace_broadcast');
+    expect(w.showGrid([vnc.id]), isFalse);
+    w.stopBroadcast();
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('workspace-layout')));
+    await _shot(tester, '20_workspace_layout_menu');
+    await tester.tap(find.text('单窗口').last);
+    await tester.pump(const Duration(milliseconds: 200));
+    for (final t in w.terminals.toList()) {
+      await w.closeTab(t);
+    }
+    w.showGrid([vnc.id, rdp.id]);
+    await _shot(tester, '21_workspace_desktops_only');
+    expect(find.text('广播'), findsNothing);
+    await tester.runAsync(() => services.settings.setThemeMode(ThemeMode.dark));
+    nav().goSettings(SettingsSection.general);
     await _shot(tester, '02_settings');
-    UiUtils.navigatorKey.currentContext!.read<NavController>().go(AppPage.snippets);
+    UiUtils.navigatorKey.currentContext!.read<NavController>().go(
+      AppPage.snippets,
+    );
     await _shot(tester, '03_snippets');
     UiUtils.navigatorKey.currentContext!.read<NavController>().go(AppPage.ai);
-    await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 300)));
+    await tester.runAsync(
+      () => Future.delayed(const Duration(milliseconds: 300)),
+    );
     await _shot(tester, '04_ai');
-    UiUtils.navigatorKey.currentContext!.read<NavController>().go(AppPage.hosts);
-    await tester.pumpAndSettle();
-    HostEditorDialog.show(UiUtils.navigatorKey.currentContext!, existing: services.hosts.all.first);
-    await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 300)));
+    UiUtils.navigatorKey.currentContext!.read<NavController>().go(
+      AppPage.hosts,
+    );
+    await _shot(tester, '00_tmp');
+    HostEditorDialog.show(
+      UiUtils.navigatorKey.currentContext!,
+      existing: services.hosts.all.first,
+    );
+    await tester.runAsync(
+      () => Future.delayed(const Duration(milliseconds: 300)),
+    );
     await _shot(tester, '05_editor');
+    Navigator.of(UiUtils.navigatorKey.currentContext!).pop();
+    HostEditorDialog.show(
+      UiUtils.navigatorKey.currentContext!,
+      existing: services.hosts.all.firstWhere(
+        (h) => h.protocol == HostProtocol.vnc,
+      ),
+    );
+    await _shot(tester, '14_dual_editor');
+    expect(
+      tester
+          .widget<SegmentedButton<HostProtocol>>(
+            find.byType(SegmentedButton<HostProtocol>),
+          )
+          .segments
+          .length,
+      3,
+    );
+    final sshSwitch = find.byKey(const ValueKey('vnc-enable-ssh'));
+    await tester.ensureVisible(sshSwitch);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(sshSwitch);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('SSH 端口'), findsNothing);
+    await tester.ensureVisible(sshSwitch);
+    await tester.tap(sshSwitch);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('SSH 端口'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 500));
+    await _shot(tester, '15_dual_ssh_settings');
+    Navigator.of(UiUtils.navigatorKey.currentContext!).pop();
+    await services.workspace.closeAll();
   });
 }
