@@ -35,10 +35,6 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
   /// RFB 客户端（协议与解码运行在后台 isolate）
   RfbIsolateClient? client;
   Timer? _clipTimer;
-  Timer? _statTimer;
-
-  /// 统计写入日志的间隔
-  static const _statInterval = Duration(seconds: 5);
 
   /// 远程是否锁屏（经关联 SSH 主机查询；未知为 null）。锁屏时画面可能仍显示锁屏前的桌面，但输入由锁屏界面接收
   bool? remoteLocked;
@@ -90,11 +86,6 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
     var needUsername = false;
     for (var attempt = 0; attempt < 5; attempt++) {
       final c = RfbIsolateClient();
-      AppLog.i(
-        'vnc',
-        '会话「${host.name}」第 ${attempt + 1} 次连接（用户名${username.isEmpty ? '未填' : '已填'}，'
-            '密码${password?.isNotEmpty == true ? '已填' : '未填'}）',
-      );
       try {
         await c.connect(host.address, host.port, username: username, password: password);
         client = c;
@@ -143,7 +134,7 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
     clipboard.start();
     // 清理之前遗留在远程的修饰键状态（如上次切走时 ⌘ 未释放），避免点击无法激活窗口等问题
     _downKeys.clear();
-    unawaited(_clearStuckModifiers(c));
+    _clearStuckModifiers(c);
     remoteLocked = null;
     _lockTimer?.cancel();
     if (hasSsh) {
@@ -151,14 +142,7 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
       _lockTimer = Timer.periodic(_lockInterval, (_) => unawaited(_checkLock()));
     }
     AppLog.i('vnc', '已连接「${host.name}」${c.width}×${c.height}，安全类型 ${c.securityType}');
-    // 协议统计由后台 isolate 写入 vnc.stat；这里定期记录本地输入统计（限流效果）
-    _statTimer?.cancel();
     _moves.cancel();
-    _statTimer = Timer.periodic(_statInterval, (_) {
-      if (_statLocalMoves == 0 && _statScrollSteps == 0) return;
-      AppLog.i('vnc.input', '${_statInterval.inSeconds}s：本地鼠标事件 $_statLocalMoves，滚轮 $_statScrollSteps 格');
-      _statLocalMoves = _statScrollSteps = 0;
-    });
     c.onFrame = () {
       frame++;
       notifyListeners();
@@ -173,7 +157,6 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
       _clipTimer?.cancel();
       _lockTimer?.cancel();
       clipboard.stop();
-      _statTimer?.cancel();
       _moves.cancel();
       if (state == SessionState.connected) {
         setState(SessionState.disconnected, error: e?.toString());
@@ -191,9 +174,6 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
   /// 鼠标移动限流（约 60Hz），见 MoveThrottle
   late final _moves = MoveThrottle((x, y) => client?.sendPointer(x, y, _buttons));
 
-  /// 统计：本地收到的鼠标事件数（与实际发送数对照，体现限流效果）、发送的滚轮格数
-  int _statLocalMoves = 0;
-  int _statScrollSteps = 0;
   int _buttons = 0;
   int _lastX = 0, _lastY = 0;
 
@@ -218,7 +198,6 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
     if (c == null) return;
     _lastX = x;
     _lastY = y;
-    _statLocalMoves++;
     if (buttons != _buttons) {
       // 按键状态变化（点击 / 拖动开始结束）立即发送，丢弃尚未发送的移动
       _moves.drop();
@@ -236,7 +215,6 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
     final bit = steps < 0 ? 8 : 16;
     // 与 noVNC / TigerVNC 一致：滚轮立即发送，不限流不丢弃（格数已由 ScrollAccumulator 按位移折算）
     final n = steps.abs();
-    _statScrollSteps += n;
     if (n == 0) return;
     _moves.flush();
     for (var i = 0; i < n; i++) {
@@ -256,15 +234,11 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
       if (sym == null) return KeyEventResult.ignored;
       _downKeys[e.physicalKey] = sym;
       c.sendKey(sym, true);
-      if (e is KeyDownEvent && _modifiers.contains(sym)) AppLog.d('vnc.key', '修饰键按下 ${_hex(sym)}');
       return KeyEventResult.handled;
     }
     if (e is KeyUpEvent) {
       final sym = _downKeys.remove(e.physicalKey) ?? VncKeysym.fromEvent(e);
-      if (sym != null) {
-        c.sendKey(sym, false);
-        if (_modifiers.contains(sym)) AppLog.d('vnc.key', '修饰键松开 ${_hex(sym)}');
-      }
+      if (sym != null) c.sendKey(sym, false);
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -280,27 +254,16 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
   void displayBlurred() {
     final c = client;
     if (c == null) return;
-    if (_downKeys.isNotEmpty) {
-      AppLog.i('vnc.key', '失去焦点，释放 ${_downKeys.length} 个按键：${_downKeys.values.map(_hex).toList()}');
-      for (final sym in _downKeys.values) {
-        c.sendKey(sym, false);
-      }
-      _downKeys.clear();
-      // 释放后核对远程状态（仅在已有传输连接时，不主动建立连接）
-      final conn = _transferConn;
-      if (conn != null && !conn.isClosed) {
-        Timer(const Duration(milliseconds: 300), () => RemoteMacState.logModifiers(conn.client, '失去焦点释放后'));
-      }
+    for (final sym in _downKeys.values) {
+      c.sendKey(sym, false);
     }
+    _downKeys.clear();
     if (_buttons != 0) {
-      AppLog.i('vnc.key', '失去焦点，释放鼠标键 $_buttons');
       _moves.drop();
       _buttons = 0;
       c.sendPointer(_lastX, _lastY, 0);
     }
   }
-
-  static String _hex(int v) => '0x${v.toRadixString(16)}';
 
   bool _lockChecking = false;
 
@@ -316,8 +279,8 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
         remoteLocked = locked;
         notifyListeners();
       }
-    } catch (e) {
-      AppLog.d('vnc', '查询远程锁屏状态失败：$e');
+    } catch (_) {
+      // 查询失败（SSH 不可用等）时保持原状态
     } finally {
       _lockChecking = false;
     }
@@ -354,25 +317,10 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
     return ok;
   }
 
-  /// 连接后释放全部修饰键；配置了关联 SSH 主机时在释放前后查询远程修饰键状态写入日志，
-  /// 释放后仍按下说明卡键并非本客户端造成（如其他会话），需在远程按一下对应键
-  Future<void> _clearStuckModifiers(RfbIsolateClient c) async {
-    SshConnection? conn;
-    if (hasSsh) {
-      try {
-        conn = await prepareTransfer();
-        await RemoteMacState.logModifiers(conn.client, '连接时');
-      } catch (_) {}
-    }
+  /// 连接后释放全部修饰键，清理遗留在远程的按键状态
+  void _clearStuckModifiers(RfbIsolateClient c) {
     for (final m in _modifiers) {
       c.sendKey(m, false);
-    }
-    AppLog.i('vnc.key', '连接后释放全部修饰键，清理遗留的按键状态');
-    if (conn == null) return;
-    await Future.delayed(const Duration(milliseconds: 300));
-    final left = await RemoteMacState.logModifiers(conn.client, '释放后');
-    if (left != null && left.isNotEmpty) {
-      AppLog.w('vnc.key', '释放后远程仍有修饰键按下 $left：可能来自其他会话或远程本机，请在远程按一下对应键');
     }
   }
 
@@ -435,8 +383,6 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
   /// 不在任何窗口内则为桌面；[remotePoint] 为空时取最前面的 Finder 窗口。
   /// 远程不是 macOS 时上传到用户主目录；macOS 上无法识别目标时抛出 [FinderLocateException]，不做猜测
   Future<String> uploadFiles(List<String> paths, {Offset? remotePoint}) async {
-    final point = remotePoint == null ? '无（按钮选择）' : '(${remotePoint.dx.round()},${remotePoint.dy.round()})';
-    AppLog.i('upload', 'VNC 上传 ${paths.length} 项，拖放点 $point，帧缓冲宽 ${client?.width}');
     final conn = await prepareTransfer();
     final r = await FinderLocator.query(conn.client);
     final String dir;
@@ -449,7 +395,6 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
       AppLog.w('upload', '无法确定目标文件夹，取消上传：${r.error} ${r.detail ?? ''}');
       throw FinderLocateException(r.error!, r.detail);
     }
-    AppLog.i('upload', '目标目录 $dir');
     for (final p in paths) {
       transfers!.upload(p, dir);
     }
@@ -461,7 +406,6 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
     _clipTimer?.cancel();
     _lockTimer?.cancel();
     clipboard.stop();
-    _statTimer?.cancel();
     _moves.cancel();
     client?.close();
     client = null;
@@ -474,7 +418,6 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
     _clipTimer?.cancel();
     _lockTimer?.cancel();
     clipboard.stop();
-    _statTimer?.cancel();
     _moves.cancel();
     client?.close();
     client = null;

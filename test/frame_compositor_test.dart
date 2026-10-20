@@ -77,8 +77,6 @@ void main() {
       expect(await _pixel(second, 2, 2), [0, 255, 0, 255]);
       expect(await _pixel(second, 7, 7), [0, 0, 255, 255]);
       expect(await _pixel(second, 50, 40), [255, 0, 0, 255]);
-      expect(c.statFull, 1);
-      expect(c.statRects, 2);
       for (final img in [first, second]) {
         img.dispose();
       }

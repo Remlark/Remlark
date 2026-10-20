@@ -70,15 +70,11 @@ class _VncViewState extends State<VncView> {
       UiUtils.toast(context.tr('vnc.no_transfer_host'), error: true);
       return;
     }
-    final remote = dropGlobal == null
-        ? null
-        : _screenKey.currentState?.remoteFromGlobal(dropGlobal);
+    final remote = dropGlobal == null ? null : _screenKey.currentState?.remoteFromGlobal(dropGlobal);
     final tr = S.of(context);
     try {
       final dir = await s.uploadFiles(paths, remotePoint: remote);
-      UiUtils.toast(
-        tr.t('vnc.uploading_to', {'count': paths.length, 'dir': dir}),
-      );
+      UiUtils.toast(tr.t('vnc.uploading_to', {'count': paths.length, 'dir': dir}));
     } on FinderLocateException catch (e) {
       UiUtils.toast(tr.t(e.code, {'detail': e.detail ?? ''}), error: true);
     } catch (e) {
@@ -101,14 +97,10 @@ class _VncViewState extends State<VncView> {
           if (!widget.compact) _toolbar(context),
           if (!widget.compact) const Divider(height: 1),
           // 远程已锁屏：画面可能仍是锁屏前的桌面，但输入由锁屏界面接收，点击无效
-          if (!widget.compact &&
-              s.state == SessionState.connected &&
-              s.remoteLocked == true)
+          if (!widget.compact && s.state == SessionState.connected && s.remoteLocked == true)
             WarningBar(
               icon: Icons.lock_outline,
-              text: context.tr(
-                s.canUnlock ? 'vnc.locked' : 'vnc.locked.manual',
-              ),
+              text: context.tr(s.canUnlock ? 'vnc.locked' : 'vnc.locked.manual'),
               action: s.canUnlock
                   ? FilledButton.icon(
                       icon: const Icon(Icons.lock_open, size: 16),
@@ -137,22 +129,14 @@ class _VncViewState extends State<VncView> {
                     onDragExited: (_) => setState(() => _dragging = false),
                     onDragDone: (d) {
                       setState(() => _dragging = false);
-                      _upload(
-                        d.files.map((f) => f.path).toList(),
-                        dropGlobal: d.globalPosition,
-                      );
+                      _upload(d.files.map((f) => f.path).toList(), dropGlobal: d.globalPosition);
                     },
                     child: Stack(
                       children: [
                         Positioned.fill(
-                          child: RemoteScreen(
-                            key: _screenKey,
-                            display: s,
-                            fit: widget.compact || _fit,
-                          ),
+                          child: RemoteScreen(key: _screenKey, display: s, fit: widget.compact || _fit),
                         ),
-                        if (_dragging)
-                          DropHint(text: context.tr('vnc.drop_hint')),
+                        if (_dragging) DropHint(text: context.tr('vnc.drop_hint')),
                         if (!widget.compact && s.transfers != null)
                           Positioned(
                             right: 12,
@@ -161,23 +145,17 @@ class _VncViewState extends State<VncView> {
                             // 没有任务时整个浮层（含边框与阴影）都不显示
                             child: ListenableBuilder(
                               listenable: s.transfers!,
-                              builder: (context, _) =>
-                                  s.transfers!.tasks.isEmpty
+                              builder: (context, _) => s.transfers!.tasks.isEmpty
                                   ? const SizedBox.shrink()
                                   : Material(
                                       elevation: 6,
                                       color: context.palette.panelRaised,
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
-                                        side: BorderSide(
-                                          color: context.palette.borderStrong,
-                                        ),
+                                        side: BorderSide(color: context.palette.borderStrong),
                                       ),
                                       clipBehavior: Clip.antiAlias,
-                                      child: TransferList(
-                                        manager: s.transfers!,
-                                        maxHeight: 160,
-                                      ),
+                                      child: TransferList(manager: s.transfers!, maxHeight: 160),
                                     ),
                             ),
                           ),
@@ -188,9 +166,7 @@ class _VncViewState extends State<VncView> {
           if (!widget.compact)
             SessionStatusBar(
               tab: s,
-              detail: s.client == null
-                  ? null
-                  : '${s.client!.desktopName}  ${s.client!.width} × ${s.client!.height}',
+              detail: s.client == null ? null : '${s.client!.desktopName}  ${s.client!.width} × ${s.client!.height}',
             ),
         ],
       ),
@@ -226,9 +202,7 @@ class _VncViewState extends State<VncView> {
           ),
           ToolButton(
             compact: true,
-            icon: s.clipboardSync
-                ? Icons.content_paste
-                : Icons.content_paste_off,
+            icon: s.clipboardSync ? Icons.content_paste : Icons.content_paste_off,
             label: context.tr('vnc.clipboard_sync'),
             selected: s.clipboardSync,
             onPressed: () => s.setClipboardSync(!s.clipboardSync),

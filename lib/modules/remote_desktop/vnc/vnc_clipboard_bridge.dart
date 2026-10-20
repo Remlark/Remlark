@@ -90,7 +90,7 @@ class VncClipboardBridge {
     _lifecycle?.dispose();
     // 离开本应用（去本地粘贴）时拉取远程剪贴板；回到本应用时推送本地剪贴板
     _lifecycle = AppLifecycleListener(
-      onInactive: () => unawaited(pullRemote(reason: '离开应用')),
+      onInactive: () => unawaited(pullRemote()),
       onResume: () => unawaited(pushLocal()),
     );
     unawaited(_baseline());
@@ -108,7 +108,6 @@ class VncClipboardBridge {
     if (conn == null) return;
     final pb = await SshClipboard.read(conn.client);
     _lastRemoteChange ??= pb?.changeCount;
-    AppLog.i('clipboard', '远程剪贴板基线 changeCount=${pb?.changeCount}');
   }
 
   /// 获取 SSH 连接；不可用时返回 null（本次连接期间不再尝试）
@@ -143,10 +142,7 @@ class VncClipboardBridge {
       } catch (_) {}
       if (files.isNotEmpty) {
         // 复制文件时剪贴板同时含文件名文本，不能当作文本推送，否则会覆盖远程的文件剪贴板
-        if (!_sameList(files, _localFiles)) {
-          _localFiles = files;
-          AppLog.i('clipboard', '本地剪贴板为 ${files.length} 个文件，在 VNC 中按 ⌘V 粘贴：${files.take(5).toList()}');
-        }
+        if (!_sameList(files, _localFiles)) _localFiles = files;
         return;
       }
       _localFiles = const [];
@@ -160,9 +156,7 @@ class VncClipboardBridge {
       // 空文本不推送（否则会把远程剪贴板清空）
       if (text == null || text.isEmpty || text == _lastText) return;
       _lastText = text;
-      final latin1 = text.codeUnits.every((c) => c < 256);
       sendRfbText(text);
-      AppLog.i('clipboard', '本地文本 ${text.length} 字符，已发送 RFB 剪贴板消息${latin1 ? '' : '（含非 Latin-1 字符，已替换为 ?）'}');
       final conn = await _ssh();
       if (conn != null) await SshClipboard.write(conn.client, text);
     } finally {
@@ -190,7 +184,7 @@ class VncClipboardBridge {
     }
     if (e.logicalKey == LogicalKeyboardKey.keyC || e.logicalKey == LogicalKeyboardKey.keyX) {
       // 等远程应用完成复制后再读取
-      Timer(const Duration(milliseconds: 600), () => unawaited(pullRemote(reason: '远程 ⌘${e.character ?? 'C'}')));
+      Timer(const Duration(milliseconds: 600), () => unawaited(pullRemote()));
     }
     return false;
   }
@@ -198,8 +192,6 @@ class VncClipboardBridge {
   /// 粘贴本地文件到远程
   Future<void> _pasteFiles(List<String> files) async {
     _pasting = true;
-    final sw = Stopwatch()..start();
-    AppLog.i('clipboard', '⌘V 粘贴 ${files.length} 个本地文件');
     try {
       final conn = await _ssh();
       final tm = transfers();
@@ -213,7 +205,6 @@ class VncClipboardBridge {
       } else {
         await _pasteToApp(conn, tm, files, front);
       }
-      AppLog.i('clipboard', '粘贴流程结束，耗时 ${sw.elapsedMilliseconds}ms');
     } catch (e, st) {
       AppLog.e('clipboard', '粘贴文件失败', e, st);
       onNotice?.call('clip.failed', {'detail': '$e'}, error: true);
@@ -241,10 +232,8 @@ class VncClipboardBridge {
       existing.add(name);
       tasks.add(tm.upload(f, dir, asName: name == p.basename(f) ? null : name));
     }
-    AppLog.i('clipboard', '粘贴到 Finder 插入位置 $dir（插入位置${layout.insertion == null ? '未知，取最前窗口' : '已知'}）');
     onNotice?.call('clip.pasting', {'count': files.length, 'dir': dir});
-    final ok = await TransferManager.waitAll(tasks);
-    AppLog.i('clipboard', '粘贴到 Finder ${ok ? '完成' : '有失败任务'}');
+    await TransferManager.waitAll(tasks);
   }
 
   /// 远程最前面是其他应用：上传到远程缓存目录、写入远程剪贴板，再补发 ⌘V 交给该应用
@@ -253,7 +242,6 @@ class VncClipboardBridge {
     final root = ShellUtils.joinRemote(await sftp.home(), 'Library/Caches/Remlark/clipboard');
     final dir = ShellUtils.joinRemote(root, '${DateTime.now().millisecondsSinceEpoch}');
     await sftp.ensureRemoteDir(dir);
-    AppLog.i('clipboard', '最前面的应用为 $app，先上传到远程缓存 $dir 再粘贴');
     onNotice?.call('clip.pasting', {'count': files.length, 'dir': app});
     final tasks = [for (final f in files) tm.upload(f, dir)];
     if (!await TransferManager.waitAll(tasks)) {
@@ -275,7 +263,6 @@ class VncClipboardBridge {
   /// 补发 ⌘V：用户已松开 ⌘ 时临时按下
   void _sendPasteKeys() {
     final held = isKeyDown(_superL) || isKeyDown(_superR);
-    AppLog.i('clipboard', '补发 ⌘V（⌘ ${held ? '仍按住' : '已松开，临时按下'}）');
     if (!held) sendKey(_superL, true);
     sendKey(_keyV, true);
     sendKey(_keyV, false);
@@ -297,7 +284,7 @@ class VncClipboardBridge {
   // ---------- 远程 → 本地 ----------
 
   /// 读取远程剪贴板，有新内容时写入本地：文件下载到本地缓存后写入文件剪贴板，文本直接写入
-  Future<void> pullRemote({required String reason}) async {
+  Future<void> pullRemote() async {
     if (!enabled || _pullBusy) return;
     _pullBusy = true;
     try {
@@ -305,17 +292,13 @@ class VncClipboardBridge {
       if (conn == null) return;
       final pb = await SshClipboard.read(conn.client);
       if (pb == null) return;
-      if (pb.changeCount == _lastRemoteChange) {
-        AppLog.d('clipboard', '拉取远程剪贴板（$reason）：无新内容');
-        return;
-      }
+      if (pb.changeCount == _lastRemoteChange) return;
       _lastRemoteChange = pb.changeCount;
       if (pb.files.isNotEmpty) {
-        await _pullFiles(conn, pb.files, reason);
+        await _pullFiles(conn, pb.files);
       } else if (pb.text != null && pb.text != _lastText) {
         _lastText = pb.text;
         await Clipboard.setData(ClipboardData(text: pb.text!));
-        AppLog.i('clipboard', '远程文本 ${pb.text!.length} 字符已写入本地剪贴板（$reason）');
       }
     } catch (e, st) {
       AppLog.e('clipboard', '拉取远程剪贴板失败', e, st);
@@ -326,7 +309,7 @@ class VncClipboardBridge {
 
   /// 远程复制了文件：支持延迟提供的平台（macOS）只放入占位项，本地粘贴时才下载；
   /// 其他平台立即下载到本地缓存并写入文件剪贴板
-  Future<void> _pullFiles(SshConnection conn, List<String> remote, String reason) async {
+  Future<void> _pullFiles(SshConnection conn, List<String> remote) async {
     final lazy = LazyFileClipboard.instance;
     if (lazy.supported) {
       final batch = await _newLocalBatch();
@@ -334,14 +317,12 @@ class VncClipboardBridge {
       lazy.onProvide = (id) => _provideFile(id, batch);
       final ok = await lazy.offer(remote);
       _localFiles = const [];
-      AppLog.i('clipboard', '远程复制了 ${remote.length} 个文件（$reason），本地粘贴时再传输：${remote.take(5).toList()}');
       onNotice?.call(ok ? 'clip.copied' : 'clip.failed', {'count': remote.length, 'detail': 'pasteboard'}, error: !ok);
       return;
     }
     final tm = transfers();
     if (tm == null) return;
     final dir = await _newLocalBatch();
-    AppLog.i('clipboard', '远程复制了 ${remote.length} 个文件（$reason），下载到 ${dir.path}：${remote.take(5).toList()}');
     onNotice?.call('clip.pulling', {'count': remote.length});
     final sftp = SftpService(conn.client);
     final tasks = <TransferTask>[];
@@ -356,19 +337,14 @@ class VncClipboardBridge {
     final ok = await Pasteboard.writeFiles(local);
     // 本地剪贴板现在是这些文件，记录下来，避免被当作新的本地复制
     _localFiles = local;
-    AppLog.i('clipboard', '本地文件剪贴板写入${ok ? '成功' : '失败'}：${local.length} 个文件');
     onNotice?.call(ok ? 'clip.pulled' : 'clip.failed', {'count': local.length, 'detail': 'pasteboard'}, error: !ok);
   }
 
   /// 本地粘贴请求某个远程文件时下载（传输进度此时才显示），返回本地路径
   Future<String?> _provideFile(String remotePath, Directory batch) async {
-    final sw = Stopwatch()..start();
     final local = p.join(batch.path, ShellUtils.basenameRemote(remotePath));
     // 同一次复制可能被多次粘贴：已下载则直接复用
-    if (FileSystemEntity.typeSync(local) != FileSystemEntityType.notFound) {
-      AppLog.i('clipboard', '粘贴复用已下载的文件 $local');
-      return local;
-    }
+    if (FileSystemEntity.typeSync(local) != FileSystemEntityType.notFound) return local;
     final conn = await _ssh();
     final tm = transfers();
     if (conn == null || tm == null) {
@@ -380,7 +356,6 @@ class VncClipboardBridge {
       onNotice?.call('clip.pulling', {'count': 1});
       final task = tm.download(await SftpService(conn.client).statEntry(remotePath), batch.path);
       final ok = await TransferManager.waitAll([task]);
-      AppLog.i('clipboard', '粘贴下载 $remotePath ${ok ? '完成' : '失败：${task.error}'}，耗时 ${sw.elapsedMilliseconds}ms');
       if (!ok) {
         onNotice?.call('clip.failed', {'detail': task.error ?? 'download failed'}, error: true);
         return null;
@@ -416,13 +391,9 @@ class VncClipboardBridge {
 
   /// 远程收到的 RFB 剪贴板文本（非 macOS 服务端）
   void onRemoteText(String text) {
-    if (!enabled) {
-      AppLog.i('clipboard', '收到远程 RFB 剪贴板 ${text.length} 字符，同步已关闭，忽略');
-      return;
-    }
+    if (!enabled) return;
     _lastText = text;
     Clipboard.setData(ClipboardData(text: text));
-    AppLog.i('clipboard', '远程 RFB 剪贴板 ${text.length} 字符已写入本地');
   }
 
   static bool _sameList(List<String> a, List<String> b) {

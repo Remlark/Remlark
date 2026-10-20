@@ -63,34 +63,6 @@ class RfbClient {
   final List<(int, int, int, int)> _dirty = [];
   bool _fullDirty = true;
 
-  /// 统计（定期写入日志后由调用方 [resetStats] 清零）：
-  /// 更新次数、矩形数、数据字节数、各编码矩形数、
-  /// 等待耗时（发出请求到收到更新头）、接收耗时（更新头到最后一个矩形处理完）、发送的鼠标 / 键盘事件数
-  int statUpdates = 0;
-  int statRects = 0;
-  int statBytes = 0;
-  final Map<int, int> statEncodings = {};
-  int statWaitMs = 0, statWaitMax = 0;
-  int statRecvMs = 0, statRecvMax = 0;
-  int statPointers = 0, statKeys = 0, statRequests = 0;
-
-  /// 输入→画面延迟：发出点击 / 按键 / 滚轮后到收到下一次更新头的时间（服务器响应速度，直接对应体感延迟）
-  int statInputSamples = 0, statInputMs = 0, statInputMax = 0;
-  int? _inputAt;
-
-  /// 清零统计
-  void resetStats() {
-    statUpdates = statRects = statBytes = 0;
-    statWaitMs = statWaitMax = statRecvMs = statRecvMax = 0;
-    statPointers = statKeys = statRequests = statPresents = 0;
-    statInputSamples = statInputMs = statInputMax = 0;
-    statVerify = statVerifyDiff = statRefresh = 0;
-    statEncodings.clear();
-  }
-
-  /// 呈现统计：通知界面的帧数、被合并进同一帧的更新数
-  int statPresents = 0;
-
   /// 更新呈现（参考 noVNC：每次更新完整处理完即呈现，渲染按帧自然合并）：
   /// 一次更新处理完时，若网络缓冲中已有后续数据则先继续处理（不额外等待），缓冲读空后立即呈现；
   /// 连续积压超过 [_maxCoalesceMs] 也强制呈现，保证持续变化时画面不停顿
@@ -107,15 +79,12 @@ class RfbClient {
   void _present() {
     _pendingSince = null;
     if (_closed) return;
-    statPresents++;
     onFrame?.call();
   }
 
-  /// 整屏校验：空闲时请求一次整屏（非增量），收到覆盖整屏的更新时与当前帧缓冲逐像素比对，
-  /// 有差异说明此前的增量更新漏掉了变化（服务器未发送或解码错误），并记录差异范围；整屏同时修复画面
+  /// 整屏校验：空闲时请求一次整屏（非增量），用于修复此前增量更新漏掉的变化（服务器未发送或解码错误）
   bool _verifyPending = false;
   int _verifyWait = 0;
-  int statVerify = 0, statVerifyDiff = 0;
 
   /// 空闲：不在接收更新、没有待呈现的更新、没有未取走的变化区域（此时帧缓冲已全部交给界面）
   bool get idle => !_updating && _pendingSince == null && _dirty.isEmpty && !_fullDirty && !_verifyPending;
@@ -128,31 +97,7 @@ class RfbClient {
     requestUpdate(incremental: false);
   }
 
-  /// 比对整屏更新前后的帧缓冲，返回差异像素数与范围
-  (int, (int, int, int, int)?) _diffFrame(Uint8List before) {
-    final fb = framebuffer;
-    if (before.length != fb.length) return (-1, null);
-    final a = before.buffer.asUint32List(before.offsetInBytes, before.length ~/ 4);
-    final b = fb.buffer.asUint32List(fb.offsetInBytes, fb.length ~/ 4);
-    var n = 0;
-    var l = width, t = height, r = 0, btm = 0;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] == b[i]) continue;
-      n++;
-      final x = i % width, y = i ~/ width;
-      if (x < l) l = x;
-      if (y < t) t = y;
-      if (x >= r) r = x + 1;
-      if (y >= btm) btm = y + 1;
-    }
-    return (n, n == 0 ? null : (l, t, r, btm));
-  }
-
-  /// 单次更新接收超过该时长写警告日志
-  static const _slowRecvMs = 300;
-
   final _clock = Stopwatch()..start();
-  int _lastRequestAt = 0;
 
   /// 远程尺寸变化回调
   void Function(int w, int h)? onResize;
@@ -187,7 +132,6 @@ class RfbClient {
     AppLog.i('vnc', '连接 $host:$port');
     final socket = await Socket.connect(host, port, timeout: const Duration(seconds: 15));
     socket.setOption(SocketOption.tcpNoDelay, true);
-    AppLog.i('vnc', 'TCP 已连接 ${socket.remoteAddress.address}:${socket.remotePort}');
     _socket = socket;
     final r = AsyncByteReader(socket);
     _reader = r;
@@ -200,7 +144,6 @@ class RfbClient {
     final minor = int.parse(m.group(2)!);
     final useMinor = minor >= 8 ? 8 : (minor >= 7 ? 7 : 3);
     socket.add(ascii.encode('RFB 003.00$useMinor\n'));
-    AppLog.i('vnc', '服务器协议 ${ver.trim()}，使用 3.$useMinor');
 
     // 2. 安全类型协商
     int secType;
@@ -211,7 +154,6 @@ class RfbClient {
       final n = await r.u8();
       if (n == 0) throw RfbAuthException(await _readReason());
       final types = await r.read(n, timeout: t);
-      AppLog.i('vnc', '服务器安全类型 $types');
       final hasUser = username?.isNotEmpty ?? false;
       final hasPass = password?.isNotEmpty ?? false;
       if (types.contains(ArdAuth.securityType) && hasUser) {
@@ -229,7 +171,6 @@ class RfbClient {
         throw RfbAuthException('unsupported security types: $types');
       }
       securityType = secType;
-      AppLog.i('vnc', '选择安全类型 $secType（用户名${hasUser ? '已填' : '未填'}，密码${hasPass ? '已填' : '未填'}）');
       if (secType == ArdAuth.securityType && (!hasUser || !hasPass)) {
         throw RfbPasswordRequired(needUsername: true);
       }
@@ -247,7 +188,6 @@ class RfbClient {
       // DH 参数：生成元(2) + 密钥长度(2) + 素数(keyLen) + 服务器公钥(keyLen)
       final generator = await r.u16();
       final keyLen = await r.u16();
-      AppLog.i('vnc', 'ARD 认证：DH 生成元 $generator，密钥长度 $keyLen 字节');
       final prime = await r.read(keyLen, timeout: t);
       final serverPub = await r.read(keyLen, timeout: t);
       socket.add(
@@ -267,22 +207,16 @@ class RfbClient {
         AppLog.w('vnc', '认证失败：$reason');
         throw RfbAuthException(reason);
       }
-      AppLog.i('vnc', '认证成功');
     }
 
     // 4. ClientInit（共享桌面）/ ServerInit
     socket.add([1]);
     width = await r.u16();
     height = await r.u16();
-    final pf = await r.read(16); // 服务器像素格式，下面会强制设置为我们需要的格式
+    await r.read(16); // 服务器像素格式，下面会强制设置为我们需要的格式
     final nameLen = await r.u32();
     desktopName = utf8.decode(await r.read(nameLen), allowMalformed: true);
     framebuffer = Uint8List(width * height * 4);
-    AppLog.i(
-      'vnc',
-      'ServerInit：$width×$height「$desktopName」，服务器像素格式 bpp=${pf[0]} depth=${pf[1]} '
-          'bigEndian=${pf[2]} trueColor=${pf[3]} shift=${pf[10]}/${pf[11]}/${pf[12]}',
-    );
 
     _setPixelFormat();
     _setEncodings();
@@ -323,7 +257,6 @@ class RfbClient {
       b.setInt32(4 + i * 4, encs[i]);
     }
     _socket!.add(b.buffer.asUint8List());
-    AppLog.i('vnc', '声明编码 $encs，像素格式 32bpp BGRX');
   }
 
   /// 请求帧缓冲更新
@@ -335,9 +268,6 @@ class RfbClient {
     b.setUint16(6, width);
     b.setUint16(8, height);
     _socket!.add(b.buffer.asUint8List());
-    _lastRequestAt = _clock.elapsedMilliseconds;
-    statRequests++;
-    if (!incremental) AppLog.i('vnc', '请求整屏更新 $width×$height');
   }
 
   /// 请求某个区域的完整画面（非增量）：服务器偶尔漏报变化（如菜单淡入），点击后对指针附近补一次
@@ -353,11 +283,7 @@ class RfbClient {
     b.setUint16(6, x1 - x0);
     b.setUint16(8, y1 - y0);
     _socket!.add(b.buffer.asUint8List());
-    statRefresh++;
   }
-
-  /// 统计：点击后区域补刷新次数
-  int statRefresh = 0;
 
   /// 启用 ContinuousUpdates（整屏区域）
   void _enableContinuous() {
@@ -385,19 +311,15 @@ class RfbClient {
   /// 发送键盘事件（X11 keysym）
   void sendKey(int keysym, bool down) {
     if (_closed) return;
-    if (down) _inputAt ??= _clock.elapsedMilliseconds;
     final b = ByteData(8);
     b.setUint8(0, 4);
     b.setUint8(1, down ? 1 : 0);
     b.setUint32(4, keysym);
     _socket?.add(b.buffer.asUint8List());
-    statKeys++;
   }
 
-  /// 发送鼠标事件；[buttons] 位掩码：1 左键、2 中键、4 右键、8 滚轮上、16 滚轮下。
-  /// [input] 为 true 表示用户操作（点击 / 滚轮），用于统计输入→画面延迟
-  void sendPointer(int x, int y, int buttons, {bool input = false}) {
-    if (input) _inputAt ??= _clock.elapsedMilliseconds;
+  /// 发送鼠标事件；[buttons] 位掩码：1 左键、2 中键、4 右键、8 滚轮上、16 滚轮下
+  void sendPointer(int x, int y, int buttons) {
     if (_closed) return;
     final b = ByteData(6);
     b.setUint8(0, 5);
@@ -405,7 +327,6 @@ class RfbClient {
     b.setUint16(2, x.clamp(0, width > 0 ? width - 1 : 0));
     b.setUint16(4, y.clamp(0, height > 0 ? height - 1 : 0));
     _socket?.add(b.buffer.asUint8List());
-    statPointers++;
   }
 
   /// 发送剪贴板文本到远程（RFB 规定为 Latin-1，无法表示的字符替换为 ?）
@@ -460,16 +381,13 @@ class RfbClient {
               await r.read(-len);
             } else {
               final data = await r.read(len);
-              AppLog.d('vnc', '收到远程剪贴板 $len 字节');
               onClipboard?.call(_decodeClipboard(data));
             }
           case 150:
             // EndOfContinuousUpdates：服务器支持 ContinuousUpdates（首次收到即启用）
             if (!_continuous) {
-              AppLog.i('vnc', '服务器支持 ContinuousUpdates，启用推送模式');
               _enableContinuous();
             } else {
-              AppLog.i('vnc', '服务器结束 ContinuousUpdates，恢复请求模式');
               _continuous = false;
               requestUpdate();
             }
@@ -479,7 +397,6 @@ class RfbClient {
             final flags = await r.u32();
             final len = await r.u8();
             final payload = await r.read(len);
-            AppLog.d('vnc', '收到服务器 Fence flags=0x${flags.toRadixString(16)} 负载 $len 字节');
             if (flags & 0x80000000 != 0) _sendFence(flags & 0x3, payload);
           default:
             AppLog.e('vnc', '未知的服务器消息类型 $type');
@@ -512,25 +429,8 @@ class RfbClient {
     final r = _reader!;
     await r.read(1);
     final n = await r.u16();
-    final headerAt = _clock.elapsedMilliseconds;
-    final wait = headerAt - _lastRequestAt;
-    final inputAt = _inputAt;
-    if (inputAt != null) {
-      final lat = headerAt - inputAt;
-      _inputAt = null;
-      statInputSamples++;
-      statInputMs += lat;
-      if (lat > statInputMax) statInputMax = lat;
-      if (lat > 500) AppLog.w('vnc', '输入后 ${lat}ms 才收到画面更新');
-    }
-    statUpdates++;
-    statRects += n;
-    statWaitMs += wait;
-    if (wait > statWaitMax) statWaitMax = wait;
-    final bytesBefore = statBytes;
-    final encs = <int>[];
-    // 整屏校验：先保存更新前的帧缓冲，若本次更新覆盖整屏则比对
-    final before = _verifyPending ? Uint8List.fromList(framebuffer) : null;
+    // 整屏校验：记录本次更新是否覆盖整屏
+    final verifying = _verifyPending;
     var coversFull = false;
     var resized = false;
     for (var i = 0; i < n; i++) {
@@ -542,8 +442,6 @@ class RfbClient {
       if (x == 0 && y == 0 && w == width && h == height && enc != _encCursor && enc != _encDesktopSize) {
         coversFull = true;
       }
-      statEncodings[enc] = (statEncodings[enc] ?? 0) + 1;
-      if (encs.length < 8) encs.add(enc);
       switch (enc) {
         case _encRaw:
           await _readRaw(x, y, w, h);
@@ -560,7 +458,6 @@ class RfbClient {
           // x, y 为热点；像素数据后跟位掩码
           final pixels = await r.read(w * h * 4);
           final mask = await r.read(((w + 7) ~/ 8) * h);
-          AppLog.d('vnc', '指针形状 $w×$h 热点 ($x,$y)');
           onCursor?.call(RfbCursor.decode(w, h, x, y, pixels, mask));
         case _encDesktopSize:
           AppLog.i('vnc', '远程尺寸变化 $width×$height → $w×$h');
@@ -571,28 +468,11 @@ class RfbClient {
           throw FormatException('unsupported encoding $enc');
       }
     }
-    if (before != null && !coversFull && ++_verifyWait >= 5) {
-      // 服务器把整屏拆成多个矩形发送等情况：放弃本次校验，避免每次更新都复制帧缓冲
+    if (verifying && !coversFull && ++_verifyWait >= 5) {
+      // 服务器把整屏拆成多个矩形发送等情况：放弃本次校验
       _verifyPending = false;
-      AppLog.d('vnc.verify', '整屏校验：5 次更新内未收到单个整屏矩形，放弃本次校验');
     }
-    if (before != null && coversFull && !resized) {
-      _verifyPending = false;
-      statVerify++;
-      final (n, box) = _diffFrame(before);
-      if (n > 0) {
-        statVerifyDiff++;
-        AppLog.w('vnc.verify', '整屏校验：增量更新遗漏了 $n 个像素，范围 $box（服务器未发送该变化或解码错误），已用整屏修复');
-      } else {
-        AppLog.d('vnc.verify', '整屏校验：帧缓冲与服务器一致');
-      }
-    }
-    final recv = _clock.elapsedMilliseconds - headerAt;
-    statRecvMs += recv;
-    if (recv > statRecvMax) statRecvMax = recv;
-    if (recv > _slowRecvMs) {
-      AppLog.w('vnc', '慢更新：接收 ${recv}ms，等待 ${wait}ms，$n 个矩形，${(statBytes - bytesBefore) ~/ 1024}KB，编码 $encs');
-    }
+    if (verifying && coversFull && !resized) _verifyPending = false;
     return resized;
   }
 
@@ -623,7 +503,6 @@ class RfbClient {
   }
 
   Future<void> _readRaw(int x, int y, int w, int h) async {
-    statBytes += w * h * 4;
     final data = await _reader!.read(w * h * 4);
     for (var row = 0; row < h; row++) {
       final dst = ((y + row) * width + x) * 4;
@@ -650,7 +529,6 @@ class RfbClient {
   /// ZRLE：zlib 流在整个连接中连续，按 64x64 瓦片解析
   Future<void> _readZrle(int x, int y, int w, int h) async {
     final len = await _reader!.u32();
-    statBytes += len;
     final compressed = await _reader!.read(len);
     final z = _zlib ??= RawZLibFilter.inflateFilter();
     z.process(compressed, 0, compressed.length);

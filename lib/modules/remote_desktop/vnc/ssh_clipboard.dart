@@ -34,7 +34,6 @@ class SshClipboard {
 
   /// 写入剪贴板并用 pbpaste 回读核对；远程没有 pbcopy（非 macOS）返回 false
   static Future<bool> write(SSHClient client, String text) async {
-    final sw = Stopwatch()..start();
     try {
       final r = await SshExec.run(client, '$_utf8 pbcopy', stdin: text, timeout: _timeout);
       if (!r.ok) {
@@ -43,12 +42,7 @@ class SshClipboard {
       }
       // 回读核对，确认写入的是图形会话的剪贴板
       final back = (await SshExec.run(client, '$_utf8 pbpaste', timeout: _timeout)).stdout;
-      final ok = back == text;
-      AppLog.i(
-        'clipboard',
-        'SSH pbcopy 完成 ${sw.elapsedMilliseconds}ms，${text.length} 字符，回读${ok ? '一致' : '不一致（回读 ${back.length} 字符）'}',
-      );
-      return ok;
+      return back == text;
     } catch (e, st) {
       AppLog.e('clipboard', 'SSH 写入远程剪贴板异常', e, st);
       return false;
@@ -82,7 +76,6 @@ function run(argv) {
 
   /// 读取远程剪贴板；失败返回 null
   static Future<RemotePasteboard?> read(SSHClient client) async {
-    final sw = Stopwatch()..start();
     try {
       final r = await SshExec.run(client, 'osascript -l JavaScript -', stdin: _readJs, timeout: _timeout);
       if (!r.ok) {
@@ -90,17 +83,11 @@ function run(argv) {
         return null;
       }
       final m = jsonDecode(r.stdout.trim()) as Map<String, dynamic>;
-      final pb = RemotePasteboard(
+      return RemotePasteboard(
         changeCount: _int(m['changeCount']),
         files: [for (final f in m['files'] as List) f as String],
         text: m['text'] as String?,
       );
-      AppLog.d(
-        'clipboard',
-        '读取远程剪贴板 ${sw.elapsedMilliseconds}ms：changeCount=${pb.changeCount} 文件 ${pb.files.length} 个，'
-            '文本 ${pb.text?.length ?? 0} 字符',
-      );
-      return pb;
     } catch (e, st) {
       AppLog.e('clipboard', '读取远程剪贴板异常', e, st);
       return null;
@@ -117,7 +104,6 @@ function run(argv) {
         return null;
       }
       final m = jsonDecode(r.stdout.trim()) as Map<String, dynamic>;
-      AppLog.i('clipboard', '远程剪贴板写入 ${remotePaths.length} 个文件：$m');
       return (m['ok'] == true || m['ok'] == 'true') ? _int(m['changeCount']) : null;
     } catch (e, st) {
       AppLog.e('clipboard', '写入远程文件剪贴板异常', e, st);
@@ -130,9 +116,7 @@ function run(argv) {
     try {
       final r = await SshExec.run(client, r'lsappinfo info -only bundleid "$(lsappinfo front)"', timeout: _timeout);
       final m = RegExp(r'"CFBundleIdentifier"="([^"]*)"').firstMatch(r.stdout);
-      final id = m?.group(1);
-      AppLog.i('clipboard', '远程最前面的应用：${id ?? '未知（${r.stdout.trim()} ${r.stderr.trim()}）'}');
-      return id;
+      return m?.group(1);
     } catch (e, st) {
       AppLog.e('clipboard', '查询远程最前面的应用异常', e, st);
       return null;

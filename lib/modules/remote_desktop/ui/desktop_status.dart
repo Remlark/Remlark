@@ -11,14 +11,13 @@ class DesktopStatus extends StatelessWidget {
   final WorkspaceTab tab;
 
   /// 把错误码转换为可读文本
-  static String errorText(BuildContext context, String? error) =>
-      switch (error) {
-        'cancelled' => context.tr('terminal.cancelled'),
-        'wrong_password' => context.tr('ssh.error.wrong_password'),
-        'rdp.lib_missing' => context.tr('rdp.lib_missing'),
-        null => context.tr('terminal.disconnected'),
-        _ => error,
-      };
+  static String errorText(BuildContext context, String? error) => switch (error) {
+    'cancelled' => context.tr('terminal.cancelled'),
+    'wrong_password' => context.tr('ssh.error.wrong_password'),
+    'rdp.lib_missing' => context.tr('rdp.lib_missing'),
+    null => context.tr('terminal.disconnected'),
+    _ => error,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -44,21 +43,14 @@ class DesktopStatus extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                tab.state == SessionState.failed
-                    ? Icons.error_outline
-                    : Icons.link_off,
+                tab.state == SessionState.failed ? Icons.error_outline : Icons.link_off,
                 size: 40,
-                color: tab.state == SessionState.failed
-                    ? context.palette.danger
-                    : context.palette.warning,
+                color: tab.state == SessionState.failed ? context.palette.danger : context.palette.warning,
               ),
               const SizedBox(height: 10),
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 520),
-                child: Text(
-                  errorText(context, tab.error),
-                  textAlign: TextAlign.center,
-                ),
+                child: Text(errorText(context, tab.error), textAlign: TextAlign.center),
               ),
               const SizedBox(height: 12),
               FilledButton.icon(
@@ -94,11 +86,7 @@ class DropHint extends StatelessWidget {
           alignment: Alignment.center,
           child: Text(
             text,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
           ),
         ),
       ),

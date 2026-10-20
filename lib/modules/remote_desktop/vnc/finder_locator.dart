@@ -57,22 +57,13 @@ class FinderLayout {
   /// 落在某个 Finder 窗口内取最前面的那个窗口，否则为桌面；
   /// [point] 为空（如通过按钮选择文件）时取最前面的 Finder 窗口，没有窗口则为桌面
   String folderAt(Offset? point, int framebufferWidth) {
-    if (point == null) {
-      final r = windows.isNotEmpty ? windows.first.path : desktop;
-      AppLog.i('finder', '无拖放点，取最前窗口：$r');
-      return r;
-    }
+    if (point == null) return windows.isNotEmpty ? windows.first.path : desktop;
     // 帧缓冲为像素，Finder 坐标为点，Retina 屏需要换算
     final scale = framebufferWidth > 0 ? framebufferWidth / screenWidth : 1.0;
     final p = point / scale;
-    for (var i = 0; i < windows.length; i++) {
-      final w = windows[i];
-      if (w.bounds.contains(p)) {
-        AppLog.i('finder', '拖放点 $point → 屏幕点 $p（缩放 $scale）命中第 ${i + 1} 个窗口 ${w.bounds}：${w.path}');
-        return w.path;
-      }
+    for (final w in windows) {
+      if (w.bounds.contains(p)) return w.path;
     }
-    AppLog.i('finder', '拖放点 $point → 屏幕点 $p（缩放 $scale）未命中 ${windows.length} 个窗口，使用桌面 $desktop');
     return desktop;
   }
 }
@@ -186,20 +177,17 @@ cat "\$OUT" 2>/dev/null
     String appletName = appName,
     String applet = _applet,
   }) async {
-    final sw = Stopwatch()..start();
-    AppLog.i('finder', '查询 Finder 布局（小程序 $appletName）');
     final String out;
     try {
       out = (await SshExec.run(client, '/bin/sh -s', stdin: _shell(appletName, applet), timeout: timeout)).stdout;
     } on TimeoutException {
-      AppLog.w('finder', '查询超时（${sw.elapsedMilliseconds}ms），可能在等待远程用户授权');
+      AppLog.w('finder', '查询超时，可能在等待远程用户授权');
       return const FinderQueryResult.fail('finder.timeout');
     } catch (e, st) {
       AppLog.e('finder', '执行失败', e, st);
       return FinderQueryResult.fail('finder.failed', '$e');
     }
     final text = out.trim();
-    AppLog.i('finder', '查询完成 ${sw.elapsedMilliseconds}ms，输出：\n$text');
     if (text.contains('__NOT_MAC__')) return const FinderQueryResult.fail('finder.not_mac');
     if (text.contains('__TIMEOUT__')) {
       AppLog.w('finder', '辅助小程序 10 秒内未返回结果（等待授权或 Finder 无响应），已强制结束');

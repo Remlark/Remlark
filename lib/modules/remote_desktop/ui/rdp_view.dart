@@ -86,8 +86,7 @@ class _RdpViewState extends State<RdpView> {
                     child: Stack(
                       children: [
                         Positioned.fill(child: RemoteScreen(display: s)),
-                        if (_dragging)
-                          DropHint(text: context.tr('rdp.drop_hint')),
+                        if (_dragging) DropHint(text: context.tr('rdp.drop_hint')),
                       ],
                     ),
                   ),
@@ -95,26 +94,18 @@ class _RdpViewState extends State<RdpView> {
           if (!widget.compact)
             SessionStatusBar(
               tab: s,
-              detail: s.state == SessionState.connected
-                  ? '${s.frameWidth} × ${s.frameHeight}'
-                  : null,
+              detail: s.state == SessionState.connected ? '${s.frameWidth} × ${s.frameHeight}' : null,
               trailing: [
                 // 远程复制的文件正在下载到本地
                 if (s.filesTotalKb > 0) ...[
                   Text(
                     context.tr('rdp.files_downloading'),
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: context.palette.textMuted,
-                    ),
+                    style: TextStyle(fontSize: 12.5, color: context.palette.textMuted),
                   ),
                   const SizedBox(width: 8),
                   SizedBox(
                     width: 120,
-                    child: LinearProgressIndicator(
-                      value: s.filesDoneKb / s.filesTotalKb,
-                      minHeight: 4,
-                    ),
+                    child: LinearProgressIndicator(value: s.filesDoneKb / s.filesTotalKb, minHeight: 4),
                   ),
                 ],
               ],

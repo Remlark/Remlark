@@ -4,7 +4,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
-import '../../../utils/app_log.dart';
 import '../remote_display.dart';
 import 'frame_compositor.dart';
 import 'scroll_accumulator.dart';
@@ -39,17 +38,6 @@ class RemoteScreenState extends State<RemoteScreen> {
 
   /// 本应用失去激活时释放远程按键（焦点仍在本组件时 onFocusChange 不会触发）
   AppLifecycleListener? _lifecycle;
-  Timer? _statTimer;
-
-  /// 合成期间到来、被合并的更新次数（统计用）
-  int _coalesced = 0;
-
-  /// UI 线程卡顿监测：每 [_lagProbe] 触发一次，实际间隔超出部分即 UI 线程被占用的时长
-  static const _lagProbe = Duration(milliseconds: 50);
-  Timer? _lagTimer;
-  final _lagClock = Stopwatch();
-  int _lagMax = 0;
-  int _lagOver100 = 0;
 
   /// 本地鼠标位置（输入区域坐标），用于绘制远程指针；离开画面时为 null
   final _mouse = ValueNotifier<Offset?>(null);
@@ -66,28 +54,6 @@ class RemoteScreenState extends State<RemoteScreen> {
     d.addListener(_onDisplay);
     _onDisplay();
     _lifecycle = AppLifecycleListener(onInactive: () => widget.display.displayBlurred());
-    _lagClock.start();
-    _lagTimer = Timer.periodic(_lagProbe, (_) {
-      final lag = _lagClock.elapsedMilliseconds - _lagProbe.inMilliseconds;
-      _lagClock.reset();
-      if (lag > _lagMax) _lagMax = lag;
-      if (lag > 100) _lagOver100++;
-    });
-    // 定期把渲染统计写入日志，便于定位卡顿（与 vnc.stat 同周期，可对照）
-    _statTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      final c = _compositor;
-      if (c.statFrames == 0) return;
-      final f = c.statFrames == 0 ? 1 : c.statFrames;
-      AppLog.i(
-        'remote.stat',
-        '5s：合成 ${c.statFrames} 次（整屏 ${c.statFull}），耗时 平均${c.statMs ~/ f}ms/最大${c.statMaxMs}ms，'
-            '增量区域 ${c.statRects} 个共 ${c.statArea ~/ 1000}K 像素，合并更新 $_coalesced 次，'
-            'UI 线程最长卡顿 ${_lagMax}ms（超过 100ms $_lagOver100 次）',
-      );
-      c.resetStats();
-      _coalesced = 0;
-      _lagMax = _lagOver100 = 0;
-    });
   }
 
   @override
@@ -104,8 +70,6 @@ class RemoteScreenState extends State<RemoteScreen> {
     d.removeListener(_onDisplay);
     _lifecycle?.dispose();
     d.displayBlurred();
-    _statTimer?.cancel();
-    _lagTimer?.cancel();
     _image?.dispose();
     _cursorImage?.dispose();
     _mouse.dispose();
@@ -118,7 +82,6 @@ class RemoteScreenState extends State<RemoteScreen> {
     _syncCursor();
     if (!d.displayReady) return;
     if (_decoding) {
-      if (_pending) _coalesced++;
       _pending = true;
       return;
     }
@@ -150,7 +113,6 @@ class RemoteScreenState extends State<RemoteScreen> {
     final src = d.cursor;
     if (identical(src, _cursorSrc)) return;
     _cursorSrc = src;
-    AppLog.d('remote', src == null ? '远程指针：使用系统指针' : '远程指针：${src.width}×${src.height} 本地绘制');
     if (src == null) {
       setState(() {
         _cursorImage?.dispose();

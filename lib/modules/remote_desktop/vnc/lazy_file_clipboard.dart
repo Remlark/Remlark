@@ -33,7 +33,6 @@ class _MacLazyFileClipboard extends LazyFileClipboard {
       if (call.method != 'provide') throw MissingPluginException(call.method);
       final id = call.arguments as String;
       final cb = onProvide;
-      AppLog.i('clipboard', '本地粘贴请求远程文件：$id');
       if (cb == null) return null;
       return cb(id);
     });
@@ -48,7 +47,6 @@ class _MacLazyFileClipboard extends LazyFileClipboard {
   Future<bool> offer(List<String> ids) async {
     try {
       final cc = await _channel.invokeMethod<int>('offer', {'ids': ids});
-      AppLog.i('clipboard', '本地剪贴板放入 ${ids.length} 个延迟文件占位项，changeCount=$cc');
       return cc != null;
     } catch (e) {
       AppLog.w('clipboard', '放入延迟文件占位项失败', e);

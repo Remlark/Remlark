@@ -131,7 +131,7 @@ class RfbIsolateClient {
 
   void sendKey(int keysym, bool down) => _toWorker?.send(['key', keysym, down]);
 
-  /// [input] 为 true 表示用户操作（点击 / 滚轮），用于统计输入→画面延迟
+  /// [input] 为 true 表示用户操作（点击 / 滚轮），用于触发点击后的区域补刷新
   void sendPointer(int x, int y, int buttons, {bool input = false}) =>
       _toWorker?.send(['pointer', x, y, buttons, input]);
 
@@ -173,13 +173,12 @@ Future<void> rfbWorkerMain(SendPort toUi) async {
   fromUi.close();
 }
 
-/// 后台 isolate 中的工作者：持有 RfbClient，负责打包变化区域、背压与统计
+/// 后台 isolate 中的工作者：持有 RfbClient，负责打包变化区域与背压
 class _RfbWorker {
   _RfbWorker(this._toUi);
 
   final SendPort _toUi;
   RfbClient? _c;
-  Timer? _statTimer;
 
   /// 已发送、UI 尚未取走的帧
   bool _inFlight = false;
@@ -197,11 +196,6 @@ class _RfbWorker {
   bool _activitySinceVerify = false;
   Timer? _verifyTimer;
 
-  /// 统计：发送给 UI 的帧数、整屏帧数、像素字节数、等待回执而合并的次数、打包耗时
-  int _sent = 0, _sentFull = 0, _sentBytes = 0, _deferred = 0, _packMs = 0;
-
-  static const _statInterval = Duration(seconds: 5);
-
   Future<void> handle(List<Object?> m) async {
     final c = _c;
     if (m[0] == 'key' || m[0] == 'pointer') _activity();
@@ -211,7 +205,7 @@ class _RfbWorker {
       case 'key':
         c?.sendKey(m[1] as int, m[2] as bool);
       case 'pointer':
-        c?.sendPointer(m[1] as int, m[2] as int, m[3] as int, input: m[4] as bool);
+        c?.sendPointer(m[1] as int, m[2] as int, m[3] as int);
         // 只有鼠标按键的按下 / 抬起触发补刷新；滚轮（第 4、5 键）连续滚动时不触发，避免反复请求大区域
         final buttons = m[3] as int;
         if (m[4] == true && c != null && buttons & 0x18 == 0) {
@@ -231,7 +225,6 @@ class _RfbWorker {
     c.onFrame = () {
       if (_inFlight || c.updating) {
         _waiting = true;
-        _deferred++;
         return;
       }
       _sendFrame();
@@ -248,7 +241,6 @@ class _RfbWorker {
     c.onClipboard = (t) => _toUi.send(['clip', t]);
     c.onBell = () => _toUi.send(const ['bell']);
     c.onClosed = (e) {
-      _statTimer?.cancel();
       _verifyTimer?.cancel();
       _toUi.send(['closed', e?.toString()]);
     };
@@ -268,8 +260,6 @@ class _RfbWorker {
       return;
     }
     _toUi.send(['connected', c.width, c.height, c.desktopName, c.securityType]);
-    AppLog.i('vnc', '协议与解码运行于后台 isolate');
-    _statTimer = Timer.periodic(_statInterval, (_) => _logStats(c));
     _verifyTimer = Timer.periodic(const Duration(milliseconds: 200), (_) => _maybeVerify(c));
   }
 
@@ -294,7 +284,6 @@ class _RfbWorker {
   int _settleCount = 0;
   final List<(int, int, int, int)> _postRects = [];
   Timer? _settleTimer;
-  int _statSettle = 0;
 
   /// 记录输入后到达的变化区域，更新停止后补刷新
   void _notePostInput(RfbClient c, List<(int, int, int, int)> rects) {
@@ -312,7 +301,6 @@ class _RfbWorker {
       }
       // 不清空：之后的补刷新覆盖点击以来所有变化区域的外接矩形（高亮行与菜单可能间隔到达）
       _settleCount++;
-      _statSettle++;
       // 外扩少许，覆盖阴影与边框
       const m = 16;
       c.requestRegionRefresh(l - m, t - m, r - l + 2 * m, b - t + 2 * m);
@@ -364,7 +352,6 @@ class _RfbWorker {
   /// 取出累积的变化区域，提取像素打包发送（一次传输，零拷贝转移给 UI）
   void _sendFrame() {
     final c = _c!;
-    final sw = Stopwatch()..start();
     final w = c.width, h = c.height;
     var rects = c.takeDirty();
     if (rects != null) {
@@ -399,10 +386,6 @@ class _RfbWorker {
     }
     _inFlight = true;
     _waiting = false;
-    _sent++;
-    if (full) _sentFull++;
-    _sentBytes += total;
-    _packMs += sw.elapsedMilliseconds;
     _toUi.send([
       'frame',
       w,
@@ -413,30 +396,11 @@ class _RfbWorker {
     ]);
   }
 
-  void _logStats(RfbClient c) {
-    if (c.statUpdates == 0 && c.statPointers == 0 && c.statKeys == 0) return;
-    final u = c.statUpdates == 0 ? 1 : c.statUpdates;
-    AppLog.i(
-      'vnc.stat',
-      '${_statInterval.inSeconds}s：更新 ${c.statUpdates} 次（请求 ${c.statRequests}，合并后呈现 ${c.statPresents} 帧），'
-          '矩形 ${c.statRects}，数据 ${c.statBytes ~/ 1024}KB，编码 ${c.statEncodings}，'
-          '等待 平均${c.statWaitMs ~/ u}ms/最大${c.statWaitMax}ms，接收 平均${c.statRecvMs ~/ u}ms/最大${c.statRecvMax}ms，'
-          '输入→画面 ${c.statInputSamples} 次 平均${c.statInputSamples == 0 ? 0 : c.statInputMs ~/ c.statInputSamples}ms/'
-          '最大${c.statInputMax}ms，发送 鼠标${c.statPointers} 键盘${c.statKeys}；'
-          '传给界面 $_sent 帧（整屏 $_sentFull）${_sentBytes ~/ 1024}KB，打包 ${_packMs}ms，等待界面而合并 $_deferred 次；'
-          '整屏校验 ${c.statVerify} 次（发现遗漏 ${c.statVerifyDiff} 次），点击后区域补刷新 ${c.statRefresh} 次（其中变化区域补刷新 $_statSettle 次）',
-    );
-    c.resetStats();
-    _statSettle = 0;
-    _sent = _sentFull = _sentBytes = _deferred = _packMs = 0;
-  }
-
   void close() {
     _settleTimer?.cancel();
     for (final t in _refreshTimers) {
       t.cancel();
     }
-    _statTimer?.cancel();
     _verifyTimer?.cancel();
     _c?.close();
   }
