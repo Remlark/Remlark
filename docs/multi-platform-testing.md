@@ -42,7 +42,8 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 剪贴板文件读取、拖放 | `pasteboard`、`desktop_drop`、`file_selector` 插件 | 插件实现 | 插件实现 | 插件实现 | [file_drop_target_test.dart](../test/file_drop_target_test.dart)（只测分发逻辑） | M-03、M-04、M-06 |
 | 窗口默认尺寸 / 最小尺寸 | [window_config.dart](../lib/app/window_config.dart) + 三个平台的 runner | `MainFlutterWindow.swift` | `main.cpp`、`flutter_window.cpp`（按 DPI 换算） | `my_application.cc` | P-06 | M-02 |
 | 原生库（RDP、SSH AES-GCM） | [hook/build.dart](../hook/build.dart)、`native/*/scripts/` | `build.sh`，x86_64 + arm64，系统 zlib | `build.ps1 [-Arch x86_64\|arm64]`，按 VS 目标架构；显式 MSVC、静态 OpenSSL / zlib，关闭自动 ccache | `build.sh`（`aarch64` 命名），系统 zlib | P-06、[native_crypto_test.dart](../test/native_crypto_test.dart) | M-12 |
-| RDP H.264 硬件解码 | [native/rdp/src/hwdec/](../native/rdp/src/hwdec/)、[rmk_h264.c](../native/rdp/src/rmk_h264.c)、`native/rdp/scripts/` 中的 FFmpeg 编译 | VideoToolbox；FFmpeg 由 `build.sh` 编译 | D3D11VA（FreeRDP 默认 DXVA2，改为显式指定）；FFmpeg 用 MSVC 编译，configure 经 MSYS2 bash 运行（`build_ffmpeg_msvc.sh`），ARM64 关闭汇编；需要 VS 英文语言包，脚本预设工具 PATH、保护 CL 编译选项并固定英文输出 | VAAPI，自动选择第一个可读写的 `/dev/dri/renderD*`；运行时依赖 libva2 / libva-drm2 | P-11 | M-17 |
+| RDP H.264 硬件解码 | [native/rdp/src/hwdec/](../native/rdp/src/hwdec/)、[rmk_h264.c](../native/rdp/src/rmk_h264.c)、`native/rdp/scripts/` 中的 FFmpeg 编译 | VideoToolbox；FFmpeg 由 `build.sh` 编译 | D3D11VA（FreeRDP 默认 DXVA2，改为显式指定）；FFmpeg 用 MSVC 编译，configure 经 MSYS2 bash 运行（`build_ffmpeg_msvc.sh`），ARM64 关闭汇编；需要 VS 英文语言包，脚本预设工具 PATH、保护 CL 编译选项并固定英文输出 | VAAPI，自动选择第一个可读写的 `/dev/dri/renderD*`；运行时依赖 libva2 / libva-drm2 | P-11 | M-18 | 编译版本 | 将 VERSION 改为新的测试版本后重新构建：macOS Finder 应用信息显示数字版本和构建号，Windows exe / 安装器属性显示相同四段资源版本，Linux deb 元数据显示正确版本；预发布 deb 低于对应正式版；正式发布标签等于 v + VERSION 的版本号（不含构建号）。开发 run 的系统元数据使用 Flutter 默认值，Dart / AI clientInfo 使用 VERSION；不把开发包用于分发 |
+| M-17 |
 | 打包 | [Makefile](../Makefile)、[Windows 安装器](../windows/packaging/) | `make mac` → zip | `make windows` → Inno Setup 安装 exe + 便携 zip，附带应用本地 VC++ 运行库 | `make linux` → deb + tar.gz，按 x64 / arm64 输出；发布前检查原生库和资源 | P-06、P-08、P-09 | M-12、M-14 |
 | 可选 JNI 依赖 | `linux/CMakeLists.txt`，Flutter 间接依赖 | 无 Linux JNI 插件 | 可选插件，未发现 JDK 时不构建 | 关闭 Android 间接依赖引入的可选 JNI，避免携带构建机 Java 绝对路径 | P-09 | M-12 |
 | 开发启动 | [Makefile](../Makefile)、[Windows 启动脚本](../windows/run.ps1) | `make run` | `windows/run.ps1` 无须 Make，按需构建原生库；也支持 `make run` | `make run` | P-08 | M-15 |
@@ -51,6 +52,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 真实 RDP 配置联调 | [rdp_live_test.dart](../test/platform/rdp_live_test.dart) | 显式传入应用数据目录，使用同一 RdpClient 与原生库；待实机执行 | 同左；Windows x64 已实际连接，数据目录通常为 `%APPDATA%\com.remlark\remlark` | 同 macOS，待实机执行 | P-12（显式启用） | M-05、M-17 |
 | 源码编码与构建失败检查 | `windows/CMakeLists.txt`、`native/*/CMakeLists.txt`、`native/utils/windows_build.ps1` | UTF-8，shell 严格错误检查 | MSVC `/utf-8`；PowerShell 带 UTF-8 BOM，外部命令失败立即停止 | UTF-8，shell 严格错误检查 | P-06 | M-12 |
 | 测试 Dart 子进程与日志关闭 | `test/helpers/platform_tools.dart`、`lib/utils/app_log.dart` | Dart 可执行文件；关闭日志释放句柄 | 定位 SDK 的 `dart.exe`；删除日志目录前关闭句柄 | 同 macOS | P-07 | M-01、M-13 |
+| 编译与发布版本 | `VERSION`、`tools/utils/app_version.py`、`lib/utils/app_version.dart`、各平台打包入口 | Flutter build 数字版本 / 构建号写入 Info.plist；DMG 打包校验系统元数据 | Flutter build 写入 exe 四段资源，安装器校验并复用；独立 run 复用 Python 工具 | deb control 从 VERSION 读取，预发布映射为 ~ | P-13、P-10 | M-18 |
 | Release CI | `.github/workflows/release.yml`、`tools/release/` | Intel / Apple Silicon 通用 zip + DMG，lipo 校验 | x64 / arm64 安装 exe + zip；匹配 CRT 与 Inno 架构 | 原生 x64 / arm64 runner，deb + tar.gz | P-10、P-08、P-09、P-11（原生库编译后重新执行 make test-platform，实际解码）；手工 build_only 验证分支且不发布，构建后 RMK_REQUIRE_RDP_NATIVE=1 禁止跳过解码 | M-16 |
 
 ## 2. 单元测试（test/platform）
@@ -71,6 +73,8 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-10 | [release_workflow_test.dart](../test/platform/release_workflow_test.dart) | 手工默认仅构建、正式标签仍发布，三个平台构建后强制加载原生库并重跑平台测试；配置读取兼容 CRLF / LF；拒绝错误版本标签、缺失附件时阻止发布、完整双架构矩阵生成正确 SHA-256 清单 | 自动发布与仅构建验证 |
 | P-11 | [rdp_h264_test.dart](../test/platform/rdp_h264_test.dart) | 三个平台都有硬件解码实现且设备类型正确，CMake 按平台选择；FFmpeg 只编译 H.264 解码器并按平台开启硬件加速，Windows 用 MSVC /MT 编译；FreeRDP 开启 FFmpeg 硬件解码；连接参数不再强制关闭 H.264，设置中的硬件解码开关传到原生库；原生库内置探测帧与测试资源一致；已编译原生库时：编入解码器、设备类型与当前平台一致，macOS 上 VideoToolbox 必须可用（Windows / Linux 取决于显卡，CI 无显卡时为软件解码），并用与连接相同的 FreeRDP AVC420 流程实际解码 [h264_320x240.h264](../test/platform/fixtures/h264_320x240.h264)：软件解码、硬件解码（不可用时为软件解码）的左右两半颜色都正确；平坦区域逐像素 RGB 差不超过 4，双色交界两侧各 2 像素的色度插值差不超过 64，输出差异列供核对，无效数据返回失败不崩溃 | RDP H.264 硬件解码 |
 | P-12 | [rdp_live_test.dart](../test/platform/rdp_live_test.dart) | 显式指定已授权的已保存 RDP 配置，默认跳过；通过 ORM 索引只读配置；测试硬解开关两种模式的真实认证、首帧、键盘触发更新，保存实际解码 PNG；通过 GDI TRACE 日志另行确认实际编码，不能用连接成功代替 H.264 / GPU 验证 | 真实 RDP、M-05 / M-17 部分验证 |
+
+| P-13 | [app_version_test.dart](../test/platform/app_version_test.dart) | VERSION 是唯一来源，兼容 CRLF / 中文空格路径，拒绝无效 / 缺失 / 越界版本；构建号默认 1；预发布与 Windows 四段资源 / Debian ~ 映射；发布标签去掉构建号；实际子进程验证三平台编译参数与开发 run 参数、退出码；拒绝命令行覆盖和给旧 macOS 应用换名打包 | 编译与发布版本 |
 
 P-11 的测试帧由 libx264 生成（BT.709 全范围，与 FreeRDP 的 YUV 转换一致），同一份字节内置在 [rmk_h264_probe_frame.h](../native/rdp/src/rmk_h264_probe_frame.h) 中，原生库首次连接时用它实际硬件解码一帧，解码成功且颜色正确才启用硬件（虚拟机、驱动异常等能创建设备却无法解码的环境会改用软件解码）。重新生成时两处同步更新：
 

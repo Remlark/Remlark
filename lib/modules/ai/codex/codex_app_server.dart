@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import '../../../l10n/app_localizations.dart';
+import '../../../utils/app_version.dart';
 import '../runtime/json_rpc_connection.dart';
 import 'codex_environment.dart';
 import 'codex_types.dart';
@@ -102,7 +103,7 @@ class CodexAppServer {
     final conn = await _launcher(homeId);
     try {
       await conn.call('initialize', {
-        'clientInfo': {'name': 'remlark', 'title': 'Remlark', 'version': '1.0.0'},
+        'clientInfo': {'name': 'remlark', 'title': 'Remlark', 'version': appVersion},
       }, timeout: initializeTimeout);
       conn.notify('initialized', const {});
     } catch (e) {

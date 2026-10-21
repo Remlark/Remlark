@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import '../utils/version_fixture.dart';
+
 /// 多平台测试 P-10：版本标签、发布附件完整性及失败时阻止发布。
 void main() {
   test('手工构建默认不发布，三个平台编译后都重新执行平台测试', () {
@@ -49,14 +51,9 @@ void main() {
   });
 
   test('附件缺失时拒绝生成发布清单', () async {
-    final root = Directory.systemTemp.createTempSync('remlark release ');
+    final root = createVersionFixture('1.2.3+4\n');
     addTearDown(() => root.deleteSync(recursive: true));
     final script = File('${root.path}/tools/release/prepare.py');
-    script.parent.createSync(recursive: true);
-    script.writeAsStringSync(
-      File('tools/release/prepare.py').readAsStringSync(),
-    );
-    File('${root.path}/pubspec.yaml').writeAsStringSync('version: 1.2.3+4\n');
     Directory('${root.path}/dist').createSync();
     final result = await Process.run(
       'python3',
@@ -69,14 +66,9 @@ void main() {
   });
 
   test('完整矩阵生成可校验的 SHA256SUMS', () async {
-    final root = Directory.systemTemp.createTempSync('remlark complete ');
+    final root = createVersionFixture('1.2.3+4\n');
     addTearDown(() => root.deleteSync(recursive: true));
     final script = File('${root.path}/tools/release/prepare.py');
-    script.parent.createSync(recursive: true);
-    script.writeAsStringSync(
-      File('tools/release/prepare.py').readAsStringSync(),
-    );
-    File('${root.path}/pubspec.yaml').writeAsStringSync('version: 1.2.3+4\n');
     final dist = Directory('${root.path}/dist')..createSync();
     final names = ['remlark-1.2.3-macos-universal.dmg', 'remlark-macos.zip'];
     for (final arch in ['x64', 'arm64']) {

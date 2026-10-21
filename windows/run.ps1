@@ -30,7 +30,7 @@ try {
     Invoke-BuildCommand powershell -NoProfile -ExecutionPolicy Bypass -File "$Root\native\rdp\scripts\build.ps1" -Arch x86_64
     Invoke-BuildCommand powershell -NoProfile -ExecutionPolicy Bypass -File "$Root\native\ssh_crypto\scripts\build.ps1" -Arch x86_64
   }
-  if (-not $PrepareOnly) { Invoke-BuildCommand flutter run -d windows }
+  if (-not $PrepareOnly) { Invoke-BuildCommand python3 "$Root\tools\utils\app_version.py" flutter run -d windows }
 } finally {
   Pop-Location
 }

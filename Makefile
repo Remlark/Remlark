@@ -66,29 +66,29 @@ rdp-test-server:
 
 # macOS：生成 .app 并打包为 zip
 mac: deps native-lib
-	flutter build macos --release
+	python3 tools/utils/app_version.py flutter build macos --release
 	mkdir -p $(DIST_DIR)
 	cd build/macos/Build/Products/Release && ditto -c -k --keepParent $(APP_NAME).app ../../../../../$(DIST_DIR)/$(APP_NAME)-macos.zip
 	@echo "输出：$(DIST_DIR)/$(APP_NAME)-macos.zip"
 
 # Linux：生成 Debian 安装包与便携 tar.gz，按主机架构选择 Flutter 输出目录
 linux: deps native-lib
-	flutter build linux --release
+	python3 tools/utils/app_version.py flutter build linux --release
 	python3 linux/packaging/build.py --arch $(LINUX_ARCH) --output "$(DIST_DIR)"
 
 # Windows：生成安装向导 exe 与便携 zip（需要 Inno Setup 6.5+）
 windows: deps native-lib
-	flutter build windows --release
+	python3 tools/utils/app_version.py flutter build windows --release
 	powershell -NoProfile -ExecutionPolicy Bypass -File windows/packaging/build.ps1 -Arch $(WINDOWS_ARCH) -OutputDir "$(DIST_DIR)"
 
 # 运行当前程序（当前平台）
 run: deps native-lib
 ifeq ($(CURRENT),mac)
-	flutter run -d macos
+	python3 tools/utils/app_version.py flutter run -d macos
 else ifeq ($(CURRENT),linux)
-	flutter run -d linux
+	python3 tools/utils/app_version.py flutter run -d linux
 else
-	flutter run -d windows
+	python3 tools/utils/app_version.py flutter run -d windows
 endif
 
 analyze:

@@ -600,6 +600,13 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 验证：[Desktop Build #11](https://github.com/Remlark/Remlark/actions/runs/39615318096)，提交 `2aa69f3`，五路构建、安装包与构建后平台测试全部通过；macOS / Linux 双架构各 42 项、Windows 双架构各 47 项通过，各仅跳过需显式启用的真实主机测试 P-12。五组安装包已上传，发布任务按仅构建模式跳过。
   - macOS ARM64 VideoToolbox 实测：平坦区域差为 0，只有交界第 160 / 161 列差为 49；Windows / Linux runner 无硬解设备，实际验证软件解码与请求硬解时回退，RGB 差均为 0。真实 GPU 与远程主机仍按 M-17 手工验证。
 
+- Step 85：VERSION 统一管理编译与发布版本
+  - 根目录 VERSION 保存 `1.0.0+1`；主应用与同步服务 pubspec 不再保存独立版本。
+  - tools/utils/app_version.py 统一解析版本，三平台 Make 编译入口传入 Flutter 版本 / 构建号和 Dart 编译期版本；开发运行注入 Dart 版本，Windows 独立入口复用同一工具。
+  - Linux deb、Windows 安装器、macOS DMG、Release 标签与附件清单统一读取 VERSION；macOS / Windows 拒绝元数据不匹配的旧应用。AI clientInfo 也使用统一版本。
+  - 增加 P-13：解析与无效版本、CRLF / 中文路径、真实 Flutter 替身子进程的参数与退出码、发布标签、旧应用保护；更新 P-10 夹具为 VERSION。
+  - 验证中：本机测试与 macOS / Windows / Linux CI 编译、打包和 make test-platform。
+
 ## 构建与运行命令
 
 | 命令 | 说明 |

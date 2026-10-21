@@ -1,6 +1,6 @@
 name: remlark_sync_server
 description: Remlark 同步服务端（保存客户端端到端加密后的主机数据）
-version: 1.0.0
+# Project version is defined in the repository root VERSION file.
 publish_to: none
 
 environment:

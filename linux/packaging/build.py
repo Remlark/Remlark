@@ -3,13 +3,15 @@
 
 import argparse
 from pathlib import Path
-import re
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+from tools.utils.app_version import read_version
 
 
 def validate_bundle(bundle):
@@ -31,7 +33,9 @@ def validate_bundle(bundle):
 def package(bundle, output, arch):
     """使用临时目录暂存 Debian 包，并从实际 ELF 依赖生成 Depends。"""
     validate_bundle(bundle)
-    version = re.search(r'^version:\s*(\S+)', (ROOT / 'pubspec.yaml').read_text(), re.M)[1].split('+')[0]
+    version = read_version(ROOT)
+    app_version = version['name']
+    deb_version = version['debian']
     deb_arch = {'x64': 'amd64', 'arm64': 'arm64'}[arch]
     output.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='remlark-linux-') as temporary:
@@ -58,7 +62,7 @@ def package(bundle, output, arch):
         shutil.rmtree(debian)
         size = sum(file.stat().st_size for file in app.rglob('*') if file.is_file()) // 1024
         (control / 'control').write_text(
-            f'Package: remlark\nVersion: {version}\nArchitecture: {deb_arch}\n'
+            f'Package: remlark\nVersion: {deb_version}\nArchitecture: {deb_arch}\n'
             'Maintainer: Remlark Developers\nSection: net\nPriority: optional\n'
             f'Installed-Size: {size}\nDepends: {depends}\n'
             'Description: Remote terminal and desktop workspace\n'
@@ -68,7 +72,7 @@ def package(bundle, output, arch):
             if not path.is_symlink():
                 path.chmod(0o755 if path.is_dir() or path.stat().st_mode & 0o111 else 0o644)
         subprocess.run(['dpkg-deb', '--root-owner-group', '--build', str(stage),
-                        str(output / f'remlark-{version}-linux-{deb_arch}.deb')], check=True)
+                        str(output / f'remlark-{app_version}-linux-{deb_arch}.deb')], check=True)
     with tarfile.open(output / f'remlark-linux-{arch}.tar.gz', 'w:gz') as archive:
         archive.add(bundle, arcname='bundle')
 

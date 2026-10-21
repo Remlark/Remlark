@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: '已有版本标签，例如 v1.0.0（必须与 pubspec.yaml 一致）'
+        description: '已有版本标签，例如 v1.0.0（必须与 VERSION 的版本号一致）'
         required: false
         type: string
       build_only:
@@ -48,6 +48,8 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref_name }}
           persist-credentials: false
+      - name: Validate application version
+        run: python3 tools/utils/app_version.py json
       - name: Validate release tag
         if: github.event_name != 'workflow_dispatch' || !inputs.build_only
         env:

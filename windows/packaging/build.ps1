@@ -70,15 +70,16 @@ Get-ChildItem -LiteralPath $ReleaseDir | Copy-Item -Destination $StageDir -Recur
 Get-ChildItem -LiteralPath $runtime -Filter '*.dll' | Copy-Item -Destination $StageDir -Force
 if ($StageOnly) { Write-Output $StageDir; exit 0 }
 
-# 与 pubspec 的应用版本、构建号同步；Inno 的资源版本必须是四段数字。
-$pubspec = [IO.File]::ReadAllText((Join-Path $Root 'pubspec.yaml'))
-$version = [regex]::Match($pubspec, '(?m)^version:\s*(\d+\.\d+\.\d+)(?:-([\w.-]+))?(?:\+(\d+))?\s*$')
-if (-not $version.Success) { throw 'Invalid version in pubspec.yaml' }
-$appVersion = $version.Groups[1].Value
-if ($version.Groups[2].Success) { $appVersion += '-' + $version.Groups[2].Value }
-$buildNumber = '0'
-if ($version.Groups[3].Success) { $buildNumber = $version.Groups[3].Value }
-$resourceVersion = $version.Groups[1].Value + '.' + $buildNumber
+# 与三个平台共享 VERSION 解析，Inno 的资源版本使用四段数字。
+$versionJson = & python3 "$Root\tools\utils\app_version.py" json
+if ($LASTEXITCODE -ne 0) { throw 'Unable to read VERSION' }
+$version = $versionJson | ConvertFrom-Json
+$appVersion = $version.name
+$resourceVersion = $version.resource
+# 防止更改 VERSION 后直接给旧 exe 换名打包，四段资源版本必须匹配。
+$exeVersion = (Get-Item -LiteralPath (Join-Path $ReleaseDir 'remlark.exe')).VersionInfo
+$actualVersion = @($exeVersion.FileMajorPart, $exeVersion.FileMinorPart, $exeVersion.FileBuildPart, $exeVersion.FilePrivatePart) -join '.'
+if ($actualVersion -ne $resourceVersion) { throw 'Release version does not match VERSION; run make windows first.' }
 $installerName = "remlark-$appVersion-windows-$Arch-setup"
 Invoke-BuildCommand $compiler "/DSourceDir=$StageDir" "/DDistDir=$OutputDir" "/DAppVersion=$appVersion" `
   "/DInstallerArch=$Arch" "/DResourceVersion=$resourceVersion" "/DInstallerName=$installerName" "$PSScriptRoot\remlark.iss"

@@ -19,4 +19,6 @@ Windows 没有安装 GNU Make 时，在仓库根目录用 PowerShell 启动：
 powershell -NoProfile -ExecutionPolicy Bypass -File .\windows\run.ps1
 ```
 
-需要 Flutter 和 Visual Studio C++ 桌面工具；首次构建原生库的依赖见[编译环境文档](docs/build-environment.md)。修改原生代码后加 `-RebuildNative`。
+版本号统一在根目录 [VERSION](VERSION) 中维护（格式如 `1.0.0+1`），构建脚本自动将版本号和构建号传给 Flutter 与各平台安装器。
+
+需要 Flutter、Python 3 和 Visual Studio C++ 桌面工具；首次构建原生库的依赖见[编译环境文档](docs/build-environment.md)。修改原生代码后加 `-RebuildNative`。

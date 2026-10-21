@@ -4,17 +4,19 @@
 import hashlib
 import os
 from pathlib import Path
-import re
+import plistlib
 import subprocess
 import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+from tools.utils.app_version import read_version
 
 
 def version():
-    """从应用声明中读取版本，保留预发布后缀但不把构建号放入标签。"""
-    return re.search(r'^version:\s*(\S+)', (ROOT / 'pubspec.yaml').read_text(encoding='utf-8'), re.M)[1].split('+')[0]
+    """从 VERSION 读取发布版本，构建号不进入标签与安装包文件名。"""
+    return read_version(ROOT)['name']
 
 
 def validate_tag():
@@ -27,6 +29,13 @@ def validate_tag():
 def macos():
     """检查主程序与两项 FFI 库均包含双架构，再生成拖入 Applications 的 DMG。"""
     app = ROOT / 'build/macos/Build/Products/Release/remlark.app'
+    # 防止修改 VERSION 后直接复用旧应用打包，导致文件名与系统版本不一致。
+    expected = read_version(ROOT)
+    with (app / 'Contents/Info.plist').open('rb') as stream:
+        info = plistlib.load(stream)
+    if (info.get('CFBundleShortVersionString') != expected['build_name'] or
+            str(info.get('CFBundleVersion')) != expected['build_number']):
+        raise SystemExit('macOS application version does not match VERSION; run make mac first')
     binaries = [app / 'Contents/MacOS/remlark']
     for name in ('rdp', 'crypto'):
         matches = list(app.rglob(f'*remlark_{name}*'))

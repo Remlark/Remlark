@@ -228,14 +228,23 @@
 
 ## Linux 分发（2026-10-21）
 
-- `make linux`（Linux 上默认 `make`）生成 Debian 系统安装包与完整 bundle 的便携 tar.gz，版本取自 `pubspec.yaml`，按当前 x64 / arm64 架构命名；本轮实机验证 x64。
+- `make linux`（Linux 上默认 `make`）生成 Debian 系统安装包与完整 bundle 的便携 tar.gz，版本取自根目录 `VERSION`，按当前 x64 / arm64 架构命名；本轮实机验证 x64。
 - Debian 包使用 `/opt/remlark` 保存完整应用、`/usr/bin/remlark` 提供命令入口，复用已有中英文桌面入口与 hicolor 图标。应用数据继续写入用户数据目录，升级与卸载仅管理程序文件。
 - 发布前必须包含 Flutter 引擎、AOT、sqlite、RDP 与 SSH 加密库及桌面资源；缺失时终止打包。系统运行库依赖由 ELF 自动计算，发行兼容性以实际构建系统为基线。
 - 构建环境与安装命令见 `docs/build-environment.md`，验证结果和待手工项目见 `docs/multi-platform-testing.md`。
 
 ## 自动发布
-- `.github/workflows/release.yml` 在推送与 pubspec 版本一致的 `v*` 标签或手工指定已有标签后运行。
+- `.github/workflows/release.yml` 在推送与 VERSION 中版本号一致的 `v*` 标签或手工指定已有标签后运行。
 - 手工运行默认仅验证构建（`build_only=true`），tag 留空时使用所选分支；与正式发布共用完整五路编译、安装包和构建后平台测试，跳过标签校验与发布任务。正式手工发布需指定版本标签并关闭 `build_only`。
 - 独立原生 runner 构建 Windows x64 / arm64、Linux x64 / arm64；macOS 构建包含 Intel / Apple Silicon 的通用 app、zip 与 DMG，发布前用 lipo 检查主程序与 FFI 库。
 - 每个 runner 顺序执行依赖准备、`make test-platform` 与构建，保留锁文件。Windows 安装器架构与 Flutter / MSVC 目标一致，附带对应架构 CRT。
 - 所有任务通过且 10 个安装 / 便携包完整后生成 SHA256SUMS；先上传草稿再公开 Release。默认 token 只读，仅发布任务有 contents:write。
+
+
+## 统一版本来源
+
+- 根目录 `VERSION` 是项目版本唯一来源，当前为 `1.0.0+1`；格式为 `X.Y.Z[-预发布标识][+构建号]`，未写构建号时使用 1。应用与同步服务的 pubspec 不再声明独立版本。
+- `tools/utils/app_version.py` 统一校验并生成发布版本、Flutter 数字版本、构建号、Windows 四段资源版本和 Debian 版本（预发布使用 `~`）。数字段均限制为 0–65535，以兼容 Windows 资源。
+- `make`、`make mac/linux/windows` 通过统一工具向 Flutter build 传入 `--build-name`、`--build-number` 和 `REMLARK_VERSION`；`make run` 与 Windows 独立运行入口注入 Dart 版本。Flutter run 不支持前两个参数，开发运行的系统元数据使用 Flutter 默认值，正式分发使用 build 产物。
+- `lib/utils/app_version.dart` 读取编译期版本，Codex / dsh 的 clientInfo 复用它，直接使用 Flutter 而未注入版本时显示 `development`。
+- 安装包命名、DMG、Debian control、Windows 安装器资源、Release 标签校验与 SHA256SUMS 统一使用 VERSION；macOS / Windows 打包前检查应用系统元数据，拒绝将旧应用按新版本打包。发布标签不包含 `+构建号`。

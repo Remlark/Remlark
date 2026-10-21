@@ -33,7 +33,12 @@ void main() {
     final run = File('windows/run.ps1');
     expect(run.readAsBytesSync().take(3), [0xef, 0xbb, 0xbf]);
     final script = run.readAsStringSync();
-    expect(script, contains('Invoke-BuildCommand flutter run -d windows'));
+    expect(
+      script,
+      contains(
+        r'Invoke-BuildCommand python3 "$Root\tools\utils\app_version.py" flutter run -d windows',
+      ),
+    );
     expect(script, contains(r'$RebuildNative'));
     expect(script, contains(r'$PrepareOnly'));
     expect(script, contains('Launch-VsDevShell.ps1'));
@@ -173,5 +178,14 @@ void main() {
     result = await runPackaging(['-StageOnly']);
     expect(result.exitCode, isNot(0));
     expect(result.stderr, contains('vcruntime140.dll'));
+  });
+
+  test('Windows 拒绝将与 VERSION 不符的旧 exe 按新版本打包', () async {
+    // 夹具 exe 没有目标资源版本，必须在调用安装器编译器之前被拒绝。
+    final compiler = File(p.join(root.path, 'fake compiler.cmd'))
+      ..writeAsStringSync('@echo off\r\nexit /b 99\r\n');
+    final result = await runPackaging(['-CompilerPath', compiler.path]);
+    expect(result.exitCode, isNot(0));
+    expect(result.stderr, contains('Release version does not match VERSION'));
   });
 }

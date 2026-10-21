@@ -100,7 +100,7 @@ make server
 
 | 产物 | 说明 |
 | --- | --- |
-| `dist/remlark-1.0.0-windows-x64-setup.exe` | 安装向导；文件名版本来自 `pubspec.yaml`，不是固定写死 |
+| `dist/remlark-1.0.0-windows-x64-setup.exe` | 安装向导；文件名版本来自 `VERSION`，不是固定写死 |
 | `dist/remlark-windows-x64.zip` | 便携包；解压整个目录后运行 `remlark.exe` |
 | `dist/remlark-sync-server/bundle/` | 同步服务端；需整体分发，`bin/server.exe` 依赖随包的 sqlite DLL |
 | `build/windows/x64/runner/Release/` | Flutter 原始 Release 输出 |
@@ -214,7 +214,7 @@ Flutter 测试与 Flutter 应用构建顺序执行，保留锁文件，不执行
 
 | 产物 | 说明 |
 | --- | --- |
-| `dist/remlark-1.0.0-linux-amd64.deb` | Ubuntu / Debian x64 安装包，版本从 pubspec.yaml 读取 |
+| `dist/remlark-1.0.0-linux-amd64.deb` | Ubuntu / Debian x64 安装包，版本从 VERSION 读取 |
 | `dist/remlark-linux-x64.tar.gz` | 便携包，必须解压并保留整个 bundle |
 | `build/linux/x64/release/bundle/` | Flutter 原始 Release 输出 |
 | `dist/remlark-sync-server/bundle/` | 同步服务端，需整体分发 |
@@ -259,7 +259,7 @@ Linux x64 本轮完成默认 `make`、原生库与同步服务端编译：全量
 
 ## GitHub Actions 自动 Release
 
-工作流为 `.github/workflows/release.yml`。先提交并推送代码，确认 `pubspec.yaml` 版本（忽略 `+` 后的构建号），再推送相同版本标签，例如：
+工作流为 `.github/workflows/release.yml`。先提交并推送代码，确认根目录 `VERSION` 版本（忽略 `+` 后的构建号），再推送相同版本标签，例如：
 
 ```bash
 git tag v1.0.0
@@ -280,10 +280,27 @@ Windows 应用解压使用 archive 4.5.2 的流式接口，在独立 isolate 处
 
 CI 同时支持 VS 2022 / VS 2026，从 VCToolsRedistDir 的目标架构目录匹配 Microsoft.VC*.CRT。Windows 安装 JOM 并行编译 OpenSSL（MSVC 显式 `/FS` 同步 PDB 写入），安装阶段固定串行 NMake，避免依赖 Makefile 并发改写；本地没有 JOM 时编译也回退 NMake。原生库按 runner、CPU 与 native 源码哈希缓存；原生编译完成后即使后续打包失败也保存，工具链重大升级时递增工作流缓存前缀。
 
-已验证发布：[v1.0.0](https://github.com/Remlark/Remlark/releases/tag/v1.0.0)，[构建记录](https://github.com/Remlark/Remlark/actions/runs/39593809838)。后续先修改 pubspec.yaml 的版本、提交并推送，再创建同版本 v* 标签；不要复用已发布标签。
+已验证发布：[v1.0.0](https://github.com/Remlark/Remlark/releases/tag/v1.0.0)，[构建记录](https://github.com/Remlark/Remlark/actions/runs/39593809838)。后续先修改 VERSION 的版本、提交并推送，再创建同版本 v* 标签；不要复用已发布标签。
 
 ### 仅验证 GitHub Actions 编译
 
-在 Desktop Release 中选择 Run workflow，选择待验证分支，tag 留空并保持 `build_only=true`。工作流执行完整五路构建、安装包生成与构建前后 `make test-platform`，产物保存在 Actions artifacts，不发布 Release。正式手工发布需填写与 pubspec.yaml 一致的已有版本标签，并关闭 `build_only`；推送 v* 标签仍自动发布。
+在 Desktop Release 中选择 Run workflow，选择待验证分支，tag 留空并保持 `build_only=true`。工作流执行完整五路构建、安装包生成与构建前后 `make test-platform`，产物保存在 Actions artifacts，不发布 Release。正式手工发布需填写与 VERSION 中版本号一致的已有版本标签，并关闭 `build_only`；推送 v* 标签仍自动发布。
 
 2026-10-21 已用此模式完成硬件加速版本五路验证：[Desktop Build #11](https://github.com/Remlark/Remlark/actions/runs/39615318096)，macOS universal、Windows / Linux x64 与 arm64 编译、打包、构建后平台测试全部通过。具体解码结果和实机验证范围见 [multi-platform-testing.md](multi-platform-testing.md#2026-10-21-硬件加速版本-github-actions-全矩阵验证step-84)。
+
+
+## 修改版本与编译
+
+只修改根目录 `VERSION`，例如 `1.2.3+4`：版本号为 `1.2.3`，构建号为 `4`，对应 Release 标签 `v1.2.3`。默认保留 `1.0.0+1`。不要向 pubspec 添加版本，也不要在编译命令中另行覆盖版本。
+
+```bash
+python3 tools/utils/app_version.py json
+make                   # 当前平台正式应用与安装包
+make run               # 开发运行，注入 Dart 版本
+# 需要手工调用 Flutter build 时也通过相同入口：
+python3 tools/utils/app_version.py flutter build macos --release
+```
+
+手工编译时将 macos 替换为当前平台的 windows / linux。工具从脚本所在仓库读取 VERSION，支持路径包含中文、空格及 CRLF。缺失或无效版本立即报错。Flutter build 的数字版本与构建号用于系统元数据；预发布标识保留在 Dart 完整版本、发布标签和安装包名称中，Debian 元数据用 `~` 表示预发布。Flutter run 没有 build-name / build-number 参数，开发运行只注入 Dart 版本，系统元数据使用 Flutter 默认值；分发请使用 make 或上述 build 入口。
+
+修改 VERSION 后重新编译再打包；macOS DMG 和 Windows 安装器会拒绝元数据不匹配的旧应用。Windows 独立开发入口也需要 PATH 中存在 Python 3（`python3`），与打包及 CI 使用相同解析器。

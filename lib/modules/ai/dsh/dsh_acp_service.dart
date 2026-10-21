@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import '../../../l10n/app_localizations.dart';
+import '../../../utils/app_version.dart';
 import '../runtime/json_rpc_connection.dart';
 import '../runtime/agent_options.dart';
 import 'dsh_config_options.dart';
@@ -130,7 +131,7 @@ class DshAcpService {
           'fs': {'readTextFile': false, 'writeTextFile': false},
           'terminal': false,
         },
-        'clientInfo': {'name': 'remlark', 'title': 'Remlark', 'version': '1.0.0'},
+        'clientInfo': {'name': 'remlark', 'title': 'Remlark', 'version': appVersion},
       }, timeout: initializeTimeout);
       final v = r['protocolVersion'];
       if (v is num && v.toInt() != protocolVersion) throw JsonRpcException('ACP protocol $v');
