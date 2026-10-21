@@ -540,7 +540,8 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
 - Step 80：GitHub Actions 多平台多 CPU 自动发布
   - 固定 Flutter 3.47.7；使用原生 Windows / Linux x64、arm64 runner，macOS 生成通用 zip / DMG。
   - Windows 安装器与 Makefile 参数支持 arm64，发布前检查全部附件与 SHA-256；增加 P-10。
-  - 本地检查及远端构建验证进行中。
+  - CI 修复：隔离 FreeRDP 与应用标签、Windows 固定系统 tar、隔离 GNU Make / NMake 参数；Windows ZIP 使用 .NET、tar.gz 指定 UTF-8。
+  - 本地平台测试与 DMG 打包验证通过；远端 Linux 双架构安装包通过，其余矩阵验证进行中。
 
 ## 构建与运行命令
 

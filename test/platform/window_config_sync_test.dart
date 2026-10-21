@@ -127,6 +127,30 @@ void main() {
     }
   });
 
+  test('NMake 不继承 GNU Make 参数，执行后恢复环境', () async {
+    if (!Platform.isWindows) return;
+    final root = Directory.systemTemp.createTempSync('remlark nmake ');
+    addTearDown(() => root.deleteSync(recursive: true));
+    final fake = File('${root.path}/nmake.cmd')
+      ..writeAsStringSync(
+        '@echo off\r\necho MAKEFLAGS=[%MAKEFLAGS%]\r\nexit /b 0\r\n',
+      );
+    final result = await Process.run(
+      'powershell',
+      [
+        '-NoProfile',
+        '-Command',
+        ". './native/utils/windows_build.ps1'; "
+            r"$env:MAKEFLAGS = '-- bad=value'; "
+            'Invoke-BuildCommand \$env:RMK_NMAKE; '
+            r"if ($env:MAKEFLAGS -ne '-- bad=value') { exit 2 }",
+      ],
+      environment: {'RMK_NMAKE': fake.path},
+    );
+    expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+    expect(result.stdout, contains('MAKEFLAGS=[]'));
+  });
+
   test('原生构建遇到外部命令失败时立即报错', () async {
     if (Platform.isWindows) {
       final forwarded = await Process.run('powershell', [

@@ -34,7 +34,7 @@ def macos():
         if not matches:
             raise SystemExit(f'missing native library: {name}')
     for binary in binaries:
-        subprocess.run(['lipo', '-verify_arch', 'x86_64', 'arm64', str(binary)], check=True)
+        subprocess.run(['lipo', str(binary), '-verify_arch', 'x86_64', 'arm64'], check=True)
     output = ROOT / 'dist' / f'remlark-{version()}-macos-universal.dmg'
     with tempfile.TemporaryDirectory(prefix='remlark-dmg-') as stage:
         subprocess.run(['ditto', str(app), f'{stage}/remlark.app'], check=True)

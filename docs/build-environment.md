@@ -265,3 +265,5 @@ git push origin v1.0.0
 Windows ARM64 自动选择匹配架构的 CRT 和安装器；手工可执行 `make windows WINDOWS_ARCH=arm64`，必须在原生 ARM64 Windows 与对应 VS 环境运行。打包脚本支持 `-Arch arm64`。macOS DMG 包含应用与 Applications 入口，通用 zip 同时保留。安装包目前未配置签名 / 公证，仍需 M-16 实机验证。
 
 Release CI 额外固定 FreeRDP `USE_VERSION_FROM_GIT_TAG=OFF`，防止读取应用标签后生成错误的 ABI 库名。Windows 构建步骤使用原生 PowerShell，源码解压显式调用系统 tar，避免 Git Bash 工具覆盖系统命令。
+
+Windows 测试还需要 Python 3（GitHub runner 已提供），用于生成包含中文文件名的标准 PAX 测试夹具；应用运行不需要 Python。GNU Make 调用 NMake 时会暂时清除 MAKEFLAGS 并恢复，避免 GNU 长参数污染 OpenSSL 构建。
