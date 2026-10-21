@@ -224,7 +224,6 @@ const Map<String, String> stringsEn = {
   'agent.new': 'Add agent',
   'agent.edit': 'Edit agent',
   'agent.delete': 'Delete agent',
-  'agent.empty': 'No agents yet. DeepSeek Harness (dsh), Codex and OpenAI-compatible APIs are supported.',
   'agent.name': 'Name',
   'agent.endpoint': 'API endpoint',
   'agent.model.dsh': 'Model',

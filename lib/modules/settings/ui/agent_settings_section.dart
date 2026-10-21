@@ -62,11 +62,7 @@ class _AgentSettingsSectionState extends State<AgentSettingsSection> {
         onPressed: () => _edit(context),
       ),
       children: [
-        const SizedBox(height: 16),
-        if (c.agents.isEmpty)
-          AppPanel(
-            child: EmptyState(icon: Icons.auto_awesome_outlined, title: context.tr('agent.empty')),
-          ),
+        if (c.agents.isNotEmpty) const SizedBox(height: 16),
         for (final a in c.agents)
           Padding(
             padding: const EdgeInsets.only(bottom: 10),

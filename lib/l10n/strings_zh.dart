@@ -235,7 +235,6 @@ const Map<String, String> stringsZh = {
   'agent.new': '添加 Agent',
   'agent.edit': '编辑 Agent',
   'agent.delete': '删除 Agent',
-  'agent.empty': '还没有 Agent。支持 DeepSeek Harness（dsh）、Codex 与 OpenAI 兼容 API。',
   'agent.name': '名称',
   'agent.endpoint': 'API 地址',
   'agent.model.dsh': '模型',
