@@ -529,12 +529,20 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
 - [已完成] Step 78：简化 Agent 设置空列表
   - 无 Agent 时移除整块空状态卡片、图标和提示文字，内容区留空；删除中英文未使用的空状态文案。
 
+- [已完成] Step 79：Linux 自动化验证、原生构建修复与安装包
+  - 在 Ubuntu 26.04 x64 按多平台文档运行平台、客户端、服务端、SSH / RDP / dsh 端到端测试，记录真实执行与手工验证边界。
+  - 统一 RDP 测试服务端的 OpenSSL 前缀，禁用不需要的 systemd；修复 Linux 测试字体路径与品牌文字宽字体溢出。
+  - `make linux` 同时生成 Debian 安装包和便携 tar.gz，校验原生库与资源，按 ELF 计算系统运行依赖；新增 P-09。
+  - 修复便携包路径含 `%` 时桌面入口无法加载；Linux 关闭 Android 间接依赖的可选 JNI，分发包无 Java 依赖。
+  - 将实际工具链、依赖、构建命令、安装与卸载步骤写入 `docs/build-environment.md`。
+  - 验证：全量 139 项通过 / 6 项跳过（4 项仅 macOS，2 项 dsh 另行执行）；最终平台 28 项、真实 dsh 2 项、服务端 2 项通过，静态检查无问题；deb / tar.gz / 同步服务端编译及本机解包启动验证通过；真实远程主机和干净机器安装流程仍待验证。
+
 ## 构建与运行命令
 
 | 命令 | 说明 |
 | --- | --- |
 | `make` | 按当前平台打包 |
-| `make mac` / `make linux` / `make windows` | 分平台打包（需在对应系统上执行，输出到 dist/；Windows 生成安装 exe 与便携 zip） |
+| `make mac` / `make linux` / `make windows` | 分平台打包（需在对应系统上执行，输出到 dist/；Windows 生成安装 exe 与便携 zip，Linux 生成 deb 与便携 tar.gz） |
 | `make run` | 运行当前程序 |
 | `make test` | 运行客户端与服务端测试 |
 | `make test-platform` | 运行多平台单元测试（见 docs/multi-platform-testing.md，三个平台分别执行） |
@@ -547,14 +555,14 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
 
 ## 已知限制
 
-- RDP 原生库已在 macOS x86_64 编译与连接测试通过、Windows x64 编译与 FFI 加载测试通过；Windows 真实远程连接、arm64 与 Linux 仍待实机验证。
-- SSH 加密原生库已在 macOS x86_64 与 Windows x64 编译测试通过；arm64 与 Linux 仍待实机验证（库缺失时自动退回纯 Dart 加密）。
+- RDP 原生库已在 macOS x86_64 编译与连接测试通过、Windows x64 编译与 FFI 加载、Linux x64 编译与测试服务端端到端通过；真实 Windows 远程连接与 arm64 仍待实机验证。
+- SSH 加密原生库已在 macOS x86_64、Windows x64 与 Linux x64 编译测试通过；arm64 仍待实机验证（库缺失时自动退回纯 Dart 加密）。
 - RDP 暂未启用 H.264（AVC）编码，使用 RemoteFX / Progressive / Planar 等编码；暂不支持声音重定向。
 - RDP 远程鼠标指针形状未同步，显示本地指针。
 - RDP 远程复制的文件会立即下载到本地（上限 2GB），超过上限不传输并提示。
 - 剪贴板测试使用自写的测试服务端，尚未与真实 Windows 服务器联调。
 - VNC 剪贴板为 RFB 标准文本剪贴板（Latin-1，兼容 UTF-8 服务器）；VNC 协议没有文件传输标准，文件传输通过内置 SSH（兼容旧关联）经 SFTP 完成；增强剪贴板和 Finder/锁屏检测面向远程 macOS。
 - AI 操作终端时命令是否结束由 Agent 根据输出判断；全屏程序（vim、top 等）与需要交互输入的命令由用户在终端处理。
-- DeepSeek Harness 安装需要访问 nodejs.org 与 registry.npmjs.org（暂不支持镜像地址），依赖约占 1GB；Windows x64 真实安装与终端 JSON 协议端到端测试已通过，Linux 仍待实机验证。
+- DeepSeek Harness 安装需要访问 nodejs.org 与 registry.npmjs.org（暂不支持镜像地址），依赖约占 1GB；Windows x64 与 Linux x64 真实安装与终端 JSON 协议端到端测试已通过。
 - Codex 安装需要访问 GitHub（api.github.com 与 Release 下载地址，暂不支持镜像）；GitHub 未登录接口每小时限 60 次查询；OpenAI 兼容 API 不支持选择推理强度。
 - 终端粘贴 / 拖拽上传无法自动获知 shell 当前目录，上传前会确认目标目录（默认 SFTP 最近浏览目录或用户主目录）。

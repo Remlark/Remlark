@@ -1,6 +1,6 @@
 # 多平台测试
 
-Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台。Flutter 桌面不能交叉编译，各平台的构建和测试都要在对应系统上执行。目前只在 macOS（x86_64）上完整测试过，Windows 和 Linux 需要按本文逐项验证。
+Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台。Flutter 桌面不能交叉编译，各平台的构建和测试都要在对应系统上执行。macOS（x86_64）、Windows x64 和 Linux x64 已有自动化验证记录；真实远程主机、干净机器安装等项目仍需按本文逐项验证。
 
 本文列出：
 
@@ -42,7 +42,8 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 剪贴板文件读取、拖放 | `pasteboard`、`desktop_drop`、`file_selector` 插件 | 插件实现 | 插件实现 | 插件实现 | [file_drop_target_test.dart](../test/file_drop_target_test.dart)（只测分发逻辑） | M-03、M-04、M-06 |
 | 窗口默认尺寸 / 最小尺寸 | [window_config.dart](../lib/app/window_config.dart) + 三个平台的 runner | `MainFlutterWindow.swift` | `main.cpp`、`flutter_window.cpp`（按 DPI 换算） | `my_application.cc` | P-06 | M-02 |
 | 原生库（RDP、SSH AES-GCM） | [hook/build.dart](../hook/build.dart)、`native/*/scripts/` | `build.sh`，x86_64 + arm64，系统 zlib | `build.ps1 [-Arch x86_64\|arm64]`，按 VS 目标架构；显式 MSVC、静态 OpenSSL / zlib，关闭自动 ccache | `build.sh`（`aarch64` 命名），系统 zlib | P-06、[native_crypto_test.dart](../test/native_crypto_test.dart) | M-12 |
-| 打包 | [Makefile](../Makefile)、[Windows 安装器](../windows/packaging/) | `make mac` → zip | `make windows` → Inno Setup 安装 exe + 便携 zip，附带应用本地 VC++ 运行库 | `make linux` → tar.gz | P-06、P-08 | M-12、M-14 |
+| 打包 | [Makefile](../Makefile)、[Windows 安装器](../windows/packaging/) | `make mac` → zip | `make windows` → Inno Setup 安装 exe + 便携 zip，附带应用本地 VC++ 运行库 | `make linux` → deb + tar.gz，按 x64 / arm64 输出；发布前检查原生库和资源 | P-06、P-08、P-09 | M-12、M-14 |
+| 可选 JNI 依赖 | `linux/CMakeLists.txt`，Flutter 间接依赖 | 无 Linux JNI 插件 | 可选插件，未发现 JDK 时不构建 | 关闭 Android 间接依赖引入的可选 JNI，避免携带构建机 Java 绝对路径 | P-09 | M-12 |
 | 开发启动 | [Makefile](../Makefile)、[Windows 启动脚本](../windows/run.ps1) | `make run` | `windows/run.ps1` 无须 Make，按需构建原生库；也支持 `make run` | `make run` | P-08 | M-15 |
 | 应用图标 | `tools/branding/`、`linux/packaging/` | `.icns` | 7 帧 `.ico` | PNG + `.desktop` | — | M-12 |
 | 同步服务端 | [server/](../server/) | `dart build cli` | 同左 | 同左 | `server/` 中的 `dart test` | M-13 |
@@ -63,8 +64,9 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-06 | [window_config_sync_test.dart](../test/platform/window_config_sync_test.dart) | 三个平台 runner 中的窗口尺寸与 `window_config.dart` 一致；构建钩子覆盖三个平台；每个原生库都有 `build.sh` 和 `build.ps1`，`build.ps1` 支持 x86_64 / arm64，输出目录与构建钩子一致；Makefile 有 mac / linux / windows / run 目标 | 窗口尺寸、原生库、打包 |
 | P-07 | [runtime_lifecycle_test.dart](../test/platform/runtime_lifecycle_test.dart) | 实际启动 Dart 子进程；重新初始化后写入新日志目录，关闭后目录可删除 | 同步测试启动、日志句柄生命周期 |
 | P-08 | [windows_packaging_test.dart](../test/platform/windows_packaging_test.dart) | 三平台打包与启动入口；Windows 中英文、当前用户安装、数据保留与 BOM；实际暂存应用和 VC++ 运行库，覆盖中文空格路径、缺少原生库 / CRT 时终止；无 Make 启动参数与 PowerShell 解析 | Windows 安装器、开发启动与分发完整性 |
+| P-09 | [linux_packaging_test.dart](../test/platform/linux_packaging_test.dart) | 三平台保留独立打包入口；Linux x64 / arm64 架构命名；禁用无用 JNI；实际运行打包脚本，缺少原生库时立即终止；在中文、空格、引号、反斜线、% 等路径中实际注册桌面入口并用 GIO 启动 | Linux 安装器与分发完整性 |
 
-P-06 还检查 Windows CMake 的 UTF-8 编译选项、PowerShell BOM 与实际解析，以及外部命令失败时的退出码；macOS / Linux 检查构建脚本严格错误处理。
+P-06 还检查 macOS / Linux 测试服务端与应用使用同一 OpenSSL 前缀、关闭 systemd 依赖，以及 Windows CMake 的 UTF-8 编译选项、PowerShell BOM 与实际解析，以及外部命令失败时的退出码；macOS / Linux 检查构建脚本严格错误处理。
 
 其他测试中与平台有关的部分：
 
@@ -110,7 +112,7 @@ P-06 还检查 Windows CMake 的 UTF-8 编译选项、PowerShell BOM 与实际�
 | M-09 | DeepSeek Harness 安装 | 安装私有 Node.js 与 dsh → 启动 ACP 进程并能提问；Windows 上 zip 解压后能找到 `node.exe`，npm 安装成功；卸载后会话记录保留 |
 | M-10 | 打开外部程序 | 设置 → 数据中打开数据目录、RDP 中打开下载目录，都能打开系统文件管理器；Codex 登录能在默认浏览器中打开授权页面；导入 / 导出时系统文件选择对话框正常 |
 | M-11 | 系统免密登录 | macOS / Linux：执行后 `~/.ssh` 下生成密钥，`~/.ssh/config` 写入别名，系统终端里 `ssh <别名>` 能免密登录；Windows：快捷指令列表中不显示这一项 |
-| M-12 | 构建与打包 | `make native-lib` 编译成功；`make` 打出安装包；解压到新机器（没有装开发环境）上能启动；原生库被打进安装包（RDP 能连接，日志显示“已启用原生 AES-GCM 加密”）；应用图标在 Dock / 任务栏 / 桌面启动器中显示正确；Linux 运行 `linux/packaging/install-desktop.py` 后菜单中出现应用 |
+| M-12 | 构建与打包 | `make native-lib` 编译成功；`make` 打出安装包；解压到新机器（没有装开发环境）上能启动；原生库被打进安装包（RDP 能连接，日志显示“已启用原生 AES-GCM 加密”）；应用图标在 Dock / 任务栏 / 桌面启动器中显示正确；Linux 的 deb 安装后菜单出现应用，命令入口可用，升级 / 卸载不删除用户数据；便携包解压后运行 `bundle/install-desktop.py`，菜单中出现应用 |
 | M-13 | 同步服务端 | `make server` 编译成功；用 `--port --token` 启动；两个客户端同步主机与密钥 |
 | M-14 | Windows 安装、升级与卸载 | Windows 10 / 11 x64 干净环境运行 setup；中英文向导、安装目录、开始菜单与可选桌面入口正确；启动不要求手工安装 VC++；关闭运行中的应用后覆盖升级；卸载程序及快捷方式移除，数据库、凭据与日志保留；macOS / Linux 不适用 |
 | M-15 | Windows 无 Make 开发启动 | 未安装 Make、已有 Flutter 与 VS C++ 的 Windows x64 环境执行 `powershell -NoProfile -ExecutionPolicy Bypass -File windows/run.ps1`，缺少原生库时按文档准备 Perl / NASM 后可编译并启动；已有原生库时不重复编译；`-RebuildNative` 强制重编译；`-PrepareOnly` 不打开应用；macOS / Linux 按 `make run` 验证 |
@@ -133,6 +135,11 @@ P-06 还检查 Windows CMake 的 UTF-8 编译选项、PowerShell BOM 与实际�
 | K-12 | Windows | 英文界面在 960×640 最小窗口中，RDP 工具栏向右溢出 27 像素 | 已修复：窄工具栏使用图标按钮，保留中英文本地化提示；`layout_overflow_test.dart` 覆盖两种语言和三种窗口尺寸 |
 | K-13 | Windows | FreeRDP 缺少 zlib 依赖；同时有 MinGW 时 CMake 会选中 GCC 或不兼容的 ccache，缺少 MSVC 对象文件而链接失败 | 已修复：构建静态 zlib，显式指定 MSVC 编译器并关闭自动 ccache，在胶水库链接 zlib；P-06 检查 |
 | K-14 | Windows | RDP 胶水库的旧 Winsock / Shell 宏冲突、剪贴板进度标志旧别名不可用，静态库被当作 DLL 导入，通道库路径与系统库缺失 | 已修复：使用精简 Windows 头和正确包含顺序；三平台统一 `FD_PROGRESSUI`；静态导入声明、Windows 通道库根目录及 `credui` 链接；P-06 检查 |
+| K-15 | Linux | RDP 测试服务端链接项目 OpenSSL 库却读取系统 pkg-config 元数据，带入不存在的 libjitterentropy.a，构建失败 | 已修复：与应用构建相同的 `CMAKE_PREFIX_PATH`，避免混用库与元数据；关闭测试服务端不需要的 systemd，保持剪贴板测试服务端链接完整；P-06 检查 |
+| K-16 | Linux | 测试字体仅查找 truetype/noto，Ubuntu 将 Noto CJK 安装在 opentype/noto；品牌文字在宽字体下溢出 | 已修复：补充 Linux 字体位置，品牌文字在剩余宽度内按需缩小；现有终端与中英文布局测试回归 |
+| K-17 | Linux | 原打包只有 x64 tar.gz，没有系统安装包，也未检查原生库缺失导致的功能降级 | 已修复：默认生成 deb 和便携包、架构对应输出、检查必需资源，从 ELF 自动计算 Depends；P-09 检查 |
+| K-18 | Linux | 便携目录包含 `%` 时，GIO 在展开 `%%` 前检查 Exec 可执行文件，菜单入口无法加载 | 已修复：通过 `/usr/bin/env` 启动正确转义的绝对路径；P-09 使用真正的 GIO 启动并验证进程输出 |
+| K-19 | Linux | 构建机安装 JDK 时，Android 间接依赖的可选 JNI 插件会生成 libdartjni.so，并依赖构建机的绝对 Java 路径 | 已修复：Linux CMake 关闭可选 JNI 查找；Linux 功能不使用 Java，分发包无需 JDK / JRE；P-09 检查 |
 
 ## 6. 验证记录
 
@@ -140,20 +147,27 @@ P-06 还检查 Windows CMake 的 UTF-8 编译选项、PowerShell BOM 与实际�
 
 | 项目 | macOS | Windows | Linux |
 | --- | --- | --- | --- |
-| 环境 | macOS 26.7 x86_64 | 2026-10-21，Windows 11 25H2（10.0.26200.9711）x64，Flutter 3.47.7 / Dart 3.13.5；基于 `3e59087` 工作区修复 | 未验证 |
-| P-01 ~ P-06（`make test-platform`） | ✅ 2026-10-21 | 未验证 | 未验证 |
-| 修复 K-01 ~ K-05 后的相关测试（test/platform、codex_installer、ssh / rdp / rdp_clipboard 端到端） | ✅ 2026-10-21，端到端测试实际执行未跳过 | 未验证 | 未验证 |
-| `flutter test`（全部）与端到端测试 | 之前的开发过程中运行过，本轮未重新运行 | ✅ 2026-10-21，123 项通过 / 18 项跳过；同步端到端、Codex 安装器、VNC 本地模拟服务器实际执行 | 未验证 |
-| P-01 ~ P-07（扩展后的 `make test-platform`） | 本轮新增检查待实机重跑 | ✅ 2026-10-21，23 项通过 | 未验证 |
-| P-01 ~ P-08（安装器扩展后的 `make test-platform`） | 新增检查待实机重跑 | ✅ 2026-10-21，26 项通过；新增测试静态检查无问题 | 新增检查待实机重跑 |
-| 无 Make 启动入口扩展验证 | 不适用新增脚本，平台测试待重跑 | ✅ 2026-10-21，平台测试 28 项通过；PATH 中无 Make 时 `windows/run.ps1 -PrepareOnly` 通过（已有原生库）；图形启动和全新原生编译待按 M-15 验证 | 不适用新增脚本，平台测试待重跑 |
-| 静态检查 | 本轮未重跑 | ✅ 客户端 lib / test / hook 与 server 均无问题 | 未验证 |
-| dsh 真实安装端到端（`RMK_DSH_E2E=1`） | 本轮未重跑 | ✅ 2 项通过，下载 Node.js、npm 安装 dsh、ACP 启动与终端 JSON 协议联调实际执行 | 未验证 |
-| 同步服务端测试 / 编译 | 本轮未重跑 | ✅ `dart test` 2 项通过，`make server` 生成 `dist/remlark-sync-server/bundle/bin/server.exe` | 未验证 |
-| 原生库编译与加载 | 本轮未重跑 | ✅ `make native-lib`；生成 RDP / SSH 加密 DLL；`native_crypto_test.dart` 实际执行未跳过，RDP FFI 加载、创建并释放会话通过；与 P 测试合计 25 项通过 | 未验证 |
+| 环境 | macOS 26.7 x86_64 | 2026-10-21，Windows 11 25H2（10.0.26200.9711）x64，Flutter 3.47.7 / Dart 3.13.5；基于 `3e59087` 工作区修复 | 2026-10-21，Ubuntu 26.04 LTS / Linux 7.0.0-38-generic x86_64，Flutter 3.47.7 / Dart 3.13.5；基于 `a318f6b` 工作区修复 |
+| P-01 ~ P-06（`make test-platform`） | ✅ 2026-10-21 | 未验证 | ✅ 已纳入本轮最新平台 / 端到端验证，见后续记录 |
+| 修复 K-01 ~ K-05 后的相关测试（test/platform、codex_installer、ssh / rdp / rdp_clipboard 端到端） | ✅ 2026-10-21，端到端测试实际执行未跳过 | 未验证 | ✅ 已纳入本轮最新平台 / 端到端验证，见后续记录 |
+| `flutter test`（全部）与端到端测试 | 之前的开发过程中运行过，本轮未重新运行 | ✅ 2026-10-21，123 项通过 / 18 项跳过；同步端到端、Codex 安装器、VNC 本地模拟服务器实际执行 | ✅ 2026-10-21，139 项通过 / 6 项跳过；SSH / SFTP、RDP / 剪贴板、VNC 模拟服务器、同步端到端、Codex 安装器、原生加密实际执行；4 项仅 macOS，2 项 dsh 另行启用 |
+| P-01 ~ P-07（扩展后的 `make test-platform`） | 本轮新增检查待实机重跑 | ✅ 2026-10-21，23 项通过 | ✅ 已纳入本轮最新平台 / 端到端验证，见后续记录 |
+| P-01 ~ P-08（安装器扩展后的 `make test-platform`） | 新增检查待实机重跑 | ✅ 2026-10-21，26 项通过；新增测试静态检查无问题 | ✅ 已纳入本轮最新平台 / 端到端验证，见后续记录 |
+| 无 Make 启动入口扩展验证 | 不适用新增脚本，平台测试待重跑 | ✅ 2026-10-21，平台测试 28 项通过；PATH 中无 Make 时 `windows/run.ps1 -PrepareOnly` 通过（已有原生库）；图形启动和全新原生编译待按 M-15 验证 | Windows 专用脚本不适用；✅ 2026-10-21，新 Bash 终端执行 make run，Debug 编译、图形启动、VM Service 和 q 正常退出通过 |
+| P-01 ~ P-09（Linux 安装包扩展） | 新增检查待实机重跑 | 新增检查待实机重跑 | ✅ 2026-10-21，最终 28 项通过，含桌面 GIO 启动、JNI 约束和打包失败保护 |
+| 静态检查 | 本轮未重跑 | ✅ 客户端 lib / test / hook 与 server 均无问题 | ✅ 客户端与服务端静态检查无问题 |
+| dsh 真实安装端到端（`RMK_DSH_E2E=1`） | 本轮未重跑 | ✅ 2 项通过，下载 Node.js、npm 安装 dsh、ACP 启动与终端 JSON 协议联调实际执行 | ✅ 2 项通过，Node.js 24.22.0 / dsh 0.2.1-rc.2，npm 安装、ACP 和终端 JSON 协议实际执行；首次查询 TLS 中断，重试通过 |
+| 同步服务端测试 / 编译 | 本轮未重跑 | ✅ `dart test` 2 项通过，`make server` 生成 `dist/remlark-sync-server/bundle/bin/server.exe` | ✅ `dart test` 2 项通过；`dart build cli` 生成 `dist/remlark-sync-server/bundle/bin/server` |
+| 原生库编译与加载 | 本轮未重跑 | ✅ `make native-lib`；生成 RDP / SSH 加密 DLL；`native_crypto_test.dart` 实际执行未跳过，RDP FFI 加载、创建并释放会话通过；与 P 测试合计 25 项通过 | ✅ `make native-lib`、`make rdp-test-server`；RDP / SSH `.so` 和测试服务端编译通过，AES-GCM 对照和 RDP 端到端实际执行，`ldd -r` 无缺失库 / 未解析符号 |
 | Windows Release 打包 | — | ✅ 默认 `make`，`dist/remlark-windows-x64.zip`；已核对 exe、RDP / crypto / sqlite DLL 与 AOT 资源齐全；RDP DLL 仅依赖系统库。未在干净机器上启动 | — |
 | Windows 安装程序 | — | ✅ 默认 `make` 生成 `dist/remlark-1.0.0-windows-x64-setup.exe`；Inno Setup 6.7.3 编译通过，71 个条目完整性检查通过，含中英文、三项 VC++ 运行库与翻译许可证；M-14 实际安装 / 升级 / 卸载尚未执行 | — |
-| 打包后的服务端 HTTP 冒烟测试 | 本轮未重跑 | 未执行：自动审批拒绝后台启动编译产物的操作，未返回具体原因；源码方式的双客户端同步端到端测试已执行 | 未验证 |
-| M-01 ~ M-13 | 开发过程中使用过，没有按本清单逐项记录；arm64 未实机运行 | 未逐项手工验证；M-02 有中英文三种尺寸布局测试，M-09 真实安装和 M-13 自动同步覆盖部分流程；真实 SSH / RDP / VNC、DPI、干净机器启动等仍待验证 | 未验证 |
+| 打包后的服务端 HTTP 冒烟测试 | 本轮未重跑 | 未执行：自动审批拒绝后台启动编译产物的操作，未返回具体原因；源码方式的双客户端同步端到端测试已执行 | ✅ AOT 产物启动成功；未授权 401、授权 PUT 200、索引读取与 SQLite 写入通过 |
+| Linux Release 与安装包 | — | — | ✅ 默认 `make`；deb + tar.gz，109 个便携归档条目；所有必需原生库 / 资源齐全，无 JNI / Java 依赖；APT 模拟安装通过；包内 RDP 创建 / 释放与 AES-GCM NIST 对照 / 认证失败检查通过 |
+| Linux 分发包图形冒烟 | — | — | ✅ deb 解包启动两次、便携包解压到中文 / 空格 / % 路径启动两次；X11 窗口显示、最小尺寸、数据目录 / 密钥持久化通过；截图与日志在 build/validation；未在干净系统安装 |
+| M-01 ~ M-13 | 开发过程中使用过，没有按本清单逐项记录；arm64 未实机运行 | 未逐项手工验证；M-02 有中英文三种尺寸布局测试，M-09 真实安装和 M-13 自动同步覆盖部分流程；真实 SSH / RDP / VNC、DPI、干净机器启动等仍待验证 | 部分覆盖：deb 解包与便携包在本机桌面成功启动 / 重启、数据库 / master.key / 日志生成，密钥 600 且重启保留；最小尺寸 960×640；中英文三尺寸布局、真实本地 SSH / SFTP、RDP 测试服务端、dsh 与同步已自动覆盖。真实远程 Windows / macOS、系统对话框与拖放、干净机器安装 / 升级 / 卸载未逐项验证 |
 
 本轮构建在 VS 2022 x64 Developer PowerShell 中执行，Perl / NASM 使用本机便携工具，仅在构建进程中补充 PATH；OpenSSL 首次构建使用 JOM 并行完成，随后 `make native-lib` 与默认 `make` 增量构建通过。依赖和本地冒烟脚本保留在忽略的 `build/` 中。
+
+Linux 本轮原始日志与构建产物检查保留在忽略的 `build/validation/`；Flutter 安装在 `~/.local/opt/flutter`。系统依赖和后续复现命令见 [build-environment.md](build-environment.md#linuxubuntu--debian)。
+
+2026-10-21 Linux 开发启动补验：初次直接 `make run` 因 Flutter 未在终端 PATH 中以 Error 127 失败；将 `~/.local/opt/flutter/bin` 持久配置到本机 `~/.bashrc` / `~/.profile` 后，从交互 Bash 实际运行 `make run`，Debug 构建与启动成功。已有终端先执行 build 文档中的 PATH export，新终端自动生效。

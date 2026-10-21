@@ -159,21 +159,81 @@ make server
 
 ## Linux（Ubuntu / Debian）
 
-准备 Flutter、GNU Make、Clang、CMake、Ninja、GTK 开发包、pkg-config、Perl、zlib 开发包及解压工具，例如：
+本轮使用 **Ubuntu 26.04 LTS x86_64、Flutter 3.47.7 / Dart 3.13.5、Clang 21.1.8、GCC 15.2.0、CMake 4.2.3、Ninja 1.13.2、GTK 3.24.52、dpkg-deb 1.23.7**。原生依赖固定为 OpenSSL 3.6.5 / FreeRDP 3.32.2，源码由构建脚本下载，静态链接进 RDP / SSH 胶水库。源码构建需要 GitHub 网络访问；Flutter / pub 依赖也需要网络。
+
+### 安装构建与测试依赖
 
 ```bash
-sudo apt-get install build-essential clang cmake ninja-build pkg-config libgtk-3-dev \
-  perl zlib1g-dev curl ca-certificates tar zip unzip xdg-utils
+sudo apt-get update
+sudo apt-get install -y build-essential clang cmake ninja-build pkg-config \
+  libgtk-3-dev libstdc++-15-dev libsecret-1-dev fonts-noto-cjk perl zlib1g-dev \
+  curl ca-certificates tar zip unzip xdg-utils python3 dpkg-dev \
+  openssh-server xvfb xdotool desktop-file-utils
+```
+
+`libstdc++-15-dev` 对应本轮 Ubuntu 的 GCC 版本，其他发行版应使用配套的 libstdc++ 开发包。`openssh-server` 用于本地 SSH / SFTP 端到端测试，`xvfb` / `xdotool` 用于图形冒烟测试，`dpkg-dev` 提供根据 ELF 实际依赖生成 Debian 包 Depends 的 `dpkg-shlibdeps`。GTK 与 libsecret 开发包也是 Flutter 插件编译依赖，`fonts-noto-cjk` 用于中文显示与真实字体布局测试。
+
+Flutter SDK 可放在用户目录，无须 root。本轮位置为 `~/.local/opt/flutter`。全新机器可安装本轮验证的 SDK：
+
+```bash
+mkdir -p "$HOME/.local/opt"
+curl -fL --retry 3 \
+  https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.47.7-stable.tar.xz \
+  -o /tmp/flutter_linux_3.47.7-stable.tar.xz
+tar -xJf /tmp/flutter_linux_3.47.7-stable.tar.xz -C "$HOME/.local/opt"
+```
+
+本机已将 SDK 的 PATH 配置写入 `~/.bashrc` 和 `~/.profile`，新开的 Bash 终端会自动生效。已打开的终端不会自动刷新环境，先执行下面的 `export` 即可继续使用 `make run`。其他机器安装 SDK 后也需要配置 PATH：
+
+```bash
+export PATH="$HOME/.local/opt/flutter/bin:$PATH"
+flutter --version
 flutter doctor -v
 make deps
+make native-lib
+make rdp-test-server
 make test-platform
-make linux
+make test
+RMK_DSH_E2E=1 flutter test test/dsh_install_e2e_test.dart
+make analyze
+make linux  # Linux 下直接 make 也执行同一目标
 make server
 ```
 
-运行本机 SSH 端到端测试还需 `openssh-server`；图形测试需要桌面显示服务，CI 可按环境准备虚拟显示。FreeRDP / OpenSSL 使用源码构建，非必要媒体依赖已在 `native/rdp/scripts/build.sh` 关闭。
+Flutter 测试与 Flutter 应用构建顺序执行，保留锁文件，不执行依赖升级。首次原生库编译较慢，后续复用 `build/native/linux-x86_64/` 中的缓存。图形运行使用当前桌面会话；无桌面 CI 可用 `xvfb-run`，但系统文件选择器、拖放、真实远程主机等仍需手工验证。
 
-当前 `make linux` 按既有 Makefile 输出 `dist/remlark-linux-x64.tar.gz`，打包目录为 `build/linux/x64/release/bundle`，应在 Linux x64 环境使用。原生脚本支持 Linux aarch64，但整套 ARM64 打包路径仍需后续适配；本轮没有 Linux 实机验证。
+### 产物与安装
+
+| 产物 | 说明 |
+| --- | --- |
+| `dist/remlark-1.0.0-linux-amd64.deb` | Ubuntu / Debian x64 安装包，版本从 pubspec.yaml 读取 |
+| `dist/remlark-linux-x64.tar.gz` | 便携包，必须解压并保留整个 bundle |
+| `build/linux/x64/release/bundle/` | Flutter 原始 Release 输出 |
+| `dist/remlark-sync-server/bundle/` | 同步服务端，需整体分发 |
+
+```bash
+sudo apt install ./dist/remlark-1.0.0-linux-amd64.deb
+remlark
+# 卸载程序；应用数据保存在用户目录，不由包管理器删除。
+sudo apt remove remlark
+
+# 或使用便携包：
+tar -xzf dist/remlark-linux-x64.tar.gz
+./bundle/remlark
+python3 bundle/install-desktop.py  # 可选：为当前用户安装菜单入口与图标
+```
+
+Debian 包将程序安装到 `/opt/remlark`，命令入口为 `/usr/bin/remlark`，菜单与图标安装到 `/usr/share`。无需在用户机器安装 Flutter 或编译工具，但需要包中 Depends 声明的系统运行库。Depends 根据构建机器上的 ELF 库生成，因此应在支持的最旧发行版上构建；本轮 Ubuntu 26.04 产物不声明兼容更早的 Ubuntu。
+
+Linux CMake 关闭 Android 间接依赖带来的可选 JNI 插件，避免链接构建机的 Java 绝对路径。构建和运行 Linux 应用均不需要 JDK / JRE。
+
+已有完整 Release 时，可以单独重新打包：
+
+```bash
+python3 linux/packaging/build.py --arch x64
+```
+
+打包前检查 Flutter 引擎、AOT、sqlite、RDP / SSH 原生库及桌面资源；缺少必需组件会立即报错。Linux arm64 的 Makefile 使用 Flutter `arm64` 输出目录、Debian `arm64` 包架构，原生库继续使用 `linux-aarch64` 目录；本轮只验证 x64，arm64 仍需实机验证。
 
 ## 生成代码与服务端
 
@@ -185,4 +245,6 @@ make server
 
 服务端产物位于 `dist/remlark-sync-server/bundle/`；Windows 使用 `bin/server.exe`，macOS / Linux 使用 `bin/server`。从该 bundle 运行 `--help` 查看参数。开发时可执行 `make server-run TOKEN=<本地令牌>`，数据写入 `server/data/`。
 
-截至 2026-10-21，本轮验证环境为 Windows x64：应用、RDP / SSH 原生库和同步服务端已编译通过；安装器编译、完整性验证与专项测试结果记录在 [multi-platform-testing.md](multi-platform-testing.md)。跨平台实机测试和安装、升级、卸载的交互检查按其中的手工清单执行。
+截至 2026-10-21，Windows x64 验证：应用、RDP / SSH 原生库和同步服务端已编译通过；安装器编译、完整性验证与专项测试结果记录在 [multi-platform-testing.md](multi-platform-testing.md)。跨平台实机测试和安装、升级、卸载的交互检查按其中的手工清单执行。
+
+Linux x64 本轮完成默认 `make`、原生库与同步服务端编译：全量测试 139 项通过 / 6 项按条件跳过，另行启用的 dsh 2 项通过，最终平台测试 28 项、服务端测试 2 项通过；静态检查、deb 解包和便携包本机图形启动、包内原生库与 APT 模拟安装验证通过。真实远程主机及干净系统安装 / 升级 / 卸载仍按手工清单验证，结果见 [multi-platform-testing.md](multi-platform-testing.md)。

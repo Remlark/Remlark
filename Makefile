@@ -4,6 +4,7 @@
 APP_NAME   := remlark
 DIST_DIR   := dist
 SERVER_DIR := server
+LINUX_ARCH = $(if $(filter aarch64 arm64,$(shell uname -m)),arm64,x64)
 
 ifeq ($(OS),Windows_NT)
   CURRENT := windows
@@ -69,12 +70,10 @@ mac: deps native-lib
 	cd build/macos/Build/Products/Release && ditto -c -k --keepParent $(APP_NAME).app ../../../../../$(DIST_DIR)/$(APP_NAME)-macos.zip
 	@echo "输出：$(DIST_DIR)/$(APP_NAME)-macos.zip"
 
-# Linux：生成 bundle 并打包为 tar.gz
+# Linux：生成 Debian 安装包与便携 tar.gz，按主机架构选择 Flutter 输出目录
 linux: deps native-lib
 	flutter build linux --release
-	mkdir -p $(DIST_DIR)
-	tar -czf $(DIST_DIR)/$(APP_NAME)-linux-x64.tar.gz -C build/linux/x64/release bundle
-	@echo "输出：$(DIST_DIR)/$(APP_NAME)-linux-x64.tar.gz"
+	python3 linux/packaging/build.py --arch $(LINUX_ARCH) --output "$(DIST_DIR)"
 
 # Windows：生成安装向导 exe 与便携 zip（需要 Inno Setup 6.5+）
 windows: deps native-lib

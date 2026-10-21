@@ -7,7 +7,9 @@ OS="$(uname -s | tr '[:upper:]' '[:lower:]')"; [[ "$OS" == darwin ]] && OS=macos
 OUT="$ROOT/build/native/$OS-$ARCH"
 PREFIX="$OUT/prefix"
 SRC="$ROOT/native/rdp/.deps/FreeRDP-3.32.2"
-cmake -G Ninja -S "$SRC" -B "$OUT/test-server-build" -DCMAKE_BUILD_TYPE=Release \
+# 清理旧版配置缓存中的系统 OpenSSL 元数据，保证库与 pkg-config 都来自项目依赖。
+cmake -G Ninja -U '*OPENSSL*' -S "$SRC" -B "$OUT/test-server-build" -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH="$PREFIX" -DWITH_SYSTEMD=OFF \
   -DOPENSSL_ROOT_DIR="$PREFIX" -DOPENSSL_USE_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF \
   -DWITH_SERVER=ON -DWITH_SAMPLE=ON -DWITH_SHADOW=OFF -DWITH_PROXY=OFF -DWITH_PLATFORM_SERVER=OFF \
   -DWITH_CLIENT=OFF -DWITH_CLIENT_SDL=OFF -DWITH_X11=OFF -DWITH_WAYLAND=OFF -DWITH_FFMPEG=OFF -DWITH_SWSCALE=OFF \

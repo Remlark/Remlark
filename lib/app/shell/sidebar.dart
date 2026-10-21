@@ -96,9 +96,16 @@ class _Brand extends StatelessWidget {
             excludeFromSemantics: true,
           ),
           const SizedBox(width: 12),
-          Text(
-            'Remlark',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: p.text),
+          // 系统字体和缩放可能使品牌文字变宽，在剩余宽度内按需缩小。
+          Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Remlark',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: p.text),
+              ),
+            ),
           ),
         ],
       ),

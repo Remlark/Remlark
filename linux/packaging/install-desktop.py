@@ -27,7 +27,8 @@ def main():
     for char in ('\\', '"', '`', '$'):
         executable = executable.replace(char, '\\' + char)
     executable = executable.replace('\\', '\\\\')
-    desktop = desktop.replace('Exec=remlark', f'Exec="{executable}"')
+    # GIO 会先检查 Exec 的首个可执行文件，尚未展开 %%；使用 env 避免路径含 % 时被误判为不存在。
+    desktop = desktop.replace('Exec=remlark', f'Exec=/usr/bin/env "{executable}"')
     (applications / 'com.remlark.remlark.desktop').write_text(desktop)
     if shutil.which('gtk-update-icon-cache'):
         subprocess.run(['gtk-update-icon-cache', '-f', '-t', str(data / 'icons/hicolor')], check=False)

@@ -48,6 +48,10 @@ void main() {
     }
     // 构建钩子中 Windows / macOS 的 arm64 目录名为 arm64，Linux 为 aarch64
     expect(hook, contains("Architecture.arm64 => os == OS.linux ? 'aarch64' : 'arm64'"));
+    // macOS / Linux 测试服务端必须从同一前缀查找 OpenSSL 和 pkg-config 元数据。
+    final testServer = src('native/rdp/scripts/build_test_server.sh');
+    expect(testServer, contains(r'-DCMAKE_PREFIX_PATH="$PREFIX"'));
+    expect(testServer, contains('-DWITH_SYSTEMD=OFF'));
     final makefile = src('Makefile');
     expect(src('native/rdp/scripts/build.ps1'), contains('zlibstatic.lib'));
     expect(src('native/rdp/scripts/build.ps1'), contains('-DWITH_CCACHE=OFF'));

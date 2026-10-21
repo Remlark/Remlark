@@ -225,3 +225,10 @@
 - 使用内置 ImageGen 从选定设计提取透明素材，提示词：保持双窗口形状、颜色、比例与方向，仅移除外部灰色背景与投影，保留不透明青色底板，不添加文字或重设计。
 - `tools/branding/generate_icons.py`（Pillow）统一导出 macOS AppIcon、Windows 多尺寸 ICO、Linux hicolor PNG；`make icons` 重建，常规构建直接使用已提交资源。
 - Linux bundle 包含 `share/icons`、中英文 `.desktop` 与 `install-desktop.py`；窗口按应用 ID 关联图标。解压到固定位置后运行 `python3 install-desktop.py` 安装当前用户的应用菜单入口；移动 bundle 后重新运行。Windows 快捷方式默认使用 exe 内嵌 ICO；macOS 使用 Asset Catalog 编译图标。
+
+## Linux 分发（2026-10-21）
+
+- `make linux`（Linux 上默认 `make`）生成 Debian 系统安装包与完整 bundle 的便携 tar.gz，版本取自 `pubspec.yaml`，按当前 x64 / arm64 架构命名；本轮实机验证 x64。
+- Debian 包使用 `/opt/remlark` 保存完整应用、`/usr/bin/remlark` 提供命令入口，复用已有中英文桌面入口与 hicolor 图标。应用数据继续写入用户数据目录，升级与卸载仅管理程序文件。
+- 发布前必须包含 Flutter 引擎、AOT、sqlite、RDP 与 SSH 加密库及桌面资源；缺失时终止打包。系统运行库依赖由 ELF 自动计算，发行兼容性以实际构建系统为基线。
+- 构建环境与安装命令见 `docs/build-environment.md`，验证结果和待手工项目见 `docs/multi-platform-testing.md`。

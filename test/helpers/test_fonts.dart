@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 Future<void> loadTestFonts() async {
   const candidates = [
     '/System/Library/Fonts/Supplemental/Arial Unicode.ttf',
+    '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
     '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
     r'C:\Windows\Fonts\msyh.ttc',
   ];
