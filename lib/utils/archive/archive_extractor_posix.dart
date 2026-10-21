@@ -16,12 +16,13 @@ class PosixArchiveExtractor implements ArchiveExtractor {
             dest.path,
           ])
         : await Process.run('tar', ['-xzf', archive.path, '-C', dest.path]);
-    if (r.exitCode != 0)
+    if (r.exitCode != 0) {
       throw ProcessException(
         zip ? 'unzip' : 'tar',
         const [],
         '${r.stderr}'.trim(),
         r.exitCode,
       );
+    }
   }
 }

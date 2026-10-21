@@ -208,6 +208,8 @@ make server
 
 Flutter 测试与 Flutter 应用构建顺序执行，保留锁文件，不执行依赖升级。首次原生库编译较慢，后续复用 `build/native/linux-x86_64/` 中的缓存。图形运行使用当前桌面会话；无桌面 CI 可用 `xvfb-run`，但系统文件选择器、拖放、真实远程主机等仍需手工验证。
 
+2026-10-21 H.264 补验时，本机缺少 NASM 与 libva 开发文件，且当前终端不能免密 sudo；通过 `apt-get download nasm libva-dev` 下载发行版包，解包到忽略的 `build/linux-test-deps/root/`，沿用系统已安装的 libva 运行库。该工作区后续编译先执行 `source build/validation/linux-h264-env.sh`，仅对当前终端补充 PATH、pkg-config、头文件及链接路径；其他机器推荐按上面的 apt 命令安装完整系统依赖。执行 `make clean` 会移除这些本地工具与环境脚本，届时需重新准备依赖。本机只有虚拟显示设备，没有 DRM 渲染节点，因此本轮可验证 H.264 软件解码及硬件不可用时的回退，实际 VAAPI GPU 解码仍需支持的显卡、驱动与渲染节点权限。
+
 ### 产物与安装
 
 | 产物 | 说明 |

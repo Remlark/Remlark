@@ -45,8 +45,9 @@ void main() {
 
   test('解压 .tar.gz：还原目录结构与中文文件名，POSIX 平台保留可执行权限', () async {
     final src = source();
-    if (!Platform.isWindows)
+    if (!Platform.isWindows) {
       await Process.run('chmod', ['755', p.join(src.path, 'bin', 'tool')]);
+    }
     final archive = p.join(tmp.path, 'a.tar.gz');
     // Windows ARM64 系统 tar 的创建路径会在中文文件名上崩溃，用独立工具生成标准 UTF-8 夹具。
     final r = Platform.isWindows

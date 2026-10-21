@@ -583,6 +583,15 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 用 GDI TRACE 日志核对实际图形编码，区分本机具备 H.264 解码能力、服务器实际发送 H.264、本机实际使用 GPU 硬解三个不同结论。
   - 验证：AMD-Windows 的两种模式均实际认证成功，1280×800 画面分别收到 36 / 38 次更新，开始菜单打开 / 关闭与截图检查通过；平台测试 46 项通过 / P-12 默认跳过 1 项，显式启用 P-12 的真实测试 1 项通过，静态检查无问题。日志只观察到 ClearCodec / Progressive / Uncompressed，未观察到 H.264；本机 D3D11VA 不可用，真实 H.264 和 GPU 硬解仍待具备条件时验证。macOS / Linux 本轮未执行。
 
+- [已完成] Step 83.3：Linux H.264 回归测试与 Release 编译
+  - 环境：Ubuntu 26.04 LTS x86_64、Flutter 3.47.7 / Dart 3.13.5，基于 `e2a7417`；本机无 DRM 渲染节点，VAAPI GPU 硬解不可用。
+  - 用发行版 NASM / libva-dev 包在 `build/` 中准备用户态构建依赖，重编 FFmpeg、FreeRDP 与 RDP / SSH 原生库；确认 H.264 解码器、VAAPI 硬件加速已编入，`ldd -r` 无缺失依赖或未解析符号。
+  - `make test-platform` 41 项通过 / P-12 默认跳过 1 项；P-11 的 8 项全部执行，实际软件解码与请求硬解时的软件回退颜色正确且一致，无效码流不崩溃。
+  - `make test` 客户端 156 项通过 / 7 项按条件跳过、服务端 2 项通过，覆盖 RDP 连接 / 输入更新 / 剪贴板、设置开关及中英文布局；修正解压模块和对应测试的两处花括号 lint，`make analyze` 全部通过。
+  - 默认 `make` 成功生成 Linux Release、deb 与便携 tar.gz；两种分发包中的 RDP 库均与本轮原生构建一致，包内库实际解码颜色正确、软解与硬解回退最大 RGB 差为 0；deb 自动声明 libva2 / libva-drm2 依赖，APT 模拟安装通过。
+  - deb 解包后在 Xvfb 中隔离数据目录启动两次，1280×820 窗口、960×640 最小尺寸和密钥持久化通过，截图检查正常。日志、截图和依赖环境脚本保留在 `build/validation/linux-h264*`。
+  - 真实 VAAPI GPU 解码、真实远程 Windows 主机 M-17、Linux ARM64 本轮未验证；macOS / Windows 本轮未重跑。
+
 ## 构建与运行命令
 
 | 命令 | 说明 |
