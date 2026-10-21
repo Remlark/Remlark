@@ -224,7 +224,7 @@
 - 透明母版：`assets/branding/app_icon_source.png`；界面资源：`assets/branding/app_icon.png`。侧栏品牌统一使用图片，Remlark 品牌名称不翻译，不增加交互。
 - 使用内置 ImageGen 从选定设计提取透明素材，提示词：保持双窗口形状、颜色、比例与方向，仅移除外部灰色背景与投影，保留不透明青色底板，不添加文字或重设计。
 - `tools/branding/generate_icons.py`（Pillow）统一导出 macOS AppIcon、Windows 多尺寸 ICO、Linux hicolor PNG；`make icons` 重建，常规构建直接使用已提交资源。
-- Linux bundle 包含 `share/icons`、中英文 `.desktop` 与 `install-desktop.py`；窗口按应用 ID 关联图标。解压到固定位置后运行 `python3 install-desktop.py` 安装当前用户的应用菜单入口；移动 bundle 后重新运行。Windows 快捷方式默认使用 exe 内嵌 ICO；macOS 使用 Asset Catalog 编译图标。
+- Linux bundle 包含 `share/icons`、中英文 `.desktop` 与 `install-desktop.py`；窗口按应用 ID 关联图标。解压到固定位置后运行 `python3 install-desktop.py` 安装当前用户的应用菜单入口；移动 bundle 后重新运行。Windows 快捷方式默认使用 exe 内嵌 ICO；macOS 使用 Asset Catalog 编译图标，AppDelegate 启动完成后通过 Branding/ApplicationIcon.swift 直接读取当前包的 AppIcon.icns 并刷新 NSApplication 图标，避免 Dock 使用历史缓存。
 
 ## Linux 分发（2026-10-21）
 

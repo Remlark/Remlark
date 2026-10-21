@@ -608,6 +608,12 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 验证：[GitHub Actions](https://github.com/Remlark/Remlark/actions/runs/39622112845)，提交 `cb93ed1`，五路编译 / 打包全部通过；macOS / Linux 双架构构建前后各 48 项、Windows 双架构各 54 项平台测试通过，均只跳过需真实主机的 P-12。macOS / Windows 安装包元数据校验通过，发布任务跳过。
   - 本机：make test-platform 48 项通过 / P-12 跳过；Codex 7 项、同步服务端 2 项通过，静态检查通过；macOS Release 实际编译并核对 Info.plist 为 1.0.0 / 1。
 
+- Step 86：修复 macOS Dock 显示旧应用图标
+  - 检查 Debug / Release AppIcon.icns，确认均已是“连接之门”；补充启动完成时显式从当前应用包加载图标并设置 NSApplication.applicationIconImage，不重启 Dock 或修改系统偏好。
+  - macOS 图标逻辑独立在 Runner/Branding/ApplicationIcon.swift；Info.plist 显式指定 AppIcon。Windows 保持 exe 内嵌 ICO，Linux 保持应用 ID / desktop 关联。
+  - 新增 P-14：三平台资源一致性 / 系统入口；macOS 编译真实原生图标实现，用隐藏测试进程验证实际图标刷新与缺失资源保留旧图标；新增 M-19。
+  - 验证中：本机专项、应用重新编译与三平台 make test-platform。
+
 ## 构建与运行命令
 
 | 命令 | 说明 |
