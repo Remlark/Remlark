@@ -487,6 +487,12 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - Windows 图标内容最大边长由 208px 缩小至 176px（约 15%），256px 画布与界面底板尺寸不变。生成脚本读取单图 `content_size` 配置，重新生成时保留该比例。
   - 更新图标总览，检查 20px 与 36px 显示效果。
 
+- [已完成] Step 74：统一「连接之门」应用图标
+  - 侧栏品牌替换为第二版透明图标，保持现有布局和中英文品牌展示。
+  - 更新 macOS 全尺寸 AppIcon、Windows 多帧 ICO；增加 Linux hicolor 图标、窗口关联、中英文桌面入口与当前用户安装脚本。
+  - 保留透明母版与统一导出脚本，`make icons` 可重建所有平台资源。
+  - 验证：flutter analyze、现有 UI 快照测试、macOS Release 构建通过；检查 17 张透明 PNG 与 7 帧 ICO，Linux 安装脚本验证含空格路径及保留已有主题。Windows/Linux 尚未在对应系统构建验证。
+
 ## 构建与运行命令
 
 | 命令 | 说明 |

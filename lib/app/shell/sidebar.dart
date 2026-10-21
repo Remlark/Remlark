@@ -87,21 +87,13 @@ class _Brand extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(22, 22, 16, 22),
       child: Row(
         children: [
-          Container(
+          // 品牌图片与平台应用图标共享母版，旁边已有品牌文本，无需重复朗读。
+          Image.asset(
+            'assets/branding/app_icon.png',
             width: 30,
             height: 30,
-            decoration: BoxDecoration(color: p.accentFill, borderRadius: BorderRadius.circular(7)),
-            alignment: Alignment.center,
-            child: Text(
-              '>_',
-              style: TextStyle(
-                color: p.onAccent,
-                fontWeight: FontWeight.w800,
-                fontSize: 14,
-                fontFamily: 'monospace',
-                height: 1,
-              ),
-            ),
+            filterQuality: FilterQuality.medium,
+            excludeFromSemantics: true,
           ),
           const SizedBox(width: 12),
           Text(

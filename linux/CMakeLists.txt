@@ -126,3 +126,11 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
   install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endif()
+
+# 将 Linux 图标及桌面入口一起放入可重定位 bundle。
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/packaging/icons/"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}/share/icons" COMPONENT Runtime)
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/com.remlark.remlark.desktop"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}/share/applications" COMPONENT Runtime)
+install(PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/install-desktop.py"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)

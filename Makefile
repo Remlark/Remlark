@@ -113,3 +113,8 @@ server-run:
 clean:
 	flutter clean
 	rm -rf $(DIST_DIR)
+
+# 从品牌母版重新导出平台图标（仅更新图标时需要 Python 3 与 Pillow）。
+.PHONY: icons
+icons:
+	python3 tools/branding/generate_icons.py

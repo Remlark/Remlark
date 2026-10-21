@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Remlark
+Comment=Remote terminal and desktop workspace
+Comment[zh_CN]=远程终端与桌面工作区
+Exec=remlark
+Icon=com.remlark.remlark
+Terminal=false
+Categories=Network;RemoteAccess;
+StartupWMClass=com.remlark.remlark
