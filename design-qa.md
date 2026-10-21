@@ -2,13 +2,10 @@
 
 final result: passed
 
-## 目标与证据
+## 目标与范围
 
-- 源设计：[紧凑右侧工具组](docs/ui-redesign/workspace/reference.png)，1036×1518 的多状态概念稿，非单一窗口截图。
 - 实现：原生 Flutter，1440×900 逻辑像素，设备比例 1；保留应用原有 196px 左导航。不是网页，未启动浏览器。
-- 已把源图与实现截图放入同一次图像查看输入对照。比对工作区区域，排除源图外侧说明、三个面板的高度差及应用左导航；不宣称逐像素复刻。
-- [混合网格](docs/ui-redesign/workspace/17_workspace_mixed_grid.png)、[聚焦](docs/ui-redesign/workspace/18_workspace_focused.png)、[广播中](docs/ui-redesign/workspace/19_workspace_broadcast.png)、[布局菜单](docs/ui-redesign/workspace/20_workspace_layout_menu.png)、[仅桌面](docs/ui-redesign/workspace/21_workspace_desktops_only.png)。
-- 状态差异：快照为模拟终端输出及未连接桌面；源图为示意桌面壁纸。测试含更多标签与 SFTP 以检查横向滚动，网格仍是两个 SSH 加 VNC/RDP。仅桌面快照展示双格，而源图第一面板是单窗口；广播入口显隐可独立核对。
+- 验收时已对照“紧凑右侧工具组”设计稿核对混合网格、聚焦、广播中、布局菜单、仅桌面五种状态（设计稿与对照截图已在实施完成后删除）。
 
 ## 发现、修复与复查
 

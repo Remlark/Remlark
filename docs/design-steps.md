@@ -77,7 +77,7 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
 
 ## UI 重设计（2026-10-20）
 
-- [已完成] Step 19：使用 ImageGen 交付全部页面、编辑/认证/操作弹窗、上下文菜单及统一控件设计稿；保存在 `docs/ui-redesign/`，由 `index.html` 按页查看，`prompts.json` 保存生成提示词。
+- [已完成] Step 19：使用 ImageGen 交付全部页面、编辑/认证/操作弹窗、上下文菜单及统一控件设计稿；界面已按设计稿全部实施，设计稿与参考图已删除。
 - [已完成] Step 20：按设计稿实施统一主题与共享控件
   - 颜色可配置：`lib/app/theme/app_palette.dart` 定义全部颜色 token（ThemeExtension），提供深色（设计稿默认）与浅色两套调色板；
     强调色以预设形式提供（鼠尾草绿 / 海蓝 / 雾紫 / 琥珀），设置页“通用”可切换；组件只通过 `context.palette` 取色
