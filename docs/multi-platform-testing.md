@@ -259,3 +259,20 @@ Windows ARM64 CI 发现系统 tar 创建中文路径时崩溃、ZIP 中文条目
 本轮修复：新增仅构建入口；修复新增 P-10 检查在 Windows CRLF 下的误报；P-11 原先要求整帧软硬解差不超过 4，macOS ARM64 在双色交界两列出现有限差异。现平坦区域仍逐像素要求不超过 4，只对交界两侧各 2 像素允许不超过 64，并输出差异列；云端证实平坦区域完全一致，没有把整帧颜色误差阈值放宽。
 
 本机补验：`make test-platform` 42 项通过 / P-12 跳过，启用强制原生库检查的 P-11 通过；静态检查通过。第二轮 Linux 双架构便携包已下载核对，主程序、RDP 与 SSH 加密库的 ELF 架构分别为 x86-64 / AArch64。最终五路日志与任务状态保存在忽略目录 `build/validation/github-h264/final/`。
+
+
+### 2026-10-21 VERSION 统一版本验证（Step 85）
+
+[GitHub Actions](https://github.com/Remlark/Remlark/actions/runs/39622112845) 使用提交 `cb93ed1`、`VERSION=1.0.0+1`，五路全部成功；应用与同步服务 pubspec 均不再声明版本。发布任务按仅构建模式跳过，五组安装包已上传。
+
+| runner / CPU | 构建前后 make test-platform | 编译与打包结果 |
+| --- | --- | --- |
+| macos-15 / arm64 | 各 48 项通过 / P-12 跳过 | 通用 app / zip / DMG；DMG 入口核对 Info.plist 版本 1.0.0、构建号 1 |
+| windows-2022 / x64 | 各 54 项通过 / P-12 跳过 | exe / 安装器 / zip；打包入口核对 exe 数字资源版本 1.0.0.1 |
+| windows-11-arm / arm64 | 各 54 项通过 / P-12 跳过 | ARM64 exe / 安装器 / zip；同样通过 1.0.0.1 资源版本核对 |
+| ubuntu-24.04 / x64 | 各 48 项通过 / P-12 跳过 | amd64 deb / x64 tar.gz；Debian control 与文件名使用 VERSION |
+| ubuntu-24.04-arm / arm64 | 各 48 项通过 / P-12 跳过 | arm64 deb / tar.gz；Debian control 与文件名使用 VERSION |
+
+P-13 在三个系统实际执行，隔离夹具的 VERSION 为 `2.3.4-rc.2+17`，pubspec 故意为 `9.9.9+9`，验证没有读取 pubspec；真实替身子进程验证编译版本、构建号、Dart define、开发 run 参数与退出码。macOS 旧应用元数据不匹配时拒绝打包，Windows 专项也验证旧 exe 被拒绝。发布清单夹具继续验证版本标签与十项附件 SHA-256。
+
+本机 `make test-platform` 48 项通过 / P-12 跳过，Codex 7 项、服务端 2 项通过，静态检查通过。实际 macOS Release 编译与 Info.plist 核对通过。日志与状态保存在忽略目录 `build/validation/version/`；M-18 的系统界面显示、安装升级等交互检查仍按手工清单验证。
