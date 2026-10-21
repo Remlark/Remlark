@@ -4,6 +4,36 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// 多平台测试 P-10：版本标签、发布附件完整性及失败时阻止发布。
 void main() {
+  test('手工构建默认不发布，三个平台编译后都重新执行平台测试', () {
+    final workflow = File('.github/workflows/release.yml').readAsStringSync();
+    // 手工验证与正式发布共用矩阵，默认只构建分支；版本标签仍走正式发布。
+    expect(workflow, contains('build_only:'));
+    expect(workflow, contains('default: true\n        type: boolean'));
+    expect(
+      workflow,
+      contains('ref: \u0024{{ inputs.tag || github.ref_name }}'),
+    );
+    final releaseGuard =
+        "if: github.event_name != 'workflow_dispatch' || !inputs.build_only";
+    expect(releaseGuard.allMatches(workflow).length, 2);
+    expect(
+      workflow.substring(workflow.indexOf('  publish:')),
+      contains(releaseGuard),
+    );
+    // 两个构建后入口分别覆盖 Windows 和 macOS / Linux，确保加载本轮原生库。
+    final postBuild = workflow.substring(workflow.indexOf('      # 原生库编译后'));
+    expect('make test-platform'.allMatches(postBuild).length, 2);
+    for (final runner in [
+      'ubuntu-24.04',
+      'ubuntu-24.04-arm',
+      'windows-2022',
+      'windows-11-arm',
+      'macos-15',
+    ]) {
+      expect(workflow, contains('runner: $runner }'));
+    }
+  });
+
   test('版本标签不匹配时拒绝发布', () async {
     final result = await Process.run(
       'python3',

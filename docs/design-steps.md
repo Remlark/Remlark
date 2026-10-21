@@ -592,6 +592,11 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - deb 解包后在 Xvfb 中隔离数据目录启动两次，1280×820 窗口、960×640 最小尺寸和密钥持久化通过，截图检查正常。日志、截图和依赖环境脚本保留在 `build/validation/linux-h264*`。
   - 真实 VAAPI GPU 解码、真实远程 Windows 主机 M-17、Linux ARM64 本轮未验证；macOS / Windows 本轮未重跑。
 
+- Step 84：硬件加速版本 GitHub Actions 全矩阵构建验证
+  - Release 工作流增加默认开启的仅构建模式，手工运行可使用分支代码，复用五路编译与打包流程并跳过发布。
+  - 三个平台在原生库编译后重新执行 `make test-platform`，覆盖 H.264 实际解码和硬件不可用时的软件回退。
+  - 验证中：macOS universal、Windows x64 / arm64、Linux x64 / arm64；记录云端问题与修复结果。
+
 ## 构建与运行命令
 
 | 命令 | 说明 |

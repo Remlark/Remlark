@@ -1,5 +1,5 @@
 name: Desktop Release
-run-name: Desktop Release · ${{ inputs.tag || github.ref_name }}
+run-name: Desktop ${{ github.event_name == 'workflow_dispatch' && inputs.build_only && 'Build' || 'Release' }} · ${{ inputs.tag || github.ref_name }}
 
 on:
   push:
@@ -8,8 +8,13 @@ on:
     inputs:
       tag:
         description: '已有版本标签，例如 v1.0.0（必须与 pubspec.yaml 一致）'
-        required: true
+        required: false
         type: string
+      build_only:
+        description: '仅验证五路构建、平台测试与安装包，不发布 Release；留空 tag 时构建所选分支'
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -44,6 +49,7 @@ jobs:
           ref: ${{ inputs.tag || github.ref_name }}
           persist-credentials: false
       - name: Validate release tag
+        if: github.event_name != 'workflow_dispatch' || !inputs.build_only
         env:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: python3 tools/release/prepare.py validate
@@ -120,15 +126,15 @@ jobs:
           make mac
           python3 tools/release/prepare.py macos
       # 原生库编译后实际解码 H.264（P-11）：硬件可用时走平台硬件解码，否则软件解码，两者都要颜色正确
-      - name: RDP H.264 decode tests
+      - name: Post-build platform and H.264 decode tests
         if: runner.os != 'Windows'
-        run: flutter test test/platform/rdp_h264_test.dart
-      - name: Windows RDP H.264 decode tests
+        run: make test-platform
+      - name: Windows post-build platform and H.264 decode tests
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          flutter test test/platform/rdp_h264_test.dart
-          if ($LASTEXITCODE -ne 0) { throw 'RDP H.264 decode tests failed' }
+          make test-platform
+          if ($LASTEXITCODE -ne 0) { throw 'Post-build platform tests failed' }
       # 打包失败时仍保存已经编译完成的原生库，重试无需重复编译 OpenSSL。
       - name: Save complete native dependencies
         if: always() && steps.native-cache.outputs.cache-hit != 'true' && hashFiles('build/native/**/remlark_rdp.dll', 'build/native/**/libremlark_rdp.so', 'build/native/**/libremlark_rdp.dylib') != ''
@@ -159,6 +165,7 @@ jobs:
   publish:
     name: Publish complete release
     needs: build
+    if: github.event_name != 'workflow_dispatch' || !inputs.build_only
     runs-on: ubuntu-24.04
     permissions:
       contents: write

@@ -235,6 +235,7 @@
 
 ## 自动发布
 - `.github/workflows/release.yml` 在推送与 pubspec 版本一致的 `v*` 标签或手工指定已有标签后运行。
+- 手工运行默认仅验证构建（`build_only=true`），tag 留空时使用所选分支；与正式发布共用完整五路编译、安装包和构建后平台测试，跳过标签校验与发布任务。正式手工发布需指定版本标签并关闭 `build_only`。
 - 独立原生 runner 构建 Windows x64 / arm64、Linux x64 / arm64；macOS 构建包含 Intel / Apple Silicon 的通用 app、zip 与 DMG，发布前用 lipo 检查主程序与 FFI 库。
 - 每个 runner 顺序执行依赖准备、`make test-platform` 与构建，保留锁文件。Windows 安装器架构与 Flutter / MSVC 目标一致，附带对应架构 CRT。
 - 所有任务通过且 10 个安装 / 便携包完整后生成 SHA256SUMS；先上传草稿再公开 Release。默认 token 只读，仅发布任务有 contents:write。
