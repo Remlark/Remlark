@@ -13,13 +13,20 @@ void main() {
     expect(makefile, contains('windows/packaging/build.ps1'));
     final installer = File('windows/packaging/remlark.iss').readAsStringSync();
     expect(installer, contains('PrivilegesRequired=lowest'));
-    expect(installer, contains(r'DefaultDirName={localappdata}\Programs\Remlark'));
+    expect(
+      installer,
+      contains(r'DefaultDirName={localappdata}\Programs\Remlark'),
+    );
     expect(installer, contains('ArchitecturesAllowed=x64compatible'));
     expect(installer, contains('compiler:Default.isl'));
     expect(installer, contains(r'languages\ChineseSimplified.isl'));
     expect(installer, isNot(contains('[UninstallDelete]')));
     expect(File('windows/packaging/languages/LICENSE').existsSync(), isTrue);
-    expect(File('windows/packaging/build.ps1').readAsBytesSync().take(3), [0xef, 0xbb, 0xbf]);
+    expect(File('windows/packaging/build.ps1').readAsBytesSync().take(3), [
+      0xef,
+      0xbb,
+      0xbf,
+    ]);
   });
 
   test('Windows 开发运行入口无须 Make，保留按需构建与显式重编译方式', () {
@@ -81,20 +88,21 @@ void main() {
   tearDown(() => root.deleteSync(recursive: true));
 
   /// 通过实际 Windows PowerShell 调用打包入口。
-  Future<ProcessResult> runPackaging(List<String> extra) => Process.run('powershell', [
-    '-NoProfile',
-    '-ExecutionPolicy',
-    'Bypass',
-    '-File',
-    'windows/packaging/build.ps1',
-    '-ReleaseDir',
-    release.path,
-    '-RuntimeDir',
-    runtime.path,
-    '-OutputDir',
-    p.join(root.path, 'output'),
-    ...extra,
-  ]);
+  Future<ProcessResult> runPackaging(List<String> extra) =>
+      Process.run('powershell', [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        'windows/packaging/build.ps1',
+        '-ReleaseDir',
+        release.path,
+        '-RuntimeDir',
+        runtime.path,
+        '-OutputDir',
+        p.join(root.path, 'output'),
+        ...extra,
+      ]);
 
   test('暂存完整应用与 VC++ 运行库，原始 Release 保持完整', () async {
     final result = await runPackaging(['-StageOnly', '-Arch', 'arm64']);
@@ -106,6 +114,17 @@ void main() {
     }
     expect(File(p.join(release.path, 'msvcp140.dll')).existsSync(), isFalse);
     expect(File(p.join(release.path, 'data/app.so')).existsSync(), isTrue);
+  });
+
+  test('ARM64 不要求 x64 专用运行库，x64 必须包含 FH4 运行库', () async {
+    File(p.join(runtime.path, 'vcruntime140_1.dll')).deleteSync();
+    final arm = await runPackaging(['-StageOnly', '-Arch', 'arm64']);
+    expect(arm.exitCode, 0, reason: '${arm.stdout}${arm.stderr}');
+    final stage = Directory((arm.stdout as String).trim());
+    addTearDown(() => stage.deleteSync(recursive: true));
+    final x64 = await runPackaging(['-StageOnly', '-Arch', 'x64']);
+    expect(x64.exitCode, isNot(0));
+    expect(x64.stderr, contains('vcruntime140_1.dll'));
   });
 
   test('缺少原生库或 VC++ 运行库时阻止生成不完整安装包', () async {

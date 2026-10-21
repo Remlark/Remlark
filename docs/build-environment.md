@@ -267,3 +267,5 @@ Windows ARM64 自动选择匹配架构的 CRT 和安装器；手工可执行 `ma
 Release CI 额外固定 FreeRDP `USE_VERSION_FROM_GIT_TAG=OFF`，防止读取应用标签后生成错误的 ABI 库名。Windows 构建步骤使用原生 PowerShell，源码解压显式调用系统 tar，避免 Git Bash 工具覆盖系统命令。
 
 Windows 测试还需要 Python 3（GitHub runner 已提供），用于生成包含中文文件名的标准 PAX 测试夹具；应用运行不需要 Python。GNU Make 调用 NMake 时会暂时清除 MAKEFLAGS 并恢复，避免 GNU 长参数污染 OpenSSL 构建。
+
+Windows 应用解压使用 archive 4.5.2 的流式接口，在独立 isolate 处理大包，规避 ARM64 系统 tar 的 Unicode 缺陷；这是新增依赖，原有锁定版本未升级。CRT 按架构校验：x64 要求 FH4 的 vcruntime140_1.dll，ARM64 不要求；附带目标架构完整 CRT 目录。

@@ -28,7 +28,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | --- | --- | --- | --- | --- | --- | --- |
 | Codex 运行包 | [lib/modules/ai/codex/platform/](../lib/modules/ai/codex/platform/) | `*-apple-darwin.tar.gz` | `*-pc-windows-msvc.tar.gz`，文件名带 `.exe` | `*-unknown-linux-musl.tar.gz` | P-01 | M-08 |
 | dsh 私有 Node.js | [lib/modules/ai/dsh/platform/](../lib/modules/ai/dsh/platform/) | `darwin-*.tar.gz`，`bin/node` | `win-*.zip`，根目录 `node.exe`，PATH 分隔符 `;` | `linux-*.tar.gz`，`bin/node` | P-02 | M-09 |
-| 压缩包解压 | [lib/utils/archive/](../lib/utils/archive/) | `tar` / `unzip` | `System32\tar.exe`（UTF-8）解压 tar.gz，PowerShell `Expand-Archive` 解压 zip | `tar` / `unzip` | P-03 | M-08、M-09 |
+| 压缩包解压 | [lib/utils/archive/](../lib/utils/archive/) | `tar` / `unzip` | Dart 流式解压 tar.gz / zip，独立 isolate，不依赖系统 tar | `tar` / `unzip` | P-03 | M-08、M-09 |
 | 主目录、PATH 查找 | [lib/utils/platform_utils.dart](../lib/utils/platform_utils.dart) | `HOME`；额外查找 Homebrew 目录 | `USERPROFILE`；依次补 `.exe` `.bat` `.cmd` 后缀 | `HOME` | P-04 | — |
 | 打开文件管理器、浏览器 | [lib/utils/platform_utils.dart](../lib/utils/platform_utils.dart) | `open` | `explorer`、`rundll32 url.dll,FileProtocolHandler` | `xdg-open` | — | M-10 |
 | 主密钥、凭据目录权限 | [lib/utils/file_permissions/](../lib/utils/file_permissions/)，调用方 `secret_store.dart`、Codex / dsh 的 HOME 目录 | `chmod 600/700` | `icacls /inheritance:r /grant:r <用户>:F`（目录加 `(OI)(CI)`） | `chmod 600/700` | P-04 | M-01 |
@@ -180,4 +180,4 @@ Linux 本轮原始日志与构建产物检查保留在忽略的 `build/validatio
 - 在干净的 Windows x64 / arm64、Linux x64 / arm64、Intel / Apple Silicon macOS 下载匹配附件，验证 SHA256SUMS，安装 / 启动 / 升级 / 卸载，并连接 SSH / RDP 验证 FFI。
 - macOS DMG 拖入 Applications，确认双架构主程序和原生库；当前未配置开发者证书、公证或 Windows 代码签名。CI 编译成功不代替实机交互验证。
 
-Windows ARM64 CI 发现系统 tar 创建中文路径时崩溃、ZIP 中文条目不可读，P-03 使用 Python 生成标准 PAX 夹具并检验真实解压；Windows ZIP 改用 .NET，tar.gz 显式指定 UTF-8。
+Windows ARM64 CI 发现系统 tar 创建中文路径时崩溃、ZIP 中文条目不可读，P-03 使用 Python 生成标准 PAX 夹具并检验真实解压；Windows 改用 Dart 流式解压，两种格式的 Windows 解码实现也在 macOS / Linux 上验证。

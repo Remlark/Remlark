@@ -69,6 +69,13 @@ void main() {
     await ArchiveExtractor.current().extract(File(archive), dest);
     expectExtracted(dest);
     if (!Platform.isWindows) {
+      // 三平台都验证 Windows 的纯 Dart 解码，提前发现 Unicode 和流式读取回归。
+      final windowsDest = Directory(p.join(tmp.path, 'windows-out'))
+        ..createSync();
+      await WindowsArchiveExtractor().extract(File(archive), windowsDest);
+      expectExtracted(windowsDest);
+    }
+    if (!Platform.isWindows) {
       final mode = File(p.join(dest.path, 'bin', 'tool')).statSync().mode;
       expect(mode & 0x40, isNot(0), reason: '所有者可执行位丢失');
     }
@@ -104,6 +111,13 @@ void main() {
     final dest = Directory(p.join(tmp.path, 'out'))..createSync();
     await ArchiveExtractor.current().extract(File(archive), dest);
     expectExtracted(dest);
+    if (!Platform.isWindows) {
+      // 三平台都验证 Windows 的纯 Dart 解码，提前发现 Unicode 和流式读取回归。
+      final windowsDest = Directory(p.join(tmp.path, 'windows-out'))
+        ..createSync();
+      await WindowsArchiveExtractor().extract(File(archive), windowsDest);
+      expectExtracted(windowsDest);
+    }
   });
 
   test('压缩包损坏时抛出 ProcessException', () async {

@@ -67,7 +67,7 @@
 - DeepSeek Harness（dsh）：第一个运行环境实现（`DshRuntimeController`），由应用安装、更新、移除，不依赖也不修改本机的 node / npm / dsh。
   - 安装（`modules/ai/dsh/dsh_installer.dart`）：dsh 只以 npm 包 `@deepseek-ai/dsh` 发布，先从 nodejs.org 下载最新 LTS 的 Node.js 官方包（按 SHASUMS256.txt 校验），再用这个 Node 自带的 npm 安装 dsh；先装到临时目录并运行 `dsh --version` 验证，再整目录替换，失败或中断不破坏已安装版本。Node 只在缺失或主版本落后最新 LTS 时重装。
   - 目录（应用数据目录下 `dsh/`）：`node`（Node.js）、`runtime`（dsh 及依赖，约 1GB）、`home`（DSH_HOME：profile 与会话记录，升级和移除运行环境时保留）、`workspace`（会话工作目录，空目录）。
-  - 平台差异（安装包名、node/npm 路径）由 `DshPlatform` 接口封装，macOS / Linux / Windows 各自实现；解压使用公共的 `utils/archive/ArchiveExtractor`（同样按平台实现：系统 tar / unzip，Windows 用 System32 的 bsdtar（tar.gz 指定 UTF-8）与 PowerShell .NET（zip，避开 ARM64 系统 tar 的中文兼容问题））。
+  - 平台差异（安装包名、node/npm 路径）由 `DshPlatform` 接口封装，macOS / Linux / Windows 各自实现；解压使用公共的 `utils/archive/ArchiveExtractor`（同样按平台实现：系统 tar / unzip，Windows 用 Dart 流式解压（独立 isolate，避开 ARM64 系统 tar 的中文缺陷））。
   - 运行（`dsh_acp_service.dart`）：`node <dsh 入口> --profile acp` 常驻子进程，标准输入输出上走 ACP（Agent Client Protocol，JSON-RPC 2.0，每行一条消息，连接为 dsh 与 Codex 共用的 `runtime/json_rpc_connection.dart`）。首次提问时启动，所有聊天共用；每个 API Key 一个进程（以 `DEEPSEEK_API_KEY` 环境变量传入）；进程退出后下次提问自动重启；安装或升级前结束进程。
   - 会话：每个聊天一个 dsh 会话（`session/new`，会话 id 存为聊天的外部会话 id）；同一进程中直接 `session/prompt` 续问；进程重启后 `session/resume`；恢复失败时新建会话，第一条消息附上之前的对话。配置了模型时按名称匹配会话公布的模型选项并 `session/set_config_option`。
   - 提问结束后继续接收迟到的更新（300ms 内无新更新才结束本轮，还没有回答文本时最多等 5 秒），防止 dsh 偶发先返回结束、后送达最后一条消息时丢失回答；迟到的更新会写日志。

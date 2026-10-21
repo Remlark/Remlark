@@ -54,7 +54,9 @@ foreach ($file in $required) {
   }
 }
 $runtime = Find-RuntimeDirectory
-$runtimeFiles = @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
+# ARM64 不要求 x64 专用的 FH4 运行库；分发时复制目标架构完整 CRT。
+$runtimeFiles = @('msvcp140.dll', 'vcruntime140.dll')
+if ($Arch -eq 'x64') { $runtimeFiles += 'vcruntime140_1.dll' }
 foreach ($file in $runtimeFiles) {
   if (-not (Test-Path -LiteralPath (Join-Path $runtime $file))) { throw "Missing VC++ runtime: $file" }
 }
@@ -62,7 +64,7 @@ $compiler = $null
 if (-not $StageOnly) { $compiler = Find-InstallerCompiler }
 New-Item -ItemType Directory -Force -Path $StageDir, $OutputDir | Out-Null
 Get-ChildItem -LiteralPath $ReleaseDir | Copy-Item -Destination $StageDir -Recurse -Force
-foreach ($file in $runtimeFiles) { Copy-Item -LiteralPath (Join-Path $runtime $file) -Destination $StageDir -Force }
+Get-ChildItem -LiteralPath $runtime -Filter '*.dll' | Copy-Item -Destination $StageDir -Force
 if ($StageOnly) { Write-Output $StageDir; exit 0 }
 
 # 与 pubspec 的应用版本、构建号同步；Inno 的资源版本必须是四段数字。
