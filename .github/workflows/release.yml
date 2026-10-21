@@ -64,7 +64,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          choco install make strawberryperl nasm innosetup --yes --no-progress
+          choco install make strawberryperl nasm innosetup jom --yes --no-progress
           if ($LASTEXITCODE -ne 0) { throw 'Windows dependency installation failed' }
           @('C:\Strawberry\perl\bin', 'C:\Program Files\NASM', 'C:\Program Files (x86)\Inno Setup 6') | Add-Content $env:GITHUB_PATH
       - name: Initialize MSVC
@@ -72,6 +72,12 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: ${{ matrix.arch }}
+      - name: Restore native dependencies
+        id: native-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: build/native
+          key: native-v1-${{ matrix.runner }}-${{ matrix.arch }}-${{ hashFiles('native/**') }}
       - name: Flutter dependencies
         if: runner.os != 'Windows'
         run: |
@@ -106,6 +112,13 @@ jobs:
         run: |
           make mac
           python3 tools/release/prepare.py macos
+      # 打包失败时仍保存已经编译完成的原生库，重试无需重复编译 OpenSSL。
+      - name: Save complete native dependencies
+        if: always() && steps.native-cache.outputs.cache-hit != 'true' && hashFiles('build/native/**/remlark_rdp.dll', 'build/native/**/libremlark_rdp.so', 'build/native/**/libremlark_rdp.dylib') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: build/native
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
       - name: Upload packages
         uses: actions/upload-artifact@v4
         with:

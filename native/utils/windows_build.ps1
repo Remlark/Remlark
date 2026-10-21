@@ -4,7 +4,7 @@ function Invoke-BuildCommand {
   $Executable = $args[0]
   $CommandArguments = @($args | Select-Object -Skip 1)
   # GNU Make 会导出自己的 MAKEFLAGS；NMake 不能解析其中的 -- 与命令行变量。
-  $isNmake = [IO.Path]::GetFileNameWithoutExtension($Executable) -eq 'nmake'
+  $isNmake = [IO.Path]::GetFileNameWithoutExtension($Executable) -in @('nmake', 'jom')
   $savedMakeFlags = $env:MAKEFLAGS
   try {
     if ($isNmake) { Remove-Item Env:MAKEFLAGS -ErrorAction SilentlyContinue }

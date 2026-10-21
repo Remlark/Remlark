@@ -35,10 +35,13 @@ function Find-InstallerCompiler {
 function Find-RuntimeDirectory {
   if ($RuntimeDir) { return (Resolve-Path -LiteralPath $RuntimeDir).Path }
   if ($env:VCToolsRedistDir) {
-    $candidate = Join-Path $env:VCToolsRedistDir "$Arch\Microsoft.VC143.CRT"
-    if (Test-Path -LiteralPath $candidate) { return $candidate }
+    # VS 2022 / 2026 的 CRT 目录名不同，只在当前工具链的目标架构下查找。
+    $archDirectory = Join-Path $env:VCToolsRedistDir $Arch
+    $candidate = Get-ChildItem -LiteralPath $archDirectory -Directory -Filter 'Microsoft.VC*.CRT' -ErrorAction SilentlyContinue |
+      Sort-Object Name -Descending | Select-Object -First 1
+    if ($candidate) { return $candidate.FullName }
   }
-  throw "VC++ $Arch runtime not found. Use a VS developer shell or set VC_REDIST_DIR to Microsoft.VC143.CRT."
+  throw "VC++ $Arch runtime not found. Use a VS developer shell or set VC_REDIST_DIR to the target architecture CRT directory."
 }
 
 if (-not $ReleaseDir) { $ReleaseDir = "build/windows/$Arch/runner/Release" }

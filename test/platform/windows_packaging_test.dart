@@ -127,6 +127,41 @@ void main() {
     expect(x64.stderr, contains('vcruntime140_1.dll'));
   });
 
+  test('从当前工具链查找 VS 2026 CRT，避免写死 VC143', () async {
+    final redist = Directory(
+      p.join(root.path, 'redist', 'arm64', 'Microsoft.VC145.CRT'),
+    )..createSync(recursive: true);
+    for (final name in ['msvcp140.dll', 'vcruntime140.dll']) {
+      File(p.join(redist.path, name)).writeAsStringSync('arm-runtime');
+    }
+    final result = await Process.run(
+      'powershell',
+      [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        'windows/packaging/build.ps1',
+        '-StageOnly',
+        '-Arch',
+        'arm64',
+        '-ReleaseDir',
+        release.path,
+      ],
+      environment: {
+        'VCToolsRedistDir': p.join(root.path, 'redist'),
+        'VC_REDIST_DIR': '',
+      },
+    );
+    expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+    final stage = Directory((result.stdout as String).trim());
+    addTearDown(() => stage.deleteSync(recursive: true));
+    expect(
+      File(p.join(stage.path, 'msvcp140.dll')).readAsStringSync(),
+      'arm-runtime',
+    );
+  });
+
   test('缺少原生库或 VC++ 运行库时阻止生成不完整安装包', () async {
     final rdp = File(p.join(release.path, 'remlark_rdp.dll'));
     rdp.deleteSync();

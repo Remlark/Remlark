@@ -54,8 +54,10 @@ if (-not (Test-Path "$Prefix\lib\libcrypto.lib")) {
   Push-Location $build
   $OpenSslTarget = @{ "x86_64" = "VC-WIN64A"; "arm64" = "VC-WIN64-ARM" }[$Arch]
   Invoke-BuildCommand perl Configure $OpenSslTarget no-shared no-tests no-docs no-apps "--prefix=$Prefix" "--openssldir=$Prefix\ssl" --libdir=lib
-  Invoke-BuildCommand nmake
-  Invoke-BuildCommand nmake install_sw
+  # JOM 兼容 NMake 并支持并行构建；未安装时保持 NMake 入口。
+  $makeCommand = if (Get-Command jom -ErrorAction SilentlyContinue) { 'jom' } else { 'nmake' }
+  Invoke-BuildCommand $makeCommand
+  Invoke-BuildCommand $makeCommand install_sw
   Pop-Location
 }
 
