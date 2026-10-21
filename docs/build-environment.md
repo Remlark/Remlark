@@ -270,4 +270,4 @@ Windows 测试还需要 Python 3（GitHub runner 已提供），用于生成包�
 
 Windows 应用解压使用 archive 4.5.2 的流式接口，在独立 isolate 处理大包，规避 ARM64 系统 tar 的 Unicode 缺陷；这是新增依赖，原有锁定版本未升级。CRT 按架构校验：x64 要求 FH4 的 vcruntime140_1.dll，ARM64 不要求；附带目标架构完整 CRT 目录。
 
-CI 同时支持 VS 2022 / VS 2026，从 VCToolsRedistDir 的目标架构目录匹配 Microsoft.VC*.CRT。Windows 安装 JOM 并行编译 OpenSSL，本地没有 JOM 时回退 NMake。原生库按 runner、CPU 与 native 源码哈希缓存；原生编译完成后即使后续打包失败也保存，工具链重大升级时递增工作流缓存前缀。
+CI 同时支持 VS 2022 / VS 2026，从 VCToolsRedistDir 的目标架构目录匹配 Microsoft.VC*.CRT。Windows 安装 JOM 并行编译 OpenSSL（MSVC 显式 `/FS` 同步 PDB 写入），本地没有 JOM 时回退 NMake。原生库按 runner、CPU 与 native 源码哈希缓存；原生编译完成后即使后续打包失败也保存，工具链重大升级时递增工作流缓存前缀。

@@ -53,7 +53,8 @@ if (-not (Test-Path "$Prefix\lib\libcrypto.lib")) {
   Copy-Item -Recurse "$DepsSrc\openssl-$OpenSslVersion" $build
   Push-Location $build
   $OpenSslTarget = @{ "x86_64" = "VC-WIN64A"; "arm64" = "VC-WIN64-ARM" }[$Arch]
-  Invoke-BuildCommand perl Configure $OpenSslTarget no-shared no-tests no-docs no-apps "--prefix=$Prefix" "--openssldir=$Prefix\ssl" --libdir=lib
+  # /FS 同步多个 cl 进程对共享 PDB 的写入，支持 JOM 并行构建。
+  Invoke-BuildCommand perl Configure $OpenSslTarget /FS no-shared no-tests no-docs no-apps "--prefix=$Prefix" "--openssldir=$Prefix\ssl" --libdir=lib
   # JOM 兼容 NMake 并支持并行构建；未安装时保持 NMake 入口。
   $makeCommand = if (Get-Command jom -ErrorAction SilentlyContinue) { 'jom' } else { 'nmake' }
   Invoke-BuildCommand $makeCommand

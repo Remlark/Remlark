@@ -91,6 +91,10 @@ void main() {
     expect(testServer, contains('-DWITH_SYSTEMD=OFF'));
     final makefile = src('Makefile');
     expect(src('native/rdp/scripts/build.ps1'), contains('zlibstatic.lib'));
+    expect(
+      src('native/rdp/scripts/build.ps1'),
+      contains(r'perl Configure $OpenSslTarget /FS'),
+    );
     expect(src('native/rdp/scripts/build.ps1'), contains('-DWITH_CCACHE=OFF'));
     expect(src('native/rdp/CMakeLists.txt'), contains('zlibstatic.lib'));
     final rdpBuild = src('native/rdp/CMakeLists.txt');
