@@ -595,6 +595,7 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
 - Step 84：硬件加速版本 GitHub Actions 全矩阵构建验证
   - Release 工作流增加默认开启的仅构建模式，手工运行可使用分支代码，复用五路编译与打包流程并跳过发布。
   - 三个平台在原生库编译后重新执行 `make test-platform`，覆盖 H.264 实际解码和硬件不可用时的软件回退。
+  - 修复 Windows CRLF 导致工作流配置回归检查误报；构建后设置 `RMK_REQUIRE_RDP_NATIVE=1`，原生库加载失败即阻止通过。
   - 验证中：macOS universal、Windows x64 / arm64、Linux x64 / arm64；记录云端问题与修复结果。
 
 ## 构建与运行命令

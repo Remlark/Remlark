@@ -51,7 +51,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 真实 RDP 配置联调 | [rdp_live_test.dart](../test/platform/rdp_live_test.dart) | 显式传入应用数据目录，使用同一 RdpClient 与原生库；待实机执行 | 同左；Windows x64 已实际连接，数据目录通常为 `%APPDATA%\com.remlark\remlark` | 同 macOS，待实机执行 | P-12（显式启用） | M-05、M-17 |
 | 源码编码与构建失败检查 | `windows/CMakeLists.txt`、`native/*/CMakeLists.txt`、`native/utils/windows_build.ps1` | UTF-8，shell 严格错误检查 | MSVC `/utf-8`；PowerShell 带 UTF-8 BOM，外部命令失败立即停止 | UTF-8，shell 严格错误检查 | P-06 | M-12 |
 | 测试 Dart 子进程与日志关闭 | `test/helpers/platform_tools.dart`、`lib/utils/app_log.dart` | Dart 可执行文件；关闭日志释放句柄 | 定位 SDK 的 `dart.exe`；删除日志目录前关闭句柄 | 同 macOS | P-07 | M-01、M-13 |
-| Release CI | `.github/workflows/release.yml`、`tools/release/` | Intel / Apple Silicon 通用 zip + DMG，lipo 校验 | x64 / arm64 安装 exe + zip；匹配 CRT 与 Inno 架构 | 原生 x64 / arm64 runner，deb + tar.gz | P-10、P-08、P-09、P-11（原生库编译后重新执行 make test-platform，实际解码）；手工 build_only 验证分支且不发布 | M-16 |
+| Release CI | `.github/workflows/release.yml`、`tools/release/` | Intel / Apple Silicon 通用 zip + DMG，lipo 校验 | x64 / arm64 安装 exe + zip；匹配 CRT 与 Inno 架构 | 原生 x64 / arm64 runner，deb + tar.gz | P-10、P-08、P-09、P-11（原生库编译后重新执行 make test-platform，实际解码）；手工 build_only 验证分支且不发布，构建后 RMK_REQUIRE_RDP_NATIVE=1 禁止跳过解码 | M-16 |
 
 ## 2. 单元测试（test/platform）
 

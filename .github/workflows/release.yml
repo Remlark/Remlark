@@ -128,10 +128,14 @@ jobs:
       # 原生库编译后实际解码 H.264（P-11）：硬件可用时走平台硬件解码，否则软件解码，两者都要颜色正确
       - name: Post-build platform and H.264 decode tests
         if: runner.os != 'Windows'
+        env:
+          RMK_REQUIRE_RDP_NATIVE: '1'
         run: make test-platform
       - name: Windows post-build platform and H.264 decode tests
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          RMK_REQUIRE_RDP_NATIVE: '1'
         run: |
           make test-platform
           if ($LASTEXITCODE -ne 0) { throw 'Post-build platform tests failed' }

@@ -12,6 +12,13 @@ import 'package:remlark/modules/remote_desktop/rdp/rdp_h264.dart';
 void main() {
   String src(String path) => File(path).readAsStringSync();
 
+  // CI 构建后必须实际加载原生库，禁止因库缺失而跳过所有解码测试。
+  setUpAll(() {
+    if (Platform.environment['RMK_REQUIRE_RDP_NATIVE'] == '1') {
+      expect(RdpClient.isAvailable, isTrue, reason: '构建后的 RDP 原生库必须可加载');
+    }
+  });
+
   /// 各平台的硬件解码实现文件与设备类型
   const platforms = {
     'macos': 'videotoolbox',

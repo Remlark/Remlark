@@ -5,7 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 /// 多平台测试 P-10：版本标签、发布附件完整性及失败时阻止发布。
 void main() {
   test('手工构建默认不发布，三个平台编译后都重新执行平台测试', () {
-    final workflow = File('.github/workflows/release.yml').readAsStringSync();
+    // readAsLinesSync 同时兼容 Windows CRLF 与 macOS / Linux LF。
+    final workflow = File('.github/workflows/release.yml')
+        .readAsLinesSync()
+        .join('\n');
     // 手工验证与正式发布共用矩阵，默认只构建分支；版本标签仍走正式发布。
     expect(workflow, contains('build_only:'));
     expect(workflow, contains('default: true\n        type: boolean'));
@@ -23,6 +26,7 @@ void main() {
     // 两个构建后入口分别覆盖 Windows 和 macOS / Linux，确保加载本轮原生库。
     final postBuild = workflow.substring(workflow.indexOf('      # 原生库编译后'));
     expect('make test-platform'.allMatches(postBuild).length, 2);
+    expect("RMK_REQUIRE_RDP_NATIVE: '1'".allMatches(postBuild).length, 2);
     for (final runner in [
       'ubuntu-24.04',
       'ubuntu-24.04-arm',
