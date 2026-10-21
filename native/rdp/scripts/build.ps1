@@ -58,7 +58,8 @@ if (-not (Test-Path "$Prefix\lib\libcrypto.lib")) {
   # JOM 兼容 NMake 并支持并行构建；未安装时保持 NMake 入口。
   $makeCommand = if (Get-Command jom -ErrorAction SilentlyContinue) { 'jom' } else { 'nmake' }
   Invoke-BuildCommand $makeCommand
-  Invoke-BuildCommand $makeCommand install_sw
+  # install_sw 会更新依赖 Makefile，使用串行 NMake 避免 JOM 并发重命名冲突。
+  Invoke-BuildCommand nmake install_sw
   Pop-Location
 }
 
