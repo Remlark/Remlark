@@ -537,11 +537,11 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 将实际工具链、依赖、构建命令、安装与卸载步骤写入 `docs/build-environment.md`。
   - 验证：全量 139 项通过 / 6 项跳过（4 项仅 macOS，2 项 dsh 另行执行）；最终平台 28 项、真实 dsh 2 项、服务端 2 项通过，静态检查无问题；deb / tar.gz / 同步服务端编译及本机解包启动验证通过；真实远程主机和干净机器安装流程仍待验证。
 
-- Step 80：GitHub Actions 多平台多 CPU 自动发布
+- [已完成] Step 80：GitHub Actions 多平台多 CPU 自动发布
   - 固定 Flutter 3.47.7；使用原生 Windows / Linux x64、arm64 runner，macOS 生成通用 zip / DMG。
   - Windows 安装器与 Makefile 参数支持 arm64，发布前检查全部附件与 SHA-256；增加 P-10。
   - CI 修复：隔离 FreeRDP 与应用标签、Windows 固定系统 tar、隔离 GNU Make / NMake 参数；Windows 使用独立 isolate 中的 Dart 流式解压。
-  - 本地平台测试与 DMG 打包验证通过；远端 Linux 双架构安装包通过，其余矩阵验证进行中。
+  - 验证：GitHub Actions 第 8 轮五路构建与发布全部成功；Windows x64 / arm64 各 38 项平台测试通过，macOS 与 Linux 双架构各 33 项通过；v1.0.0 已发布 10 个安装 / 便携包及 SHA256SUMS。浏览器确认 Actions Success 与 Release 附件齐全，实机交互见 M-16。
 
 ## 构建与运行命令
 

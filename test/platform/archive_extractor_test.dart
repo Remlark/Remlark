@@ -33,7 +33,7 @@ void main() {
     expect(File(p.join(dest.path, '说明.txt')).readAsStringSync(), '中文内容');
   }
 
-  test('解压工具：current() 在 Windows 使用系统 tar / PowerShell，其余平台使用 tar / unzip', () {
+  test('解压实现：Windows 使用 Dart 流式解码，其余平台使用 tar / unzip', () {
     final e = ArchiveExtractor.current();
     expect(
       e,

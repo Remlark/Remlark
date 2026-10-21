@@ -59,7 +59,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | --- | --- | --- | --- |
 | P-01 | [codex_platform_test.dart](../test/platform/codex_platform_test.dart) | 三个平台、x64/arm64 的 Codex 发布包名称；Windows 可执行文件带 `.exe`；不支持的架构返回 null；`current()` 选中当前平台的实现且当前架构有发布包 | Codex 运行包 |
 | P-02 | [dsh_platform_test.dart](../test/platform/dsh_platform_test.dart) | Node.js 安装包名称；`node` / `npm-cli.js` / PATH 目录的位置；PATH 分隔符；子进程环境只有一个 PATH 键（Windows 下键名为 `Path`），且私有 node 目录在最前面 | dsh 私有 Node.js |
-| P-03 | [archive_extractor_test.dart](../test/platform/archive_extractor_test.dart) | `current()` 选中对应的解压实现；用当前系统的工具解压 `.tar.gz` 和 `.zip`，中文文件名不乱码，POSIX 下保留可执行权限；压缩包损坏时抛出 `ProcessException` | 压缩包解压 |
+| P-03 | [archive_extractor_test.dart](../test/platform/archive_extractor_test.dart) | `current()` 选中对应的解压实现；按平台实现解压 `.tar.gz` 和 `.zip`（Windows 的 Dart 解码同时在三个系统测试），中文文件名不乱码，POSIX 下保留可执行权限；压缩包损坏时抛出 `ProcessException` | 压缩包解压 |
 | P-04 | [platform_utils_test.dart](../test/platform/platform_utils_test.dart) | 主目录是存在的绝对路径；`which` 能找到 `sh`（Windows 下为 `cmd.exe`），找不到时返回 null；`isUnixDesktop` 的值；权限实现按平台选择，icacls 参数正确；主密钥文件权限为 600、目录为 700，Windows 下 `icacls` 输出中有当前用户且没有继承的权限；`SecretStore` 加解密能往返 | 主目录、PATH、密钥权限 |
 | P-05 | [platform_features_test.dart](../test/platform/platform_features_test.dart) | 延迟文件剪贴板只在 macOS 上可用；系统免密登录在 Windows 上不可用；RDP 中 ⌘ 映射为 Ctrl，Windows / Linux 下保持 Win 键 | 只在部分平台提供的功能、按键映射 |
 | P-06 | [window_config_sync_test.dart](../test/platform/window_config_sync_test.dart) | 三个平台 runner 中的窗口尺寸与 `window_config.dart` 一致；构建钩子覆盖三个平台；每个原生库都有 `build.sh` 和 `build.ps1`，`build.ps1` 支持 x86_64 / arm64，输出目录与构建钩子一致；Makefile 有 mac / linux / windows / run 目标 | 窗口尺寸、原生库、打包 |
@@ -178,3 +178,17 @@ Linux 本轮原始日志与构建产物检查保留在忽略的 `build/validatio
 2026-10-21 Linux 开发启动补验：初次直接 `make run` 因 Flutter 未在终端 PATH 中以 Error 127 失败；将 `~/.local/opt/flutter/bin` 持久配置到本机 `~/.bashrc` / `~/.profile` 后，从交互 Bash 实际运行 `make run`，Debug 构建与启动成功。已有终端先执行 build 文档中的 PATH export，新终端自动生效。
 
 Windows ARM64 CI 发现系统 tar 创建中文路径时崩溃、ZIP 中文条目不可读，P-03 使用 Python 生成标准 PAX 夹具并检验真实解压；Windows 改用 Dart 流式解压，两种格式的 Windows 解码实现也在 macOS / Linux 上验证。
+
+### 2026-10-21 GitHub Actions Release 验证
+
+[Desktop Release #8](https://github.com/Remlark/Remlark/actions/runs/39593809838) 五路构建及发布任务全部成功，总耗时 20 分 38 秒；[v1.0.0](https://github.com/Remlark/Remlark/releases/tag/v1.0.0) 已发布。
+
+| runner / CPU | 平台测试 | 构建结果 |
+| --- | --- | --- |
+| macos-15 / arm64 | 33 项通过 | Intel / Apple Silicon 通用 zip 与 DMG |
+| windows-2022 / x64 | 38 项通过 | setup.exe 与便携 zip，附带 x64 CRT |
+| windows-11-arm / arm64 | 38 项通过 | VS 2026 原生 ARM64 应用、setup.exe 与便携 zip，附带 ARM64 CRT |
+| ubuntu-24.04 / x64 | 33 项通过 | amd64 deb 与 x64 tar.gz |
+| ubuntu-24.04-arm / arm64 | 33 项通过 | arm64 deb 与 tar.gz |
+
+发布任务验证 10 个附件完整后生成 SHA256SUMS，先上传草稿再公开。浏览器已确认 Actions Success、Release 为 Latest，附件齐全。本机补验：33 项平台测试、2 项 Codex 安装器测试通过；通用 DMG 完整性、macOS 主程序 / FFI 双架构、Linux 两种 ELF 架构、Windows 分发 PE 架构和发布校验和核对见本轮验证。M-16 的干净机器交互安装 / 升级 / 卸载仍需按清单执行。
