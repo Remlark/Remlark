@@ -14,8 +14,13 @@ DefaultDirName={localappdata}\Programs\Remlark
 DefaultGroupName=Remlark
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
+#if InstallerArch == "arm64"
+ArchitecturesAllowed=arm64
+ArchitecturesInstallIn64BitMode=arm64
+#else
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+#endif
 MinVersion=10.0
 OutputDir={#DistDir}
 OutputBaseFilename={#InstallerName}

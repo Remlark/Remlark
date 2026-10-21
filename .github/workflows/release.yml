@@ -1,0 +1,145 @@
+name: Desktop Release
+run-name: Desktop Release · ${{ inputs.tag || github.ref_name }}
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '已有版本标签，例如 v1.0.0（必须与 pubspec.yaml 一致）'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: '3.47.7'
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}-${{ matrix.arch }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: linux, arch: x64, runner: ubuntu-24.04 }
+          - { platform: linux, arch: arm64, runner: ubuntu-24.04-arm }
+          - { platform: windows, arch: x64, runner: windows-2022 }
+          - { platform: windows, arch: arm64, runner: windows-11-arm }
+          - { platform: macos, arch: universal, runner: macos-15 }
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          persist-credentials: false
+      - name: Validate release tag
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: python3 tools/release/prepare.py validate
+      # 从固定的官方源码标签启动 SDK，兼容没有预打包 Flutter SDK 的 ARM64 主机。
+      - name: Install Flutter
+        run: |
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev fonts-noto-cjk perl zlib1g-dev curl ca-certificates tar zip unzip xdg-utils python3 dpkg-dev desktop-file-utils
+      - name: macOS build dependencies
+        if: runner.os == 'macOS'
+        run: brew install cmake ninja
+      - name: Windows build dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install make strawberryperl nasm innosetup --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'Windows dependency installation failed' }
+          @('C:\Strawberry\perl\bin', 'C:\Program Files\NASM', 'C:\Program Files (x86)\Inno Setup 6') | Add-Content $env:GITHUB_PATH
+      - name: Initialize MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
+      - name: Flutter dependencies
+        run: |
+          flutter config --no-analytics --enable-linux-desktop --enable-macos-desktop --enable-windows-desktop
+          flutter --version
+          make deps
+      - name: Platform tests
+        run: make test-platform
+      - name: Build Linux installers
+        if: runner.os == 'Linux'
+        run: make linux
+      - name: Build Windows installers
+        if: runner.os == 'Windows'
+        run: make windows WINDOWS_ARCH=${{ matrix.arch }}
+      - name: Build macOS universal installer
+        if: runner.os == 'macOS'
+        run: |
+          make mac
+          python3 tools/release/prepare.py macos
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            dist/*.exe
+            dist/*.zip
+            dist/*.deb
+            dist/*.tar.gz
+            dist/*.dmg
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload native build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.platform }}-${{ matrix.arch }}
+          path: build/native/**/*.log
+          if-no-files-found: ignore
+
+  publish:
+    name: Publish complete release
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: packages-*
+          path: dist
+          merge-multiple: true
+      - name: Check complete matrix and generate SHA256SUMS
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: python3 tools/release/prepare.py manifest
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        shell: bash
+        run: |
+          # 先上传到草稿，全部附件成功后再公开；失败时不会留下可见的半成品 Release。
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --verify-tag --draft --title "Remlark $RELEASE_TAG" --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" dist/* --clobber
+          gh release edit "$RELEASE_TAG" --draft=false

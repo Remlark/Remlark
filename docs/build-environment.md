@@ -121,7 +121,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File windows/packaging/build.ps1
 # 可选：-ReleaseDir <目录> -OutputDir <目录> -CompilerPath <ISCC.exe> -RuntimeDir <CRT目录>
 ```
 
-当前 Makefile 的 Windows 应用与安装器以 **x64** 为目标。原生脚本虽支持 `-Arch arm64`，整套 Windows ARM64 应用与安装包尚未验证，不能混用 arm64 原生库和 x64 Flutter 输出。安装包暂未配置代码签名；正式签名需要发布方证书。
+Makefile 按 Windows 主机选择 x64 / arm64，安装器通过 `-Arch` 选择相同目标；不能混用 arm64 原生库和 x64 Flutter 输出。ARM64 实机验证见 M-16。安装包暂未配置代码签名；正式签名需要发布方证书。
 
 ### 已固定的原生构建约定
 
@@ -248,3 +248,18 @@ make server
 截至 2026-10-21，Windows x64 验证：应用、RDP / SSH 原生库和同步服务端已编译通过；安装器编译、完整性验证与专项测试结果记录在 [multi-platform-testing.md](multi-platform-testing.md)。跨平台实机测试和安装、升级、卸载的交互检查按其中的手工清单执行。
 
 Linux x64 本轮完成默认 `make`、原生库与同步服务端编译：全量测试 139 项通过 / 6 项按条件跳过，另行启用的 dsh 2 项通过，最终平台测试 28 项、服务端测试 2 项通过；静态检查、deb 解包和便携包本机图形启动、包内原生库与 APT 模拟安装验证通过。真实远程主机及干净系统安装 / 升级 / 卸载仍按手工清单验证，结果见 [multi-platform-testing.md](multi-platform-testing.md)。
+
+## GitHub Actions 自动 Release
+
+工作流为 `.github/workflows/release.yml`。先提交并推送代码，确认 `pubspec.yaml` 版本（忽略 `+` 后的构建号），再推送相同版本标签，例如：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+也可在 Actions → Desktop Release → Run workflow 中指定已有标签重试。手工运行仍按标签检出，不会将分支新代码混入旧版本。
+
+固定 Flutter 3.47.7，从官方源码标签启动 SDK，以便 ARM64 runner 下载原生 Dart SDK。Linux 使用 Ubuntu 24.04（x64 / arm64）及发行版配套 C++ 库，Windows 使用 windows-2022 / windows-11-arm、MSVC、原生 Perl、NASM 和 Inno Setup，macOS 使用 macos-15，构建双架构原生库和通用 app。每个任务运行 `make test-platform`；所有构建通过后统一上传 10 个安装 / 便携附件及 SHA256SUMS，并公开 Release。失败时保留构建日志，发布任务不会执行。
+
+Windows ARM64 自动选择匹配架构的 CRT 和安装器；手工可执行 `make windows WINDOWS_ARCH=arm64`，必须在原生 ARM64 Windows 与对应 VS 环境运行。打包脚本支持 `-Arch arm64`。macOS DMG 包含应用与 Applications 入口，通用 zip 同时保留。安装包目前未配置签名 / 公证，仍需 M-16 实机验证。

@@ -4,6 +4,7 @@
 APP_NAME   := remlark
 DIST_DIR   := dist
 SERVER_DIR := server
+WINDOWS_ARCH = $(if $(filter ARM64 arm64,$(PROCESSOR_ARCHITECTURE)),arm64,x64)
 LINUX_ARCH = $(if $(filter aarch64 arm64,$(shell uname -m)),arm64,x64)
 
 ifeq ($(OS),Windows_NT)
@@ -78,7 +79,7 @@ linux: deps native-lib
 # Windows：生成安装向导 exe 与便携 zip（需要 Inno Setup 6.5+）
 windows: deps native-lib
 	flutter build windows --release
-	powershell -NoProfile -ExecutionPolicy Bypass -File windows/packaging/build.ps1 -OutputDir "$(DIST_DIR)"
+	powershell -NoProfile -ExecutionPolicy Bypass -File windows/packaging/build.ps1 -Arch $(WINDOWS_ARCH) -OutputDir "$(DIST_DIR)"
 
 # 运行当前程序（当前平台）
 run: deps native-lib

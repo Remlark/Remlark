@@ -1,5 +1,6 @@
-﻿# Windows x64 分发：校验 Release，附带应用本地 VC++ 运行库，生成安装程序和便携包。
+﻿# Windows x64 / arm64 分发：校验 Release，附带应用本地 VC++ 运行库，生成安装程序和便携包。
 param(
+  [ValidateSet('x64', 'arm64')] [string]$Arch = 'x64',
   [string]$ReleaseDir,
   [string]$OutputDir = 'dist',
   [string]$CompilerPath = $env:ISCC,
@@ -34,17 +35,17 @@ function Find-InstallerCompiler {
 function Find-RuntimeDirectory {
   if ($RuntimeDir) { return (Resolve-Path -LiteralPath $RuntimeDir).Path }
   if ($env:VCToolsRedistDir) {
-    $candidate = Join-Path $env:VCToolsRedistDir 'x64\Microsoft.VC143.CRT'
+    $candidate = Join-Path $env:VCToolsRedistDir "$Arch\Microsoft.VC143.CRT"
     if (Test-Path -LiteralPath $candidate) { return $candidate }
   }
-  throw 'VC++ x64 runtime not found. Use a VS 2022 developer shell or set VC_REDIST_DIR to Microsoft.VC143.CRT.'
+  throw "VC++ $Arch runtime not found. Use a VS developer shell or set VC_REDIST_DIR to Microsoft.VC143.CRT."
 }
 
-if (-not $ReleaseDir) { $ReleaseDir = 'build/windows/x64/runner/Release' }
+if (-not $ReleaseDir) { $ReleaseDir = "build/windows/$Arch/runner/Release" }
 $ReleaseDir = Resolve-RepoPath $ReleaseDir
 $OutputDir = Resolve-RepoPath $OutputDir
 # 每次使用独立暂存目录，避免把旧版本残留文件带入安装包，也不删除已有产物。
-$StageDir = Join-Path $Root ('build\packaging\windows-x64-' + [Guid]::NewGuid().ToString('N'))
+$StageDir = Join-Path $Root ("build\packaging\windows-$Arch-" + [Guid]::NewGuid().ToString('N'))
 $required = @('remlark.exe', 'flutter_windows.dll', 'remlark_rdp.dll', 'remlark_crypto.dll',
   'sqlite3.dll', 'data\app.so', 'data\icudtl.dat', 'data\flutter_assets')
 foreach ($file in $required) {
@@ -73,9 +74,9 @@ if ($version.Groups[2].Success) { $appVersion += '-' + $version.Groups[2].Value 
 $buildNumber = '0'
 if ($version.Groups[3].Success) { $buildNumber = $version.Groups[3].Value }
 $resourceVersion = $version.Groups[1].Value + '.' + $buildNumber
-$installerName = "remlark-$appVersion-windows-x64-setup"
+$installerName = "remlark-$appVersion-windows-$Arch-setup"
 Invoke-BuildCommand $compiler "/DSourceDir=$StageDir" "/DDistDir=$OutputDir" "/DAppVersion=$appVersion" `
-  "/DResourceVersion=$resourceVersion" "/DInstallerName=$installerName" "$PSScriptRoot\remlark.iss"
-Compress-Archive -Force -Path "$StageDir\*" -DestinationPath (Join-Path $OutputDir 'remlark-windows-x64.zip')
+  "/DInstallerArch=$Arch" "/DResourceVersion=$resourceVersion" "/DInstallerName=$installerName" "$PSScriptRoot\remlark.iss"
+Compress-Archive -Force -Path "$StageDir\*" -DestinationPath (Join-Path $OutputDir "remlark-windows-$Arch.zip")
 Write-Host "Installer: $(Join-Path $OutputDir ($installerName + '.exe'))"
-Write-Host "Portable: $(Join-Path $OutputDir 'remlark-windows-x64.zip')"
+Write-Host "Portable: $(Join-Path $OutputDir "remlark-windows-$Arch.zip")"

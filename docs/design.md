@@ -232,3 +232,9 @@
 - Debian 包使用 `/opt/remlark` 保存完整应用、`/usr/bin/remlark` 提供命令入口，复用已有中英文桌面入口与 hicolor 图标。应用数据继续写入用户数据目录，升级与卸载仅管理程序文件。
 - 发布前必须包含 Flutter 引擎、AOT、sqlite、RDP 与 SSH 加密库及桌面资源；缺失时终止打包。系统运行库依赖由 ELF 自动计算，发行兼容性以实际构建系统为基线。
 - 构建环境与安装命令见 `docs/build-environment.md`，验证结果和待手工项目见 `docs/multi-platform-testing.md`。
+
+## 自动发布
+- `.github/workflows/release.yml` 在推送与 pubspec 版本一致的 `v*` 标签或手工指定已有标签后运行。
+- 独立原生 runner 构建 Windows x64 / arm64、Linux x64 / arm64；macOS 构建包含 Intel / Apple Silicon 的通用 app、zip 与 DMG，发布前用 lipo 检查主程序与 FFI 库。
+- 每个 runner 顺序执行依赖准备、`make test-platform` 与构建，保留锁文件。Windows 安装器架构与 Flutter / MSVC 目标一致，附带对应架构 CRT。
+- 所有任务通过且 10 个安装 / 便携包完整后生成 SHA256SUMS；先上传草稿再公开 Release。默认 token 只读，仅发布任务有 contents:write。

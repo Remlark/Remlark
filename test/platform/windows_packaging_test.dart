@@ -97,7 +97,7 @@ void main() {
   ]);
 
   test('暂存完整应用与 VC++ 运行库，原始 Release 保持完整', () async {
-    final result = await runPackaging(['-StageOnly']);
+    final result = await runPackaging(['-StageOnly', '-Arch', 'arm64']);
     expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
     final stage = Directory((result.stdout as String).trim());
     addTearDown(() => stage.deleteSync(recursive: true));
