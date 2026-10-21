@@ -42,6 +42,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 剪贴板文件读取、拖放 | `pasteboard`、`desktop_drop`、`file_selector` 插件 | 插件实现 | 插件实现 | 插件实现 | [file_drop_target_test.dart](../test/file_drop_target_test.dart)（只测分发逻辑） | M-03、M-04、M-06 |
 | 窗口默认尺寸 / 最小尺寸 | [window_config.dart](../lib/app/window_config.dart) + 三个平台的 runner | `MainFlutterWindow.swift` | `main.cpp`、`flutter_window.cpp`（按 DPI 换算） | `my_application.cc` | P-06 | M-02 |
 | 原生库（RDP、SSH AES-GCM） | [hook/build.dart](../hook/build.dart)、`native/*/scripts/` | `build.sh`，x86_64 + arm64，系统 zlib | `build.ps1 [-Arch x86_64\|arm64]`，按 VS 目标架构；显式 MSVC、静态 OpenSSL / zlib，关闭自动 ccache | `build.sh`（`aarch64` 命名），系统 zlib | P-06、[native_crypto_test.dart](../test/native_crypto_test.dart) | M-12 |
+| RDP H.264 硬件解码 | [native/rdp/src/hwdec/](../native/rdp/src/hwdec/)、[rmk_h264.c](../native/rdp/src/rmk_h264.c)、`native/rdp/scripts/` 中的 FFmpeg 编译 | VideoToolbox；FFmpeg 由 `build.sh` 编译 | D3D11VA（FreeRDP 默认 DXVA2，改为显式指定）；FFmpeg 用 MSVC 编译，configure 经 MSYS2 bash 运行（`build_ffmpeg_msvc.sh`），ARM64 关闭汇编 | VAAPI，自动选择第一个可读写的 `/dev/dri/renderD*`；运行时依赖 libva2 / libva-drm2 | P-11 | M-17 |
 | 打包 | [Makefile](../Makefile)、[Windows 安装器](../windows/packaging/) | `make mac` → zip | `make windows` → Inno Setup 安装 exe + 便携 zip，附带应用本地 VC++ 运行库 | `make linux` → deb + tar.gz，按 x64 / arm64 输出；发布前检查原生库和资源 | P-06、P-08、P-09 | M-12、M-14 |
 | 可选 JNI 依赖 | `linux/CMakeLists.txt`，Flutter 间接依赖 | 无 Linux JNI 插件 | 可选插件，未发现 JDK 时不构建 | 关闭 Android 间接依赖引入的可选 JNI，避免携带构建机 Java 绝对路径 | P-09 | M-12 |
 | 开发启动 | [Makefile](../Makefile)、[Windows 启动脚本](../windows/run.ps1) | `make run` | `windows/run.ps1` 无须 Make，按需构建原生库；也支持 `make run` | `make run` | P-08 | M-15 |
@@ -49,7 +50,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 同步服务端 | [server/](../server/) | `dart build cli` | 同左 | 同左 | `server/` 中的 `dart test` | M-13 |
 | 源码编码与构建失败检查 | `windows/CMakeLists.txt`、`native/*/CMakeLists.txt`、`native/utils/windows_build.ps1` | UTF-8，shell 严格错误检查 | MSVC `/utf-8`；PowerShell 带 UTF-8 BOM，外部命令失败立即停止 | UTF-8，shell 严格错误检查 | P-06 | M-12 |
 | 测试 Dart 子进程与日志关闭 | `test/helpers/platform_tools.dart`、`lib/utils/app_log.dart` | Dart 可执行文件；关闭日志释放句柄 | 定位 SDK 的 `dart.exe`；删除日志目录前关闭句柄 | 同 macOS | P-07 | M-01、M-13 |
-| Release CI | `.github/workflows/release.yml`、`tools/release/` | Intel / Apple Silicon 通用 zip + DMG，lipo 校验 | x64 / arm64 安装 exe + zip；匹配 CRT 与 Inno 架构 | 原生 x64 / arm64 runner，deb + tar.gz | P-10、P-08、P-09 | M-16 |
+| Release CI | `.github/workflows/release.yml`、`tools/release/` | Intel / Apple Silicon 通用 zip + DMG，lipo 校验 | x64 / arm64 安装 exe + zip；匹配 CRT 与 Inno 架构 | 原生 x64 / arm64 runner，deb + tar.gz | P-10、P-08、P-09、P-11（原生库编译后实际解码） | M-16 |
 
 ## 2. 单元测试（test/platform）
 
@@ -67,6 +68,16 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-08 | [windows_packaging_test.dart](../test/platform/windows_packaging_test.dart) | 三平台打包与启动入口；Windows VS 2022 / 2026 CRT 查找、按架构运行库、当前用户安装、数据保留与 BOM；实际暂存应用和 VC++ 运行库，覆盖中文空格路径、缺少原生库 / CRT 时终止；无 Make 启动参数与 PowerShell 解析 | Windows 安装器、开发启动与分发完整性 |
 | P-09 | [linux_packaging_test.dart](../test/platform/linux_packaging_test.dart) | 三平台保留独立打包入口；Linux x64 / arm64 架构命名；禁用无用 JNI；实际运行打包脚本，缺少原生库时立即终止；在中文、空格、引号、反斜线、% 等路径中实际注册桌面入口并用 GIO 启动 | Linux 安装器与分发完整性 |
 | P-10 | [release_workflow_test.dart](../test/platform/release_workflow_test.dart) | 拒绝错误版本标签、缺失附件时阻止发布、完整双架构矩阵生成正确 SHA-256 清单 | 自动发布 |
+| P-11 | [rdp_h264_test.dart](../test/platform/rdp_h264_test.dart) | 三个平台都有硬件解码实现且设备类型正确，CMake 按平台选择；FFmpeg 只编译 H.264 解码器并按平台开启硬件加速，Windows 用 MSVC /MT 编译；FreeRDP 开启 FFmpeg 硬件解码；连接参数不再强制关闭 H.264，设置中的硬件解码开关传到原生库；原生库内置探测帧与测试资源一致；已编译原生库时：编入解码器、设备类型与当前平台一致，macOS 上 VideoToolbox 必须可用（Windows / Linux 取决于显卡，CI 无显卡时为软件解码），并用与连接相同的 FreeRDP AVC420 流程实际解码 [h264_320x240.h264](../test/platform/fixtures/h264_320x240.h264)：软件解码、硬件解码（不可用时为软件解码）的左右两半颜色都正确且两者一致，无效数据返回失败不崩溃 | RDP H.264 硬件解码 |
+
+P-11 的测试帧由 libx264 生成（BT.709 全范围，与 FreeRDP 的 YUV 转换一致），同一份字节内置在 [rmk_h264_probe_frame.h](../native/rdp/src/rmk_h264_probe_frame.h) 中，原生库首次连接时用它实际硬件解码一帧，解码成功且颜色正确才启用硬件（虚拟机、驱动异常等能创建设备却无法解码的环境会改用软件解码）。重新生成时两处同步更新：
+
+```bash
+ffmpeg -f lavfi -i "color=c=0x3080C0:s=320x240:d=0.04,drawbox=x=0:y=0:w=160:h=240:color=0xE04020:t=fill,format=rgb24,scale=out_color_matrix=bt709:out_range=pc,format=yuvj420p" \
+  -frames:v 1 -c:v libx264 -profile:v baseline -x264-params keyint=1 -bsf:v h264_mp4toannexb -f h264 test/platform/fixtures/h264_320x240.h264
+```
+
+Release CI 在原生库编译完成后再次运行 P-11，五个平台架构都实际执行解码测试（runner 无显卡时验证软件解码路径），失败时不发布。
 
 P-06 同时检查 FreeRDP 禁用宿主仓库 Git 标签版本探测，以及 Windows 下载源码使用系统 tar，避免应用版本改变库名或 Git Bash tar 误解析盘符。
 
@@ -97,7 +108,7 @@ P-06 还检查 macOS / Linux 测试服务端与应用使用同一 OpenSSL 前缀
 各平台的准备：
 
 - **Windows**：Flutter + Visual Studio 2022（C++ 桌面开发）；编译原生库还需要 CMake、Ninja、Strawberry Perl、NASM，并在 “x64 Native Tools Command Prompt” 中执行 `make native-lib`；`make` 可以用 Git for Windows 或 MSYS2 自带的。确认 `C:\Windows\System32\tar.exe` 存在（Windows 10 1803 及以上自带）。
-- **Linux**（以 Ubuntu 为例）：`clang cmake ninja-build pkg-config libgtk-3-dev`、`openssh-server`、`xdg-utils`、`zip unzip`；编译 FreeRDP 需要的开发包见 `native/rdp/scripts/build.sh`。
+- **Linux**（以 Ubuntu 为例）：`clang cmake ninja-build pkg-config libgtk-3-dev nasm libva-dev`、`openssh-server`、`xdg-utils`、`zip unzip`；编译 FreeRDP 需要的开发包见 `native/rdp/scripts/build.sh`。
 
 ## 4. 手工测试清单
 
@@ -120,6 +131,7 @@ P-06 还检查 macOS / Linux 测试服务端与应用使用同一 OpenSSL 前缀
 | M-13 | 同步服务端 | `make server` 编译成功；用 `--port --token` 启动；两个客户端同步主机与密钥 |
 | M-14 | Windows 安装、升级与卸载 | Windows 10 / 11 x64 干净环境运行 setup；中英文向导、安装目录、开始菜单与可选桌面入口正确；启动不要求手工安装 VC++；关闭运行中的应用后覆盖升级；卸载程序及快捷方式移除，数据库、凭据与日志保留；macOS / Linux 不适用 |
 | M-15 | Windows 无 Make 开发启动 | 未安装 Make、已有 Flutter 与 VS C++ 的 Windows x64 环境执行 `powershell -NoProfile -ExecutionPolicy Bypass -File windows/run.ps1`，缺少原生库时按文档准备 Perl / NASM 后可编译并启动；已有原生库时不重复编译；`-RebuildNative` 强制重编译；`-PrepareOnly` 不打开应用；macOS / Linux 按 `make run` 验证 |
+| M-17 | RDP H.264 硬件解码 | 连接开启 H.264 的 Windows 服务器（组策略“远程桌面会话主机 → 远程会话环境”中开启“为远程桌面连接优先使用 H.264/AVC 444 图形模式”与“配置 H.264/AVC 硬件编码”），播放视频或拖动窗口：画面正常、无花屏与色偏；日志中连接行显示“H.264 硬件解码（videotoolbox / d3d11va / vaapi）”；活动监视器 / 任务管理器 / `intel_gpu_top` 或 `radeontop` 中可见 GPU 视频解码负载，CPU 占用低于软件解码时（在设置 → 远程桌面中关闭“RDP 硬件解码”后新建连接即为软件解码，日志显示“设置中已关闭硬件解码”，用于对比）；设置页说明显示本机可用的设备名，显卡不支持时开关禁用；Linux 无 VAAPI 驱动或 Windows 无显卡时日志显示软件解码且画面正常 |
 | M-16 | Release 安装验证 | 在干净的 Windows / Linux x64、arm64 与 Intel / Apple Silicon macOS 下载附件，验证 SHA256SUMS，安装、启动、升级、卸载并连接 SSH / RDP；macOS DMG 拖入 Applications。当前没有签名 / 公证，CI 成功不代替实机交互验证 |
 
 ## 5. 已发现的平台问题
@@ -169,6 +181,7 @@ P-06 还检查 macOS / Linux 测试服务端与应用使用同一 OpenSSL 前缀
 | 打包后的服务端 HTTP 冒烟测试 | 本轮未重跑 | 未执行：自动审批拒绝后台启动编译产物的操作，未返回具体原因；源码方式的双客户端同步端到端测试已执行 | ✅ AOT 产物启动成功；未授权 401、授权 PUT 200、索引读取与 SQLite 写入通过 |
 | Linux Release 与安装包 | — | — | ✅ 默认 `make`；deb + tar.gz，109 个便携归档条目；所有必需原生库 / 资源齐全，无 JNI / Java 依赖；APT 模拟安装通过；包内 RDP 创建 / 释放与 AES-GCM NIST 对照 / 认证失败检查通过 |
 | Linux 分发包图形冒烟 | — | — | ✅ deb 解包启动两次、便携包解压到中文 / 空格 / % 路径启动两次；X11 窗口显示、最小尺寸、数据目录 / 密钥持久化通过；截图与日志在 build/validation；未在干净系统安装 |
+| P-11 RDP H.264 硬件解码（Step 81） | ✅ 2026-10-21，macOS x86_64，基于 `f06a681` 工作区：`build.sh` x86_64 / arm64 编译通过；`make test-platform` 41 项通过，探测到 VideoToolbox（实际解码校验通过）；P-11 解码测试中软件 / VideoToolbox 解码颜色正确且一致；RDP 端到端与剪贴板测试通过；真实 Windows 服务器（M-17）待验证 | 待执行：需 MSYS2；`make native-lib`、`make test-platform`、M-17 | 待执行：需 nasm、libva-dev；`make native-lib`、`make test-platform`、M-17 |
 | M-01 ~ M-13 | 开发过程中使用过，没有按本清单逐项记录；arm64 未实机运行 | 未逐项手工验证；M-02 有中英文三种尺寸布局测试，M-09 真实安装和 M-13 自动同步覆盖部分流程；真实 SSH / RDP / VNC、DPI、干净机器启动等仍待验证 | 部分覆盖：deb 解包与便携包在本机桌面成功启动 / 重启、数据库 / master.key / 日志生成，密钥 600 且重启保留；最小尺寸 960×640；中英文三尺寸布局、真实本地 SSH / SFTP、RDP 测试服务端、dsh 与同步已自动覆盖。真实远程 Windows / macOS、系统对话框与拖放、干净机器安装 / 升级 / 卸载未逐项验证 |
 
 本轮构建在 VS 2022 x64 Developer PowerShell 中执行，Perl / NASM 使用本机便携工具，仅在构建进程中补充 PATH；OpenSSL 首次构建使用 JOM 并行完成，随后 `make native-lib` 与默认 `make` 增量构建通过。依赖和本地冒烟脚本保留在忽略的 `build/` 中。

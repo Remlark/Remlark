@@ -1,6 +1,6 @@
 /*
  * Remlark RDP 胶水库：连接管理、画面合成、输入、动态分辨率与证书校验。
- * 剪贴板逻辑见 rmk_clipboard.c。
+ * 剪贴板逻辑见 rmk_clipboard.c，H.264 解码配置见 rmk_h264.c。
  */
 #include <stdlib.h>
 #include <string.h>
@@ -409,6 +409,7 @@ RmkRdp* rmk_rdp_new(int64_t id, RmkEventCallback callback)
 		return NULL;
 	rdp->id = id;
 	rdp->callback = callback;
+	rdp->hwdec_enabled = TRUE;
 	InitializeCriticalSection(&rdp->frame_lock);
 	rdp->clip = rmk_clip_new(rdp);
 	return rdp;
@@ -458,10 +459,9 @@ int32_t rmk_rdp_connect(RmkRdp* rdp, const char* host, int32_t port, const char*
 	          freerdp_settings_set_uint32(s, FreeRDP_DesktopHeight, h) &&
 	          freerdp_settings_set_uint32(s, FreeRDP_ColorDepth, 32) &&
 	          freerdp_settings_set_bool(s, FreeRDP_SupportGraphicsPipeline, TRUE) &&
-	          freerdp_settings_set_bool(s, FreeRDP_GfxH264, FALSE) &&
+	          rmk_h264_apply(s, rdp->hwdec_enabled) &&
 	          freerdp_settings_set_bool(s, FreeRDP_RemoteFxCodec, TRUE) &&
 	          freerdp_settings_set_bool(s, FreeRDP_NSCodec, TRUE) &&
-	          freerdp_settings_set_bool(s, FreeRDP_GfxAVC444, FALSE) &&
 	          freerdp_settings_set_bool(s, FreeRDP_SupportDisplayControl, TRUE) &&
 	          freerdp_settings_set_bool(s, FreeRDP_DynamicResolutionUpdate, TRUE) &&
 	          freerdp_settings_set_bool(s, FreeRDP_NetworkAutoDetect, TRUE) &&
@@ -505,6 +505,13 @@ void rmk_rdp_set_proxy(RmkRdp* rdp, int32_t type, const char* host, int32_t port
 	rdp->proxy_port = (UINT16)port;
 	rmk_set_str(&rdp->proxy_user, username);
 	rmk_set_str(&rdp->proxy_pass, password);
+}
+
+/* 记录是否允许 H.264 硬件解码，连接时生效 */
+void rmk_rdp_set_hwdec(RmkRdp* rdp, int32_t enabled)
+{
+	if (rdp)
+		rdp->hwdec_enabled = enabled != 0;
 }
 
 void rmk_rdp_disconnect(RmkRdp* rdp)

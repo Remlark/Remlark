@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'settings_repository.dart';
 
-/// 应用设置控制器：语言、主题、终端外观等，变化时通知 UI
+/// 应用设置控制器：语言、主题、终端外观、远程桌面等，变化时通知 UI
 class SettingsController extends ChangeNotifier {
   SettingsController(this._repo);
 
@@ -14,6 +14,7 @@ class SettingsController extends ChangeNotifier {
   String _terminalTheme = 'auto';
   bool _copyOnSelect = false;
   String _accent = 'sage';
+  bool _rdpHardwareDecode = true;
 
   Locale get locale => _locale;
   ThemeMode get themeMode => _themeMode;
@@ -24,6 +25,9 @@ class SettingsController extends ChangeNotifier {
   /// 界面强调色预设 id（见 AccentPreset）
   String get accent => _accent;
 
+  /// RDP 是否允许 H.264 硬件解码（默认开启，对新建的连接生效）
+  bool get rdpHardwareDecode => _rdpHardwareDecode;
+
   static const _keys = [
     'ui.locale',
     'ui.theme',
@@ -31,6 +35,7 @@ class SettingsController extends ChangeNotifier {
     'term.theme',
     'term.copyOnSelect',
     'ui.accent',
+    'rdp.hwdec',
   ];
 
   /// 启动时从数据库加载
@@ -54,6 +59,7 @@ class SettingsController extends ChangeNotifier {
     _terminalTheme = m['term.theme'] ?? 'auto';
     _copyOnSelect = m['term.copyOnSelect'] == '1';
     _accent = m['ui.accent'] ?? 'sage';
+    _rdpHardwareDecode = m['rdp.hwdec'] != '0';
     notifyListeners();
   }
 
@@ -89,6 +95,13 @@ class SettingsController extends ChangeNotifier {
   Future<void> setCopyOnSelect(bool v) async {
     _copyOnSelect = v;
     await _repo.set('term.copyOnSelect', v ? '1' : '0');
+    notifyListeners();
+  }
+
+  /// 设置 RDP 是否允许硬件解码
+  Future<void> setRdpHardwareDecode(bool v) async {
+    _rdpHardwareDecode = v;
+    await _repo.set('rdp.hwdec', v ? '1' : '0');
     notifyListeners();
   }
 

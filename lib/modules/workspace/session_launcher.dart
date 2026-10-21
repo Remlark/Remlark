@@ -39,7 +39,8 @@ class SessionLauncher {
         _ui,
         _ui,
       ),
-      HostProtocol.rdp => RdpSession(fresh, services.hostRepo, _ui),
+      HostProtocol.rdp => RdpSession(fresh, services.hostRepo, _ui)
+        ..hardwareDecode = services.settings.rdpHardwareDecode,
     };
     workspace.add(tab);
     // 新会话默认独立输入，只有显式从广播目标入口添加才加入。

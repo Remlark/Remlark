@@ -573,6 +573,14 @@ const Map<String, String> stringsEn = {
   'accent.violet': 'Violet',
   'accent.amber': 'Amber',
   'settings.terminal.desc': 'Terminal font, colors and behavior.',
+  'settings.remote_desktop': 'Remote desktop',
+  'settings.remote_desktop.desc': 'How remote desktop frames are decoded.',
+  'settings.rdp_hwdec': 'RDP hardware decoding',
+  'settings.rdp_hwdec.desc':
+      'Decode H.264 frames on the GPU to reduce CPU usage. Turn off if the image looks wrong. Applies to new connections.',
+  'settings.rdp_hwdec.available': 'Available on this device: {name}',
+  'settings.rdp_hwdec.unavailable': 'Not supported by this GPU; software decoding will be used',
+  'settings.rdp_hwdec.missing': 'RDP component is not installed',
   'settings.terminal_theme.desc': 'Color scheme of the terminal.',
   'settings.copy_on_select.desc':
       'Copy text to the clipboard as soon as it is selected.',

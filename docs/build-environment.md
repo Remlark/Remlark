@@ -6,7 +6,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux。桌面应用
 
 - Flutter stable，包含 Dart SDK。当前项目 `pubspec.yaml` 要求 Dart `^3.13.5`；本轮验证使用 Flutter **3.47.7 / Dart 3.13.5**。
 - Git；使用 Makefile 时还需要 GNU Make，本轮 Windows 使用 **4.4.1**，仅通过 Windows PowerShell 入口开发运行时不需要 Make。原生库还需要 CMake、Ninja、Perl；Windows x64 的 OpenSSL 汇编需要 NASM。
-- 网络需能访问 Flutter / pub 依赖、GitHub、zlib.net。只有验证 dsh 真实安装时还需要 nodejs.org、registry.npmjs.org。
+- 网络需能访问 Flutter / pub 依赖、GitHub、zlib.net、ffmpeg.org。只有验证 dsh 真实安装时还需要 nodejs.org、registry.npmjs.org。
 - 保留仓库中的 `pubspec.lock` 与 `server/pubspec.lock`，日常构建使用 `pub get`，不要为解决构建问题直接升级依赖。
 
 在仓库根目录执行：
@@ -54,7 +54,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\windows\run.ps1 -PrepareOn
 | GNU Make | 使用 Makefile 时需要 `make.exe`；仅通过 `windows/run.ps1` 开发运行时不需要。Git Bash 自身不保证包含 Make |
 | CMake / Ninja | 可使用 VS 自带版本；本轮 VS CMake 3.31.6；应能在开发者终端中直接执行 |
 | Strawberry Perl | 使用原生 Windows Perl，不能使用 Git / MSYS 的 Perl 替代 OpenSSL 的 Windows 构建环境 |
-| NASM | x64 OpenSSL 汇编所需，确保 `nasm.exe` 在 PATH 中 |
+| NASM | x64 OpenSSL / FFmpeg 汇编所需，确保 `nasm.exe` 在 PATH 中 |
+| MSYS2 | 只用来运行 FFmpeg 的 configure（编译器仍是 MSVC）；默认 `C:\msys64`，其他位置用 `MSYS2_ROOT` 指定；安装后在 MSYS2 终端执行 `pacman -S --needed make diffutils` |
 | Inno Setup | **6.5 或以上**，本轮使用 6.7.3；`ISCC.exe` 编译安装向导 |
 
 官方入口：[Flutter Windows 环境](https://docs.flutter.dev/platform-integration/windows/setup)、[Visual Studio](https://visualstudio.microsoft.com/downloads/)、[Strawberry Perl](https://strawberryperl.com/)、[NASM](https://www.nasm.us/)、[Inno Setup](https://jrsoftware.org/isdl.php)。Android SDK、Android Studio 和 Chrome 不是 Windows 桌面构建的必要依赖。
@@ -125,7 +126,7 @@ Makefile 按 Windows 主机选择 x64 / arm64，安装器通过 `-Arch` 选择�
 
 ### 已固定的原生构建约定
 
-- `native/rdp/scripts/build.ps1` 固定 OpenSSL 3.6.5、FreeRDP 3.32.2、zlib 1.3.1，静态链接依赖；`native/ssh_crypto/scripts/build.ps1` 复用同一 OpenSSL。
+- `native/rdp/scripts/build.ps1` 固定 OpenSSL 3.6.5、FFmpeg 8.1.3、FreeRDP 3.32.2、zlib 1.3.1，静态链接依赖；FFmpeg 只含 H.264 解码器与 D3D11VA / DXVA2 硬件解码，由 `build_ffmpeg_msvc.sh` 在 MSYS2 bash 中用 MSVC（/MT）编译，ARM64 关闭汇编；`native/ssh_crypto/scripts/build.ps1` 复用同一 OpenSSL。
 - 明确使用当前 VS 目标架构的 MSVC，并关闭 FreeRDP 自动探测 ccache，避免误用 MinGW 工具链。
 - PowerShell 脚本使用 UTF-8 BOM，C / C++ 使用 `/utf-8`；外部编译命令返回非零时立即终止。
 - 安装器打包前检查 RDP、SSH 加密、sqlite、Flutter 引擎、AOT 与 VC++ 运行库；缺少任何必需项都会报错。
@@ -135,6 +136,7 @@ Makefile 按 Windows 主机选择 x64 / arm64，安装器通过 `-Arch` 选择�
 | 现象 | 处理 |
 | --- | --- |
 | 找不到 `cl` / `nmake`，或目标架构不一致 | 重新进入 VS x64 开发者终端，确认 `VSCMD_ARG_TGT_ARCH=x64` |
+| 未找到 MSYS2 或 FFmpeg configure 失败 | 安装 MSYS2 并执行 `pacman -S --needed make diffutils`，或用 `MSYS2_ROOT` 指定目录；查看 `build\native\windows-<架构>\ffmpeg-build\ffmpeg-configure.log` 与同目录的 `ffbuild/config.log` |
 | OpenSSL Configure 失败 | 检查 `perl -v` 为原生 Windows Strawberry Perl，`nasm -v` 可运行 |
 | 找不到 Inno Setup | 安装 6.5+ 或指定 `ISCC`；它是 `ISCC.exe` 的完整路径，不是目录 |
 | 找不到 VC++ x64 runtime | 在 VS 开发者终端打包，或将 `VC_REDIST_DIR` 指向包含三项 DLL 的 CRT 目录 |
@@ -144,7 +146,7 @@ Makefile 按 Windows 主机选择 x64 / arm64，安装器通过 `-Arch` 选择�
 
 ## macOS
 
-准备 Xcode（含 Command Line Tools）、Flutter、GNU Make，以及原生构建依赖 CMake、Ninja、Perl、zlib。可使用系统工具及 Homebrew 安装的依赖；首次 Xcode 使用需完成许可确认与工具初始化，`flutter doctor -v` 应能识别 Xcode。
+准备 Xcode（含 Command Line Tools）、Flutter、GNU Make，以及原生构建依赖 CMake、Ninja、Perl、zlib、NASM（x86_64 FFmpeg 汇编，`brew install nasm`）。可使用系统工具及 Homebrew 安装的依赖；首次 Xcode 使用需完成许可确认与工具初始化，`flutter doctor -v` 应能识别 Xcode。
 
 ```bash
 xcode-select -p
@@ -159,14 +161,14 @@ make server
 
 ## Linux（Ubuntu / Debian）
 
-本轮使用 **Ubuntu 26.04 LTS x86_64、Flutter 3.47.7 / Dart 3.13.5、Clang 21.1.8、GCC 15.2.0、CMake 4.2.3、Ninja 1.13.2、GTK 3.24.52、dpkg-deb 1.23.7**。原生依赖固定为 OpenSSL 3.6.5 / FreeRDP 3.32.2，源码由构建脚本下载，静态链接进 RDP / SSH 胶水库。源码构建需要 GitHub 网络访问；Flutter / pub 依赖也需要网络。
+本轮使用 **Ubuntu 26.04 LTS x86_64、Flutter 3.47.7 / Dart 3.13.5、Clang 21.1.8、GCC 15.2.0、CMake 4.2.3、Ninja 1.13.2、GTK 3.24.52、dpkg-deb 1.23.7**。原生依赖固定为 OpenSSL 3.6.5 / FFmpeg 8.1.3 / FreeRDP 3.32.2，源码由构建脚本下载，静态链接进 RDP / SSH 胶水库。源码构建需要 GitHub 网络访问；Flutter / pub 依赖也需要网络。
 
 ### 安装构建与测试依赖
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y build-essential clang cmake ninja-build pkg-config \
-  libgtk-3-dev libstdc++-15-dev libsecret-1-dev fonts-noto-cjk perl zlib1g-dev \
+  libgtk-3-dev libstdc++-15-dev libsecret-1-dev fonts-noto-cjk perl zlib1g-dev nasm libva-dev \
   curl ca-certificates tar zip unzip xdg-utils python3 dpkg-dev \
   openssh-server xvfb xdotool desktop-file-utils
 ```

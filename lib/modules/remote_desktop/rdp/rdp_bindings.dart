@@ -59,6 +59,10 @@ external void rmk_rdp_set_proxy(
   Pointer<Utf8> password,
 );
 
+/// 是否允许 H.264 硬件解码（connect 之前调用）
+@Native<Void Function(Pointer<RmkRdp>, Int32)>()
+external void rmk_rdp_set_hwdec(Pointer<RmkRdp> rdp, int enabled);
+
 @Native<Void Function(Pointer<RmkRdp>)>()
 external void rmk_rdp_disconnect(Pointer<RmkRdp> rdp);
 
@@ -115,3 +119,28 @@ external void rmk_rdp_free_string(Pointer<Utf8> str);
 
 @Native<Pointer<Utf8> Function()>()
 external Pointer<Utf8> rmk_rdp_version();
+
+/// H.264 解码能力位：已编入解码器（与 RMK_H264_DECODER 一致）
+const rmkH264Decoder = 1;
+
+/// H.264 解码能力位：平台硬件解码可用，已实际解码校验（与 RMK_H264_HARDWARE 一致）
+const rmkH264Hardware = 2;
+
+/// 探测 H.264 解码能力（首次调用会创建硬件设备并实际解码一帧内置画面，结果由原生库缓存）
+@Native<Int32 Function()>()
+external int rmk_rdp_h264_caps();
+
+/// 自检：把一帧 H.264 解码为 BGRA（多平台测试用），返回值 >= 0 表示成功
+@Native<Int32 Function(Pointer<Uint8>, Int32, Int32, Int32, Int32, Pointer<Uint8>)>()
+external int rmk_rdp_h264_self_test(
+  Pointer<Uint8> data,
+  int size,
+  int width,
+  int height,
+  int hardware,
+  Pointer<Uint8> bgra,
+);
+
+/// 当前平台使用的硬件解码设备类型：videotoolbox / d3d11va / vaapi
+@Native<Pointer<Utf8> Function()>()
+external Pointer<Utf8> rmk_rdp_h264_hw_type();

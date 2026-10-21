@@ -56,6 +56,7 @@ class RdpConnectOptions {
     this.proxyPort = 0,
     this.proxyUser = '',
     this.proxyPassword = '',
+    this.hardwareDecode = true,
   });
 
   final String host;
@@ -76,6 +77,9 @@ class RdpConnectOptions {
   final int proxyPort;
   final String proxyUser;
   final String proxyPassword;
+
+  /// 是否允许 H.264 硬件解码（设置项，关闭或硬件不可用时软件解码）
+  final bool hardwareDecode;
 }
 
 /// 原生库不可用
@@ -189,6 +193,7 @@ class RdpClient {
     using((arena) {
       Pointer<Utf8> s(String? v) => v == null || v.isEmpty ? nullptr : v.toNativeUtf8(allocator: arena);
       rmk_rdp_set_proxy(_handle, o.proxyType, s(o.proxyHost), o.proxyPort, s(o.proxyUser), s(o.proxyPassword));
+      rmk_rdp_set_hwdec(_handle, o.hardwareDecode ? 1 : 0);
       final rc = rmk_rdp_connect(
         _handle,
         s(o.host),

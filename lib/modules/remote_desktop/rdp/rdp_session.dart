@@ -14,6 +14,7 @@ import '../../workspace/workspace_tab.dart';
 import '../remote_desktop_interaction.dart';
 import '../remote_display.dart';
 import 'rdp_client.dart';
+import 'rdp_h264.dart';
 import 'rdp_scancode.dart';
 
 /// 一次连接尝试的结果
@@ -49,6 +50,9 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
 
   /// macOS 上把 Command 映射为 Ctrl
   bool metaAsCtrl = Platform.isMacOS;
+
+  /// 是否允许 H.264 硬件解码（来自设置，由会话启动器传入）
+  bool hardwareDecode = true;
 
   String? _fingerprint;
   Timer? _clipTimer;
@@ -90,7 +94,7 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
         password = input.password;
         remember = input.remember;
       }
-      AppLog.i('rdp', '连接「${host.name}」${host.endpoint}（第 ${attempt + 1} 次）');
+      AppLog.i('rdp', '连接「${host.name}」${host.endpoint}（第 ${attempt + 1} 次，${RdpH264Support.probe().describe(hardwareDecode: hardwareDecode)}）');
       final (result, detail) = await _attempt(password);
       AppLog.i('rdp', '连接结果 ${result.name}${detail == null ? '' : '：$detail'}');
       switch (result) {
@@ -204,6 +208,7 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
         proxyPort: proxy.port,
         proxyUser: proxy.username,
         proxyPassword: proxy.password ?? '',
+        hardwareDecode: hardwareDecode,
       ),
     );
     return done.future;

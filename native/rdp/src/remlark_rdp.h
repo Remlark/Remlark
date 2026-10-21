@@ -2,6 +2,7 @@
  * Remlark RDP 胶水库：在 FreeRDP 之上提供一组简单的 C 接口，供 Dart FFI 调用。
  * - 连接在独立线程中运行，事件通过回调通知 Dart（回调可能在任意线程触发）
  * - 画面使用 FreeRDP GDI 合成为 BGRA32，Dart 通过 rmk_rdp_take_frame 只取走变化区域
+ * - 图形管线支持 H.264（AVC420 / AVC444），经 FFmpeg 使用平台硬件解码，不可用时软件解码
  * - 剪贴板（文本 + 文件）通过 cliprdr 通道实现，文件夹共享通过 rdpdr/drive 通道实现
  */
 #ifndef REMLARK_RDP_H
@@ -56,6 +57,9 @@ RMK_API int32_t rmk_rdp_connect(RmkRdp* rdp, const char* host, int32_t port, con
 RMK_API void rmk_rdp_set_proxy(RmkRdp* rdp, int32_t type, const char* host, int32_t port,
                                const char* username, const char* password);
 
+/* 是否允许 H.264 硬件解码（在 connect 之前调用，默认允许）；关闭或硬件不可用时软件解码 */
+RMK_API void rmk_rdp_set_hwdec(RmkRdp* rdp, int32_t enabled);
+
 /* 断开连接并等待连接线程退出 */
 RMK_API void rmk_rdp_disconnect(RmkRdp* rdp);
 
@@ -90,6 +94,21 @@ RMK_API void rmk_rdp_set_clipboard_files(RmkRdp* rdp, const char* paths);
 
 /* 释放回调中传出的字符串 */
 RMK_API void rmk_rdp_free_string(char* str);
+
+/* H.264 解码能力（rmk_rdp_h264_caps 返回值的位） */
+#define RMK_H264_DECODER 1  /* 已编入 H.264 解码器，连接时启用 AVC420 / AVC444 */
+#define RMK_H264_HARDWARE 2 /* 平台硬件解码可用（已实际解码一帧并校验颜色） */
+
+/* 探测 H.264 解码能力（首次调用会创建硬件设备并实际解码一帧内置画面，结果缓存） */
+RMK_API int32_t rmk_rdp_h264_caps(void);
+
+/* 当前平台使用的硬件解码设备类型：videotoolbox / d3d11va / vaapi */
+RMK_API const char* rmk_rdp_h264_hw_type(void);
+
+/* 自检：用与连接相同的 FreeRDP AVC420 流程把一帧 H.264（Annex B）解码为 BGRA（行距 = 宽 * 4），
+ * hardware 非 0 且探测到硬件可用时使用平台硬件解码（与连接时的选择一致），否则软件解码。返回值 >= 0 表示成功，供多平台测试使用 */
+RMK_API int32_t rmk_rdp_h264_self_test(const uint8_t* data, int32_t size, int32_t width,
+                                       int32_t height, int32_t hardware, uint8_t* bgra);
 
 /* FreeRDP 版本 */
 RMK_API const char* rmk_rdp_version(void);

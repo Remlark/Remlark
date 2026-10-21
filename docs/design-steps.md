@@ -543,6 +543,31 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - CI 修复：隔离 FreeRDP 与应用标签、Windows 固定系统 tar、隔离 GNU Make / NMake 参数；Windows 使用独立 isolate 中的 Dart 流式解压。
   - 验证：GitHub Actions 第 8 轮五路构建与发布全部成功；Windows x64 / arm64 各 38 项平台测试通过，macOS 与 Linux 双架构各 33 项通过；v1.0.0 已发布 10 个安装 / 便携包及 SHA256SUMS。浏览器确认 Actions Success 与 Release 附件齐全，实机交互见 M-16。
 
+- [已完成] Step 81：RDP H.264 硬件解码
+  - 原因：原 RDP 只协商 RemoteFX / Progressive / Planar，解码全部在 CPU 上完成；高分辨率或视频画面时带宽与 CPU 占用高。
+  - 构建：新增 FFmpeg 8.1.3 静态编译，仅包含 H.264 解码器、解析器与 swscale，关闭自动探测；按平台开启硬件加速：macOS VideoToolbox、Windows D3D11VA / DXVA2（MSVC 编译，configure 经 MSYS2 bash 运行，见 `build_ffmpeg_msvc.sh`）、Linux VAAPI。FreeRDP 开启 `WITH_VIDEO_FFMPEG` 与 `WITH_FFMPEG_HWACCEL`，关闭音频 FFmpeg；构建脚本记录 FreeRDP 特性标识，编译选项变化时自动重编旧缓存。
+  - 胶水库：新增 `rmk_h264.c`，首次连接时探测 H.264 解码器与平台硬件设备（结果缓存），开启 GFX AVC420 / AVC444 / AVC444v2；硬件可用时 `SoftwareGdi=FALSE` 让 FreeRDP 为每个 H.264 表面启用硬件解码，否则保持 FFmpeg 软件解码；没有解码器时不协商 H.264。
+  - 平台接口：`src/hwdec/rmk_hwdec.h` 定义设备类型 / 设备路径 / 环境准备，三个平台各自实现（macOS `videotoolbox`；Windows `d3d11va`，FreeRDP 默认 DXVA2；Linux `vaapi`，自动选择第一个可读写的 `/dev/dri/renderD*`），经 `FREERDP_HWCTX_TYPE` / `FREERDP_HWCTX_DEVICE` 传给 FreeRDP，用户已设置时保留。
+  - Dart：新增 `rdp_h264.dart`（`RdpH264Support`），连接日志写明当前为 H.264 硬件解码或软件解码；画面合成与上传流程不变。
+  - CI：macOS 安装 nasm；Linux 安装 nasm、libva-dev（deb 依赖由 dpkg-shlibdeps 自动加入 libva2 / libva-drm2）；Windows 安装 MSYS2 的 make、diffutils。
+  - 测试：新增 P-11（三平台实现与构建选项、原生库探测）、M-17（真实 Windows 服务器 H.264 硬件解码）。
+  - 验证：macOS x86_64 / arm64 编译通过；用 FreeRDP `avc420_decompress` 解码 libx264 编码的帧，VideoToolbox 硬解与软解输出一致；平台测试 37 项、RDP 端到端与剪贴板测试通过。Windows / Linux 的编译与硬解待在对应平台执行 `make test-platform` 与 M-17 验证。
+
+- [已完成] Step 82：设置中开关 RDP 硬件解码
+  - 设置页新增“远程桌面”分区（位于终端之后），提供“RDP 硬件解码”开关，默认开启，存储键 `rdp.hwdec`；修改后对新建的连接生效。
+  - 说明文字显示本机能力：可用时显示设备名（VideoToolbox / Direct3D 11 (D3D11VA) / VA-API），显卡不支持时提示使用软件解码并禁用开关（保留已保存的选择），原生库缺失时提示组件未安装。
+  - 原生库新增 `rmk_rdp_set_hwdec`（连接前调用），`rmk_h264_apply` 按设置决定 `SoftwareGdi`；关闭时仍协商 H.264，只是改用软件解码。取代 Step 81 中的环境变量开关。
+  - 会话启动器把设置传给 `RdpSession.hardwareDecode`；连接日志写明“设置中已关闭硬件解码”。
+  - 测试：新增 `rdp_hwdec_setting_test.dart`（默认值与持久化、日志描述、设置页开关状态与切换）；P-11 增加设置传递检查；`layout_overflow_test.dart` 自动覆盖新分区的中英文三种尺寸。
+  - 验证：macOS x86_64 平台测试 37 项、设置测试 3 项、布局溢出测试通过。
+
+- [已完成] Step 83：H.264 多平台解码测试与硬件实测探测
+  - 原生库新增 `rmk_rdp_h264_self_test`：用与连接相同的 FreeRDP AVC420 流程把一帧 H.264 解码为 BGRA，供多平台测试调用；Dart 封装为 `RdpH264Support.selfTest`。
+  - 探测改为实测：硬件设备可创建后，再用硬件实际解码内置帧（`rmk_h264_probe_frame.h`，左半 #E04020、右半 #3080C0）并校验颜色，成功才启用硬件。原因：虚拟机中的 VideoToolbox、异常的 VAAPI 驱动等能创建设备却无法解码，而 FreeRDP 的 FFmpeg 后端此时不会回退软件解码，会导致 H.264 画面失败。
+  - P-11 增加实际解码测试（测试资源 `test/platform/fixtures/h264_320x240.h264`，BT.709 全范围，与 FreeRDP YUV 转换一致）：软件 / 硬件解码颜色正确且一致、无效数据返回失败；检查内置探测帧与测试资源字节一致。
+  - Release CI 在原生库编译完成后再次运行 P-11，五个平台架构都实际解码，失败时不发布。
+  - 验证：macOS x86_64 平台测试 41 项、设置测试、RDP 端到端与剪贴板测试通过；软件解码与 VideoToolbox 解码结果一致。
+
 ## 构建与运行命令
 
 | 命令 | 说明 |
@@ -563,7 +588,7 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
 
 - RDP 原生库已在 macOS x86_64 编译与连接测试通过、Windows x64 编译与 FFI 加载、Linux x64 编译与测试服务端端到端通过；真实 Windows 远程连接与 arm64 仍待实机验证。
 - SSH 加密原生库已在 macOS x86_64、Windows x64 与 Linux x64 编译测试通过；arm64 仍待实机验证（库缺失时自动退回纯 Dart 加密）。
-- RDP 暂未启用 H.264（AVC）编码，使用 RemoteFX / Progressive / Planar 等编码；暂不支持声音重定向。
+- RDP 支持 H.264（AVC420 / AVC444），经 FFmpeg 使用平台硬件解码（macOS VideoToolbox / Windows D3D11VA / Linux VAAPI），硬件不可用时软件解码；解码后的画面仍拷贝为 BGRA 再上传纹理，尚未零拷贝；暂不支持声音重定向。
 - RDP 远程鼠标指针形状未同步，显示本地指针。
 - RDP 远程复制的文件会立即下载到本地（上限 2GB），超过上限不传输并提示。
 - 剪贴板测试使用自写的测试服务端，尚未与真实 Windows 服务器联调。

@@ -1,7 +1,8 @@
-﻿# 编译 RDP 原生库（Windows x64 / arm64）：OpenSSL + FreeRDP（静态）+ 胶水库 remlark_rdp.dll
+﻿# 编译 RDP 原生库（Windows x64 / arm64）：OpenSSL + FFmpeg + FreeRDP（静态）+ 胶水库 remlark_rdp.dll
 # 需要：Visual Studio 2022（含对应架构的 C++ 工具链，x64 在 "x64 Native Tools Command Prompt"、
 #       arm64 在 "ARM64 Native Tools Command Prompt" 或 x64_arm64 交叉编译命令行中运行）、CMake、Ninja、
-#       Strawberry Perl 与 NASM（x64 编译 OpenSSL 汇编用）
+#       Strawberry Perl 与 NASM（x64 编译 OpenSSL / FFmpeg 汇编用）、
+#       MSYS2（含 make、diffutils，只用来运行 FFmpeg 的 configure；默认 C:\msys64，可用 MSYS2_ROOT 指定）
 # 用法：powershell -ExecutionPolicy Bypass -File native\rdp\scripts\build.ps1 [-Arch x86_64|arm64]
 param(
   # 目标架构：x86_64 / arm64，默认取 VS 开发者命令行的目标架构（VSCMD_ARG_TGT_ARCH），没有时取本机架构
@@ -27,6 +28,9 @@ if ($VsTarget -and $VsTarget -ne $ExpectedVs) {
 $FreeRdpVersion = "3.32.2"
 $OpenSslVersion = "3.6.5"
 $ZlibVersion = "1.3.1"
+$FfmpegVersion = "8.1.3"
+# FreeRDP 编译特性标识：修改 FreeRDP 编译选项时同步修改，已有缓存会自动重新编译
+$FreeRdpFeatures = "h264-ffmpeg-hwaccel-1"
 $Root = (Resolve-Path "$PSScriptRoot\..\..\..").Path
 $Native = "$Root\native\rdp"
 $DepsSrc = "$Native\.deps"
@@ -74,7 +78,28 @@ if (-not (Test-Path "$Prefix\lib\zlibstatic.lib")) {
   Invoke-BuildCommand cmake --install "$Out\zlib-build"
 }
 
-# 3. FreeRDP（静态）
+# 3. FFmpeg（静态，/MT）：只保留 H.264 解码器、解析器与 swscale，开启 D3D11VA / DXVA2 硬件解码
+if (-not (Test-Path "$Prefix\lib\avcodec.lib")) {
+  Fetch "https://ffmpeg.org/releases/ffmpeg-$FfmpegVersion.tar.gz" "ffmpeg-$FfmpegVersion"
+  $Msys = if ($env:MSYS2_ROOT) { $env:MSYS2_ROOT } else { "C:\msys64" }
+  $Bash = "$Msys\usr\bin\bash.exe"
+  if (-not (Test-Path $Bash)) {
+    throw "未找到 MSYS2（$Bash）：请安装 MSYS2 并执行 pacman -S make diffutils，或用 MSYS2_ROOT 指定安装目录"
+  }
+  Invoke-BuildCommand $Bash "$Native\scripts\build_ffmpeg_msvc.sh" "$DepsSrc\ffmpeg-$FfmpegVersion" "$Out\ffmpeg-build" $Prefix $Arch
+  # FFmpeg 的 MSVC 静态库命名为 libxxx.a，改为 FreeRDP 与胶水库查找的 xxx.lib
+  foreach ($lib in @("avcodec", "swscale", "avutil")) {
+    Move-Item -Force "$Prefix\lib\lib$lib.a" "$Prefix\lib\$lib.lib"
+  }
+}
+
+# 4. FreeRDP（静态）
+# 编译选项变化（特性标识不同）时清理旧缓存重新编译
+$FeaturesFile = "$Out\freerdp-features"
+if ((Test-Path "$Prefix\lib\freerdp3.lib") -and
+    (-not (Test-Path $FeaturesFile) -or (Get-Content $FeaturesFile -Raw).Trim() -ne $FreeRdpFeatures)) {
+  Remove-Item -Recurse -Force "$Out\freerdp-build", "$Prefix\lib\freerdp3.lib" -ErrorAction SilentlyContinue
+}
 if (-not (Test-Path "$Prefix\lib\freerdp3.lib")) {
   Invoke-BuildCommand cmake -G Ninja -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -S "$DepsSrc\FreeRDP-$FreeRdpVersion" -B "$Out\freerdp-build" `
     -DCMAKE_BUILD_TYPE=Release "-DCMAKE_INSTALL_PREFIX=$Prefix" "-DCMAKE_PREFIX_PATH=$Prefix" `
@@ -82,7 +107,8 @@ if (-not (Test-Path "$Prefix\lib\freerdp3.lib")) {
     "-DZLIB_LIBRARY=$Prefix\lib\zlibstatic.lib" "-DZLIB_INCLUDE_DIR=$Prefix\include" `
     "-DOPENSSL_ROOT_DIR=$Prefix" -DOPENSSL_USE_STATIC_LIBS=ON -DOPENSSL_MSVC_STATIC_RT=ON `
     -DWITH_CLIENT_COMMON=ON -DWITH_CLIENT=OFF -DWITH_CLIENT_SDL=OFF -DWITH_SERVER=OFF -DWITH_SAMPLE=OFF `
-    -DWITH_PROXY=OFF -DWITH_SHADOW=OFF -DWITH_PLATFORM_SERVER=OFF -DWITH_FFMPEG=OFF -DWITH_SWSCALE=OFF `
+    -DWITH_PROXY=OFF -DWITH_SHADOW=OFF -DWITH_PLATFORM_SERVER=OFF `
+    -DWITH_FFMPEG=ON -DWITH_VIDEO_FFMPEG=ON -DWITH_DSP_FFMPEG=OFF -DWITH_FFMPEG_HWACCEL=ON -DWITH_SWSCALE=ON `
     -DWITH_MEDIA_FOUNDATION=OFF -DWITH_OPENH264=OFF -DWITH_JSON_DISABLED=ON -DWITH_AAD=OFF -DWITH_KRB5=OFF `
     -DWITH_OPUS=OFF -DWITH_URIPARSER=OFF -DWITH_MANPAGES=OFF -DWITH_WINPR_TOOLS=OFF -DWITH_WEBVIEW=OFF `
     -DWITH_INTERNAL_MD4=ON -DWITH_INTERNAL_MD5=ON -DWITH_INTERNAL_RC4=ON `
@@ -90,9 +116,10 @@ if (-not (Test-Path "$Prefix\lib\freerdp3.lib")) {
     -DCHANNEL_SERIAL=OFF -DCHANNEL_PARALLEL=OFF -DCHANNEL_RDPECAM=OFF -DCHANNEL_SSHAGENT=OFF -DCHANNEL_RDPEAR=OFF
   Invoke-BuildCommand cmake --build "$Out\freerdp-build"
   Invoke-BuildCommand cmake --install "$Out\freerdp-build"
+  Set-Content -Path $FeaturesFile -Value $FreeRdpFeatures -Encoding ascii
 }
 
-# 4. 胶水库
+# 5. 胶水库
 Invoke-BuildCommand cmake -G Ninja -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -S $Native -B "$Out\shim-build" -DCMAKE_BUILD_TYPE=Release "-DREMLARK_DEPS_PREFIX=$Prefix" `
   -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
 Invoke-BuildCommand cmake --build "$Out\shim-build"
