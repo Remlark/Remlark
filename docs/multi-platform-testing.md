@@ -1,0 +1,130 @@
+# 多平台测试
+
+Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台。Flutter 桌面不能交叉编译，各平台的构建和测试都要在对应系统上执行。目前只在 macOS（x86_64）上完整测试过，Windows 和 Linux 需要按本文逐项验证。
+
+本文列出：
+
+1. 哪些功能和平台有关、各平台用的是什么实现；
+2. 用来检查这些功能的单元测试（编号 P-xx）；
+3. 依赖本机环境的端到端测试，以及各平台的准备步骤；
+4. 自动化测试覆盖不到、需要手工验证的项目（编号 M-xx）；
+5. 已经发现的平台问题。
+
+## 维护规则
+
+- 新增或修改与平台有关的功能时（`Platform.isXxx`、`defaultTargetPlatform`、`Process.run`/`Process.start` 调用系统命令、FFI 原生库、MethodChannel、平台工程目录 `macos/` `windows/` `linux/` 下的原生代码、按平台区分的快捷键或路径），必须同时完成以下三件事：
+  1. 在[平台差异总览](#1-平台差异总览)中加一行或更新对应行；
+  2. 在 `test/platform/` 下加单元测试（或扩展已有测试），给测试分配新的 P 编号，文件头注释写上“多平台测试 P-xx”，并登记到[单元测试](#2-单元测试test-platform)表中；
+  3. 自动化测不到的部分（界面交互、系统对话框、真实安装包等）写进[手工测试清单](#4-手工测试清单)。
+- 平台实现遵循 agents.md 的约定：先定义接口，每个平台各自实现；改一个平台时三个平台一起改，对应的 P 测试也要一起改。
+- 平台相关的单元测试要能在三个平台上都跑：
+  - 纯逻辑部分（包名、路径布局、按键映射）直接构造各平台的实现类来测，与当前系统无关；
+  - 依赖当前系统的部分用 `Platform.isXxx` 分支写出各平台的预期结果，不要直接跳过。
+- 在某个平台上完成一轮验证后，更新[验证记录](#6-验证记录)。
+
+## 1. 平台差异总览
+
+| 功能 | 代码位置 | macOS | Windows | Linux | 单元测试 | 手工 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Codex 运行包 | [lib/modules/ai/codex/platform/](../lib/modules/ai/codex/platform/) | `*-apple-darwin.tar.gz` | `*-pc-windows-msvc.tar.gz`，文件名带 `.exe` | `*-unknown-linux-musl.tar.gz` | P-01 | M-08 |
+| dsh 私有 Node.js | [lib/modules/ai/dsh/platform/](../lib/modules/ai/dsh/platform/) | `darwin-*.tar.gz`，`bin/node` | `win-*.zip`，根目录 `node.exe`，PATH 分隔符 `;` | `linux-*.tar.gz`，`bin/node` | P-02 | M-09 |
+| 压缩包解压 | [lib/utils/archive/](../lib/utils/archive/) | `tar` / `unzip` | `System32\tar.exe`，没有时用 PowerShell `Expand-Archive`（只支持 zip） | `tar` / `unzip` | P-03 | M-08、M-09 |
+| 主目录、PATH 查找 | [lib/utils/platform_utils.dart](../lib/utils/platform_utils.dart) | `HOME`；额外查找 Homebrew 目录 | `USERPROFILE`；依次补 `.exe` `.bat` `.cmd` 后缀 | `HOME` | P-04 | — |
+| 打开文件管理器、浏览器 | [lib/utils/platform_utils.dart](../lib/utils/platform_utils.dart) | `open` | `explorer`、`rundll32 url.dll,FileProtocolHandler` | `xdg-open` | — | M-10 |
+| 主密钥、凭据目录权限 | [lib/utils/file_permissions/](../lib/utils/file_permissions/)，调用方 `secret_store.dart`、Codex / dsh 的 HOME 目录 | `chmod 600/700` | `icacls /inheritance:r /grant:r <用户>:F`（目录加 `(OI)(CI)`） | `chmod 600/700` | P-04 | M-01 |
+| 应用数据目录 | `path_provider` | `~/Library/Application Support/<bundle id>` | `%APPDATA%\<公司>\<产品>` | `~/.local/share/<应用 id>` | — | M-01 |
+| VNC 延迟文件剪贴板 | [lazy_file_clipboard.dart](../lib/modules/remote_desktop/vnc/lazy_file_clipboard.dart) + [MainFlutterWindow.swift](../macos/Runner/MainFlutterWindow.swift) | 原生 NSPasteboard，粘贴时才下载 | 不支持，复制时立即下载 | 不支持，复制时立即下载 | P-05 | M-06 |
+| 系统免密登录快捷指令 | [install_system_key_action.dart](../lib/modules/snippets/actions/install_system_key_action.dart) | 可用 | 不可用，列表中隐藏 | 可用 | P-05 | M-11 |
+| RDP Command 键映射 | [rdp_scancode.dart](../lib/modules/remote_desktop/rdp/rdp_scancode.dart)、[rdp_session.dart](../lib/modules/remote_desktop/rdp/rdp_session.dart) | ⌘ 映射为 Ctrl | Win 键保持 Win | Win 键保持 Win | P-05 | M-05 |
+| 聊天发送快捷键 | [chat_panel.dart](../lib/modules/ai/ui/chat_panel.dart) | ⌘Enter | Ctrl+Enter | Ctrl+Enter | [chat_send_key_test.dart](../test/chat_send_key_test.dart) | M-07 |
+| 终端复制粘贴快捷键、字体 | [terminal_pane.dart](../lib/modules/terminal/ui/terminal_pane.dart) | ⌘C / ⌘V / ⌘A，Menlo | Ctrl+Shift+C / V，Ctrl+Insert，monospace | 同 Windows | — | M-03 |
+| SFTP 多选 | [file_pane.dart](../lib/modules/sftp/ui/file_pane.dart) | ⌘ 或 Ctrl 点击 | Ctrl 点击 | Ctrl 点击 | — | M-04 |
+| 剪贴板文件读取、拖放 | `pasteboard`、`desktop_drop`、`file_selector` 插件 | 插件实现 | 插件实现 | 插件实现 | [file_drop_target_test.dart](../test/file_drop_target_test.dart)（只测分发逻辑） | M-03、M-04、M-06 |
+| 窗口默认尺寸 / 最小尺寸 | [window_config.dart](../lib/app/window_config.dart) + 三个平台的 runner | `MainFlutterWindow.swift` | `main.cpp`、`flutter_window.cpp`（按 DPI 换算） | `my_application.cc` | P-06 | M-02 |
+| 原生库（RDP、SSH AES-GCM） | [hook/build.dart](../hook/build.dart)、`native/*/scripts/` | `build.sh`，x86_64 + arm64 | `build.ps1 [-Arch x86_64\|arm64]`，默认按 VS 命令行的目标架构 | `build.sh`（`aarch64` 命名） | P-06、[native_crypto_test.dart](../test/native_crypto_test.dart) | M-12 |
+| 打包 | [Makefile](../Makefile) | `make mac` → zip | `make windows` → zip | `make linux` → tar.gz | P-06 | M-12 |
+| 应用图标 | `tools/branding/`、`linux/packaging/` | `.icns` | 7 帧 `.ico` | PNG + `.desktop` | — | M-12 |
+| 同步服务端 | [server/](../server/) | `dart build cli` | 同左 | 同左 | `server/` 中的 `dart test` | M-13 |
+
+## 2. 单元测试（test/platform）
+
+运行方式：`make test-platform`（等价于 `flutter test test/platform`）。三个平台都要执行，测试会按当前系统检查对应的预期结果。
+
+| 编号 | 测试文件 | 检查内容 | 关联功能 |
+| --- | --- | --- | --- |
+| P-01 | [codex_platform_test.dart](../test/platform/codex_platform_test.dart) | 三个平台、x64/arm64 的 Codex 发布包名称；Windows 可执行文件带 `.exe`；不支持的架构返回 null；`current()` 选中当前平台的实现且当前架构有发布包 | Codex 运行包 |
+| P-02 | [dsh_platform_test.dart](../test/platform/dsh_platform_test.dart) | Node.js 安装包名称；`node` / `npm-cli.js` / PATH 目录的位置；PATH 分隔符；子进程环境只有一个 PATH 键（Windows 下键名为 `Path`），且私有 node 目录在最前面 | dsh 私有 Node.js |
+| P-03 | [archive_extractor_test.dart](../test/platform/archive_extractor_test.dart) | `current()` 选中对应的解压实现；用当前系统的工具解压 `.tar.gz` 和 `.zip`，中文文件名不乱码，POSIX 下保留可执行权限；压缩包损坏时抛出 `ProcessException` | 压缩包解压 |
+| P-04 | [platform_utils_test.dart](../test/platform/platform_utils_test.dart) | 主目录是存在的绝对路径；`which` 能找到 `sh`（Windows 下为 `cmd.exe`），找不到时返回 null；`isUnixDesktop` 的值；权限实现按平台选择，icacls 参数正确；主密钥文件权限为 600、目录为 700，Windows 下 `icacls` 输出中有当前用户且没有继承的权限；`SecretStore` 加解密能往返 | 主目录、PATH、密钥权限 |
+| P-05 | [platform_features_test.dart](../test/platform/platform_features_test.dart) | 延迟文件剪贴板只在 macOS 上可用；系统免密登录在 Windows 上不可用；RDP 中 ⌘ 映射为 Ctrl，Windows / Linux 下保持 Win 键 | 只在部分平台提供的功能、按键映射 |
+| P-06 | [window_config_sync_test.dart](../test/platform/window_config_sync_test.dart) | 三个平台 runner 中的窗口尺寸与 `window_config.dart` 一致；构建钩子覆盖三个平台；每个原生库都有 `build.sh` 和 `build.ps1`，`build.ps1` 支持 x86_64 / arm64，输出目录与构建钩子一致；Makefile 有 mac / linux / windows / run 目标 | 窗口尺寸、原生库、打包 |
+
+其他测试中与平台有关的部分：
+
+| 测试文件 | 平台相关内容 | 各平台情况 |
+| --- | --- | --- |
+| [chat_send_key_test.dart](../test/chat_send_key_test.dart) | ⌘Enter / Ctrl+Enter 的判断 | 纯逻辑，三个平台都能跑 |
+| [native_crypto_test.dart](../test/native_crypto_test.dart) | 原生 AES-GCM 与纯 Dart 实现的结果一致 | 需要先 `make crypto-lib`；Windows / Linux 上未验证过 |
+| [codex_installer_test.dart](../test/codex_installer_test.dart) | 安装、升级、校验失败时回滚 | 用脚本模拟 codex：macOS / Linux 为 sh，Windows 为 `.cmd`；压缩用系统 tar（Windows 为 System32 的 bsdtar） |
+| [layout_overflow_test.dart](../test/layout_overflow_test.dart) | 最小窗口尺寸下界面不溢出 | 纯 Flutter，三个平台都能跑 |
+| [ui_snapshot_test.dart](../test/ui_snapshot_test.dart) | 页面快照 | 字体渲染因平台而异，只在 macOS 上维护快照 |
+
+## 3. 端到端测试与各平台准备
+
+端到端测试依赖本机服务或预先编译的程序，条件不满足时会跳过。在 Windows / Linux 上验证时，要确认测试是真的执行了，不能只看“通过”——跳过的测试也会显示为通过（看输出中的 `skip` 和 `markTestSkipped` 信息）。
+
+| 测试 | 依赖 | macOS | Windows | Linux |
+| --- | --- | --- | --- | --- |
+| [ssh_e2e_test.dart](../test/ssh_e2e_test.dart) | 本机 `/usr/sbin/sshd`、`ssh-keygen` | 可运行；剪贴板、Finder 相关用例只在 macOS 上执行 | 跳过（Windows 的 OpenSSH Server 需要管理员权限以服务方式运行），按 M-03、M-04 手工验证 | 安装 `openssh-server` 后可运行 |
+| [rdp_e2e_test.dart](../test/rdp_e2e_test.dart) | `make rdp-lib` + `make rdp-test-server`、`openssl` | 可运行 | 没有测试服务端，跳过 | 可运行；目录按当前架构选择（arm64 为 `linux-aarch64`） |
+| [rdp_clipboard_test.dart](../test/rdp_clipboard_test.dart) | 同上 | 可运行 | 跳过 | 可运行 |
+| [dsh_install_e2e_test.dart](../test/dsh_install_e2e_test.dart) | 网络（nodejs.org、npm），`RMK_DSH_E2E=1` | 可运行 | 需要验证：zip 解压、`node.exe`、`Path` | 需要验证 |
+| [sync_e2e_test.dart](../test/sync_e2e_test.dart) | 本机启动同步服务端 | 可运行 | 需要验证 | 需要验证 |
+
+各平台的准备：
+
+- **Windows**：Flutter + Visual Studio 2022（C++ 桌面开发）；编译原生库还需要 CMake、Ninja、Strawberry Perl、NASM，并在 “x64 Native Tools Command Prompt” 中执行 `make native-lib`；`make` 可以用 Git for Windows 或 MSYS2 自带的。确认 `C:\Windows\System32\tar.exe` 存在（Windows 10 1803 及以上自带）。
+- **Linux**（以 Ubuntu 为例）：`clang cmake ninja-build pkg-config libgtk-3-dev`、`openssh-server`、`xdg-utils`、`zip unzip`；编译 FreeRDP 需要的开发包见 `native/rdp/scripts/build.sh`。
+
+## 4. 手工测试清单
+
+每一项都要在三个平台上分别执行。结果记录在[验证记录](#6-验证记录)中：✅ 通过，❌ 失败（附问题），— 不适用。
+
+| 编号 | 项目 | 步骤与预期 |
+| --- | --- | --- |
+| M-01 | 首次启动与数据目录 | 全新环境启动 → 数据目录中生成数据库、`master.key`、日志目录（启动日志第一行写有系统版本）；重启后主机、密钥都还在 |
+| M-02 | 窗口 | 默认 1280×820 并居中；不能缩小到 960×640 以下；Windows 上在 125% / 150% 缩放下最小尺寸正确；最小尺寸下各页面不溢出、不被截断；中英文切换后同样不溢出 |
+| M-03 | 终端 | SSH 连接后可以输入；中文显示正常、字体等宽；复制 / 粘贴快捷键与右键菜单中显示的一致（macOS ⌘C/⌘V，其他平台 Ctrl+Shift+C/V、Ctrl+Insert）；在资源管理器 / 文件管理器中复制文件后，在终端里粘贴 → 显示“粘贴并上传”并上传成功；把文件拖进终端 → 上传成功；“选中即复制”有效 |
+| M-04 | SFTP | 本地栏起始目录为用户主目录（Windows 为 `C:\Users\<用户名>`）；进入上级目录直到盘符根目录不出错；Ctrl 点击多选、Shift 连续选择；新建、重命名、删除本地文件；带中文和空格的文件名上传、下载正常；从系统文件管理器拖入文件即上传 |
+| M-05 | RDP | 连接 Windows 服务器：画面、鼠标、键盘正常；macOS 上 ⌘C/⌘V 在远程中生效，Windows / Linux 上 Win 键打开远程开始菜单；剪贴板文本双向同步；本地复制文件后在远程粘贴、远程复制文件后在本地粘贴；拖放上传 |
+| M-06 | VNC | 连接 macOS 屏幕共享与普通 VNC 服务器；远程复制文件后在本地粘贴：macOS 上粘贴时才下载，Windows / Linux 上复制时就下载，粘贴得到的是完整文件；修饰键不会卡住 |
+| M-07 | AI 聊天 | 输入框提示的发送快捷键与平台一致；⌘Enter / Ctrl+Enter 发送，单独 Enter 换行 |
+| M-08 | Codex 安装 | 设置中安装 Codex → 下载、校验、解压成功，显示版本号；登录、提问都正常；升级时正在运行的 Codex 被结束后完成替换（Windows 上文件被占用时，下次启动会清理旧目录）；卸载后登录信息保留 |
+| M-09 | DeepSeek Harness 安装 | 安装私有 Node.js 与 dsh → 启动 ACP 进程并能提问；Windows 上 zip 解压后能找到 `node.exe`，npm 安装成功；卸载后会话记录保留 |
+| M-10 | 打开外部程序 | 设置 → 数据中打开数据目录、RDP 中打开下载目录，都能打开系统文件管理器；Codex 登录能在默认浏览器中打开授权页面；导入 / 导出时系统文件选择对话框正常 |
+| M-11 | 系统免密登录 | macOS / Linux：执行后 `~/.ssh` 下生成密钥，`~/.ssh/config` 写入别名，系统终端里 `ssh <别名>` 能免密登录；Windows：快捷指令列表中不显示这一项 |
+| M-12 | 构建与打包 | `make native-lib` 编译成功；`make` 打出安装包；解压到新机器（没有装开发环境）上能启动；原生库被打进安装包（RDP 能连接，日志显示“已启用原生 AES-GCM 加密”）；应用图标在 Dock / 任务栏 / 桌面启动器中显示正确；Linux 运行 `linux/packaging/install-desktop.py` 后菜单中出现应用 |
+| M-13 | 同步服务端 | `make server` 编译成功；用 `--port --token` 启动；两个客户端同步主机与密钥 |
+
+## 5. 已发现的平台问题
+
+| 编号 | 平台 | 问题 | 建议 |
+| --- | --- | --- | --- |
+| K-01 | Windows | `ssh_e2e_test.dart` 在 `main()` 中读取 `Platform.environment['USER']!`，Windows 上没有这个变量，文件加载时就会报错，而不是跳过 | 已修复：用户名改用 `test/helpers/platform_tools.dart` 的 `currentUserName()`（Windows 下取 `USERNAME`）；Windows 上明确跳过并提示，SSH 按手工清单验证 |
+| K-02 | Linux arm64 | `rdp_e2e_test.dart` 在非 macOS 上把架构写死为 `x86_64`，arm64 上找不到 `linux-aarch64` 下的测试服务端，测试被跳过 | 已修复：RDP 测试统一用 `nativeBuildFile()`，按当前 Dart 进程的 ABI 选择与构建钩子相同的目录 |
+| K-03 | Windows | `PlatformUtils.restrictPermissions` 在 Windows 上什么都不做，`master.key` 和 Codex 凭据目录用的是默认 ACL | 已修复：新增 `FilePermissions` 接口（POSIX 用 chmod，Windows 用 icacls 去掉继承、只授权当前用户），P-04 检查 |
+| K-04 | Windows | `codex_installer_test.dart` 的安装 / 升级用例用 sh 脚本模拟 codex，Windows 上跳过 | 已修复：Windows 上用 `.cmd` 脚本模拟，压缩用 System32 的 tar，不再跳过（需在 Windows 上实际运行确认） |
+| K-05 | Windows arm64 | `native/*/scripts/build.ps1` 只编译 x64 | 已修复：两个脚本都加了 `-Arch x86_64\|arm64` 参数，默认按 VS 命令行的目标架构，不一致时报错；arm64 的 OpenSSL 用 `VC-WIN64-ARM`（需在 Windows arm64 上实际构建确认） |
+| K-06 | Linux | 打开目录、打开链接依赖 `xdg-open`，有些精简发行版没有安装 | 不处理：目标环境（桌面发行版）默认带 `xdg-utils`；M-10 中验证 |
+
+## 6. 验证记录
+
+每完成一轮验证都更新这张表（写明日期、系统版本与架构、提交号），失败项在[已发现的平台问题](#5-已发现的平台问题)中登记。
+
+| 项目 | macOS | Windows | Linux |
+| --- | --- | --- | --- |
+| 环境 | macOS 26.7 x86_64 | 未验证 | 未验证 |
+| P-01 ~ P-06（`make test-platform`） | ✅ 2026-10-21 | 未验证 | 未验证 |
+| 修复 K-01 ~ K-05 后的相关测试（test/platform、codex_installer、ssh / rdp / rdp_clipboard 端到端） | ✅ 2026-10-21，端到端测试实际执行未跳过 | 未验证 | 未验证 |
+| `flutter test`（全部）与端到端测试 | 之前的开发过程中运行过，本轮未重新运行 | 未验证 | 未验证 |
+| M-01 ~ M-13 | 开发过程中使用过，没有按本清单逐项记录；arm64 未实机运行 | 未验证 | 未验证 |

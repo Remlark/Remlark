@@ -16,7 +16,7 @@ else
   endif
 endif
 
-.PHONY: all build mac linux windows run deps gen test analyze server server-run clean rdp-lib crypto-lib native-lib rdp-test-server
+.PHONY: all build mac linux windows run deps gen test analyze server server-run clean rdp-lib crypto-lib native-lib rdp-test-server test-platform
 
 # 默认：按当前平台打包
 all: build
@@ -99,6 +99,10 @@ analyze:
 test:
 	flutter test
 	cd $(SERVER_DIR) && dart test
+
+# 多平台单元测试（见 docs/multi-platform-testing.md），在 macOS / Linux / Windows 上分别执行
+test-platform:
+	flutter test test/platform
 
 # 同步服务端：编译为可执行文件包（含 sqlite 动态库）
 server: deps

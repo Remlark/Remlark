@@ -9,28 +9,38 @@ import 'package:remlark/modules/ai/codex/codex_installer.dart';
 import 'package:remlark/modules/ai/codex/codex_types.dart';
 import 'package:remlark/modules/ai/codex/platform/codex_platform.dart';
 
-/// 测试用平台：固定的发布包名称
+import 'helpers/platform_tools.dart';
+
+/// 测试用平台：固定的发布包名称；Windows 上用 .cmd 脚本模拟可执行文件，其余平台用 sh 脚本
 class _TestPlatform implements CodexPlatform {
   @override
   String? get releaseAsset => 'codex-package-test.tar.gz';
 
   @override
-  String get executableName => 'codex';
+  String get executableName => Platform.isWindows ? 'codex.cmd' : 'codex';
 
   @override
-  String get codeModeHostName => 'codex-code-mode-host';
+  String get codeModeHostName => Platform.isWindows ? 'codex-code-mode-host.cmd' : 'codex-code-mode-host';
 }
 
-/// 生成假的运行包（bin/codex 输出版本号，执行工具可运行，附 codex-package.json），返回 tar.gz 字节
+/// 生成假的运行包（主程序输出版本号，执行工具可运行，附 codex-package.json），返回 tar.gz 字节
 Future<List<int>> _package(Directory tmp, String version) async {
+  final platform = _TestPlatform();
   final src = Directory(p.join(tmp.path, 'pkg-$version'));
   await Directory(p.join(src.path, 'bin')).create(recursive: true);
-  final exe = File(p.join(src.path, 'bin', 'codex'))..writeAsStringSync('#!/bin/sh\necho "codex-cli $version"\n');
-  final host = File(p.join(src.path, 'bin', 'codex-code-mode-host'))..writeAsStringSync('#!/bin/sh\nexit 0\n');
-  await Process.run('chmod', ['755', exe.path, host.path]);
+  final exe = File(p.join(src.path, 'bin', platform.executableName));
+  final host = File(p.join(src.path, 'bin', platform.codeModeHostName));
+  if (Platform.isWindows) {
+    exe.writeAsStringSync('@echo codex-cli $version\r\n');
+    host.writeAsStringSync('@exit /b 0\r\n');
+  } else {
+    exe.writeAsStringSync('#!/bin/sh\necho "codex-cli $version"\n');
+    host.writeAsStringSync('#!/bin/sh\nexit 0\n');
+    await Process.run('chmod', ['755', exe.path, host.path]);
+  }
   File(p.join(src.path, 'codex-package.json')).writeAsStringSync(jsonEncode({'version': version}));
   final archive = p.join(tmp.path, 'pkg-$version.tar.gz');
-  final r = await Process.run('tar', ['-czf', archive, '-C', src.path, '.']);
+  final r = await Process.run(systemTar(), ['-czf', archive, '-C', src.path, '.']);
   expect(r.exitCode, 0, reason: '${r.stderr}');
   return File(archive).readAsBytes();
 }
@@ -112,7 +122,7 @@ void main() {
     await i.uninstall();
     expect(env.installed, isFalse);
     i.dispose();
-  }, skip: Platform.isWindows ? '使用 sh 脚本模拟 codex' : null);
+  });
 
   test('采用临时目录中的登录：只替换凭据文件，删除临时目录，保留 Agent 原有数据', () async {
     final env = CodexEnvironment(p.join(tmp.path, 'codex'), _TestPlatform());

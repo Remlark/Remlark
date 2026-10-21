@@ -6,11 +6,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:remlark/modules/remote_desktop/rdp/rdp_client.dart';
 
+import 'helpers/platform_tools.dart';
+
 /// RDP 剪贴板端到端测试：使用 native/rdp/test/clip_test_server.c（build_test_server.sh 编译）
 void main() {
-  final arch = (Process.runSync('uname', ['-m']).stdout as String).trim();
-  final os = Platform.isMacOS ? 'macos' : 'linux';
-  final server = File('build/native/$os-$arch/clip_test_server');
+  // 测试服务端由 build_test_server.sh 编译，只支持 macOS / Linux
+  final server = nativeBuildFile('clip_test_server');
   final available = !Platform.isWindows && server.existsSync() && RdpClient.isAvailable;
 
   test('文本双向、本地目录复制到远程、远程文件复制到本地', () async {

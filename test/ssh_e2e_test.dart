@@ -27,6 +27,8 @@ import 'package:remlark/utils/async_byte_reader.dart';
 import 'package:remlark/utils/crypto_utils.dart';
 import 'package:remlark/utils/secret_store.dart';
 
+import 'helpers/platform_tools.dart';
+
 /// 测试用交互：不应弹出任何对话框
 class _NoUi extends SshInteraction {
   final progress = <String>[];
@@ -118,12 +120,15 @@ void main() {
   late HostRepository hosts;
   late KeyRepository keys;
   late SshConnector connector;
-  final user = Platform.environment['USER']!;
+  // Windows 下环境变量为 USERNAME；取不到用户名时不运行（sshd 按系统用户认证）
+  final user = currentUserName() ?? '';
   var available = true;
 
   setUpAll(() async {
     SecretStore.initForTest(CryptoUtils.randomBytes(32));
-    if (!File('/usr/sbin/sshd').existsSync()) {
+    // 本地 sshd 仅在 macOS / Linux 上以普通用户临时启动；Windows 的 OpenSSH Server 需管理员权限作为服务运行，
+    // 不在这里启动，Windows 上的 SSH 按 docs/multi-platform-testing.md 的手工清单验证
+    if (Platform.isWindows || user.isEmpty || !File('/usr/sbin/sshd').existsSync()) {
       available = false;
       return;
     }
@@ -200,7 +205,7 @@ Subsystem sftp $sftpServer
   );
 
   test('密钥登录、指纹记录、系统探测、执行命令', () async {
-    if (!available) return markTestSkipped('sshd not available');
+    if (!available) return markTestSkipped('sshd not available (macOS / Linux only)');
     await hosts.save(host('direct'));
     final conn = await connector.connect((await hosts.getByUuid('direct'))!, _NoUi());
     expect(utf8.decode(await conn.client.run('echo hi')).trim(), 'hi');
@@ -213,7 +218,7 @@ Subsystem sftp $sftpServer
   });
 
   test('跳板链（两级）+ HTTP 代理', () async {
-    if (!available) return markTestSkipped('sshd not available');
+    if (!available) return markTestSkipped('sshd not available (macOS / Linux only)');
     final log = <String>[];
     final proxy = await _httpProxy(log);
     await hosts.save(
@@ -235,7 +240,7 @@ Subsystem sftp $sftpServer
   });
 
   test('SOCKS5 代理（用户名密码）', () async {
-    if (!available) return markTestSkipped('sshd not available');
+    if (!available) return markTestSkipped('sshd not available (macOS / Linux only)');
     final log = <String>[];
     final proxy = await _socks5(log);
     await hosts.save(
@@ -252,7 +257,7 @@ Subsystem sftp $sftpServer
   });
 
   test('终端会话：打开 shell、输入命令、读取输出、断开', () async {
-    if (!available) return markTestSkipped('sshd not available');
+    if (!available) return markTestSkipped('sshd not available (macOS / Linux only)');
     final s = TerminalSession((await hosts.getByUuid('direct'))!, connector, _NoUi());
     await s.connect();
     expect(s.state, SessionState.connected);
@@ -268,7 +273,7 @@ Subsystem sftp $sftpServer
   });
 
   test('VNC 主机内置 SSH：用同一主机的地址与用户名经密钥登录 SSH（无需单独的 SSH 主机）', () async {
-    if (!available) return markTestSkipped('sshd not available');
+    if (!available) return markTestSkipped('sshd not available (macOS / Linux only)');
     // 模拟 VNC 服务器（无认证）
     final rfb = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     rfb.listen((s) async {
@@ -429,7 +434,7 @@ close access f
   });
 
   test('传输完成后自动从列表移除（远程桌面浮动传输框），失败任务保留', () async {
-    if (!available) return markTestSkipped('sshd not available');
+    if (!available) return markTestSkipped('sshd not available (macOS / Linux only)');
     final conn = await connector.connect((await hosts.getByUuid('direct'))!, _NoUi());
     final tm = TransferManager(SftpService(conn.client), autoRemoveDoneAfter: const Duration(milliseconds: 200));
     final local = File('${dir.path}/auto.txt')..writeAsStringSync('hi');
@@ -447,7 +452,7 @@ close access f
   });
 
   test('SFTP：新建目录、上传（带进度）、列目录、重命名、下载、删除', () async {
-    if (!available) return markTestSkipped('sshd not available');
+    if (!available) return markTestSkipped('sshd not available (macOS / Linux only)');
     final conn = await connector.connect((await hosts.getByUuid('direct'))!, _NoUi());
     final sftp = SftpService(conn.client);
     final remote = '${dir.path}/remote';
@@ -478,7 +483,7 @@ close access f
   });
 
   test('密钥被拒绝时回退为密码输入（用户取消）', () async {
-    if (!available) return markTestSkipped('sshd not available');
+    if (!available) return markTestSkipped('sshd not available (macOS / Linux only)');
     final other = await KeyUtils.generateEd25519('other');
     await keys.save(
       KeyEntry(

@@ -493,6 +493,20 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 保留透明母版与统一导出脚本，`make icons` 可重建所有平台资源。
   - 验证：flutter analyze、现有 UI 快照测试、macOS Release 构建通过；检查 17 张透明 PNG 与 7 帧 ICO，Linux 安装脚本验证含空格路径及保留已有主题。Windows/Linux 尚未在对应系统构建验证。
 
+- [已完成] Step 75：多平台测试文档与平台单元测试
+  - 新增 docs/multi-platform-testing.md：平台差异总览、单元测试（P 编号）、端到端测试准备、手工测试清单（M 编号）、已发现的平台问题与验证记录；agents.md 增加多平台测试规定。
+  - 新增 test/platform/ 单元测试 P-01 ~ P-06（Codex / dsh 平台实现、解压、PlatformUtils 与密钥权限、平台限定功能与 RDP 按键映射、原生窗口尺寸与构建脚本一致性），新增 `make test-platform`。
+  - 验证：macOS 上 `make test-platform` 18 项通过，flutter analyze test/platform 无问题；Windows / Linux 待按文档验证。
+
+- [已完成] Step 75.1：修复多平台测试文档中发现的平台问题
+  - K-01：ssh_e2e_test 用户名兼容 Windows（USERNAME），Windows 上明确跳过，不再在加载时报错。
+  - K-02：RDP 端到端测试按当前 ABI 定位原生构建目录（test/helpers/platform_tools.dart），Linux arm64 不再被跳过。
+  - K-03：新增 lib/utils/file_permissions/ 接口（POSIX chmod、Windows icacls 只授权当前用户），PlatformUtils 收紧权限改为调用该接口。
+  - K-04：Codex 安装器测试在 Windows 上用 .cmd 脚本模拟 codex，不再跳过。
+  - K-05：Windows 原生库构建脚本支持 -Arch x86_64|arm64。
+  - K-06（xdg-open）不处理。
+  - 验证：macOS 上 test/platform、codex_installer、ssh / rdp / rdp_clipboard 端到端测试通过；Windows / Linux 待实机验证。
+
 ## 构建与运行命令
 
 | 命令 | 说明 |
@@ -501,6 +515,7 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
 | `make mac` / `make linux` / `make windows` | 分平台打包（需在对应系统上执行，输出到 dist/） |
 | `make run` | 运行当前程序 |
 | `make test` | 运行客户端与服务端测试 |
+| `make test-platform` | 运行多平台单元测试（见 docs/multi-platform-testing.md，三个平台分别执行） |
 | `make gen` | 重新生成 drift ORM 代码 |
 | `make server` | 编译同步服务端（dist/remlark-sync-server/bundle/bin/server） |
 | `make server-run TOKEN=xxx` | 本地运行同步服务端 |

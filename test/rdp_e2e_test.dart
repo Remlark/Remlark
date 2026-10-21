@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:drift/native.dart';
 import 'package:flutter/services.dart';
 import 'package:remlark/data/database.dart';
@@ -16,6 +17,8 @@ import 'package:remlark/modules/workspace/workspace_tab.dart';
 import 'package:remlark/utils/crypto_utils.dart';
 import 'package:remlark/utils/platform_utils.dart';
 import 'package:remlark/utils/secret_store.dart';
+
+import 'helpers/platform_tools.dart';
 
 /// 测试交互：记录是否被询问密码
 class _Ui implements RemoteDesktopInteraction {
@@ -33,10 +36,9 @@ class _Ui implements RemoteDesktopInteraction {
 
 /// 使用 FreeRDP 示例服务端（native/rdp/scripts/build_test_server.sh 编译）做端到端测试
 void main() {
-  final arch = Platform.isMacOS ? (Process.runSync('uname', ['-m']).stdout as String).trim() : 'x86_64';
-  final os = Platform.isMacOS ? 'macos' : 'linux';
-  final server = File('build/native/$os-$arch/test-server-build/server/Sample/sfreerdp-server');
-  final available = server.existsSync() && RdpClient.isAvailable;
+  // 测试服务端由 build_test_server.sh 编译，只支持 macOS / Linux；目录按当前架构（Linux arm64 为 linux-aarch64）
+  final server = nativeBuildFile(p.join('test-server-build', 'server', 'Sample', 'sfreerdp-server'));
+  final available = !Platform.isWindows && server.existsSync() && RdpClient.isAvailable;
   late Directory dir;
   late Process proc;
   late int port;

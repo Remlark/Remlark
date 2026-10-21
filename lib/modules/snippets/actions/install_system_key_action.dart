@@ -30,7 +30,7 @@ class InstallSystemKeyAction extends SnippetAction {
     final sshDir = Directory(p.join(PlatformUtils.homeDir(), '.ssh'));
     if (!sshDir.existsSync()) {
       sshDir.createSync(recursive: true);
-      await Process.run('chmod', ['700', sshDir.path]);
+      await PlatformUtils.restrictDirectory(sshDir.path);
     }
 
     // 1. 本机公钥

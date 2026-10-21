@@ -1,15 +1,34 @@
-# 编译 RDP 原生库（Windows x64）：OpenSSL + FreeRDP（静态）+ 胶水库 remlark_rdp.dll
-# 需要：Visual Studio 2022（含 C++ 工具链，在 "x64 Native Tools Command Prompt" 中运行）、CMake、Ninja、
-#       Strawberry Perl 与 NASM（编译 OpenSSL 用）
-# 用法：powershell -ExecutionPolicy Bypass -File native\rdp\scripts\build.ps1
+# 编译 RDP 原生库（Windows x64 / arm64）：OpenSSL + FreeRDP（静态）+ 胶水库 remlark_rdp.dll
+# 需要：Visual Studio 2022（含对应架构的 C++ 工具链，x64 在 "x64 Native Tools Command Prompt"、
+#       arm64 在 "ARM64 Native Tools Command Prompt" 或 x64_arm64 交叉编译命令行中运行）、CMake、Ninja、
+#       Strawberry Perl 与 NASM（x64 编译 OpenSSL 汇编用）
+# 用法：powershell -ExecutionPolicy Bypass -File native\rdp\scripts\build.ps1 [-Arch x86_64|arm64]
+param(
+  # 目标架构：x86_64 / arm64，默认取 VS 开发者命令行的目标架构（VSCMD_ARG_TGT_ARCH），没有时取本机架构
+  [ValidateSet("x86_64", "arm64")] [string]$Arch
+)
 $ErrorActionPreference = "Stop"
+
+# 目标架构必须与当前 VS 开发者命令行一致（cl.exe 只能编译当前环境的目标架构）
+$VsTarget = $env:VSCMD_ARG_TGT_ARCH
+if (-not $Arch) {
+  if ($VsTarget -eq "arm64") { $Arch = "arm64" }
+  elseif ($VsTarget -eq "x64") { $Arch = "x86_64" }
+  elseif ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { $Arch = "arm64" }
+  else { $Arch = "x86_64" }
+}
+$ExpectedVs = @{ "x86_64" = "x64"; "arm64" = "arm64" }[$Arch]
+if ($VsTarget -and $VsTarget -ne $ExpectedVs) {
+  throw "当前 VS 命令行的目标架构为 $VsTarget，编译 $Arch 请在 `"$ExpectedVs Native Tools Command Prompt`"（或 x64_arm64 交叉编译命令行）中运行"
+}
 
 $FreeRdpVersion = "3.32.2"
 $OpenSslVersion = "3.6.5"
 $Root = (Resolve-Path "$PSScriptRoot\..\..\..").Path
 $Native = "$Root\native\rdp"
 $DepsSrc = "$Native\.deps"
-$Out = "$Root\build\native\windows-x86_64"
+# 输出目录与 hook/build.dart 一致：windows-x86_64 / windows-arm64
+$Out = "$Root\build\native\windows-$Arch"
 $Prefix = "$Out\prefix"
 New-Item -ItemType Directory -Force -Path $DepsSrc, $Out | Out-Null
 
@@ -30,7 +49,8 @@ if (-not (Test-Path "$Prefix\lib\libcrypto.lib")) {
   if (Test-Path $build) { Remove-Item -Recurse -Force $build }
   Copy-Item -Recurse "$DepsSrc\openssl-$OpenSslVersion" $build
   Push-Location $build
-  perl Configure VC-WIN64A no-shared no-tests no-docs no-apps "--prefix=$Prefix" "--openssldir=$Prefix\ssl"
+  $OpenSslTarget = @{ "x86_64" = "VC-WIN64A"; "arm64" = "VC-WIN64-ARM" }[$Arch]
+  perl Configure $OpenSslTarget no-shared no-tests no-docs no-apps "--prefix=$Prefix" "--openssldir=$Prefix\ssl"
   nmake
   nmake install_sw
   Pop-Location

@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'app_log.dart';
+import 'file_permissions/file_permissions.dart';
+
 /// 平台相关的通用工具：数据目录、可执行文件查找、主目录等。
 class PlatformUtils {
   PlatformUtils._();
@@ -78,18 +81,14 @@ class PlatformUtils {
     }
   }
 
-  /// 将文件权限设置为仅当前用户可读写（非 Windows）
-  static Future<void> restrictPermissions(String path) => _chmod('600', path);
+  /// 将文件权限设置为仅当前用户可读写（macOS / Linux 为 600，Windows 为仅当前用户的 ACL）
+  static Future<void> restrictPermissions(String path) async {
+    // 设置权限失败不影响主流程
+    if (!await FilePermissions.current().restrictFile(path)) AppLog.w('platform', '收紧文件权限失败：$path');
+  }
 
-  /// 将目录权限设置为仅当前用户可访问（非 Windows）
-  static Future<void> restrictDirectory(String path) => _chmod('700', path);
-
-  static Future<void> _chmod(String mode, String path) async {
-    if (Platform.isWindows) return;
-    try {
-      await Process.run('chmod', [mode, path]);
-    } catch (_) {
-      // 设置权限失败不影响主流程
-    }
+  /// 将目录权限设置为仅当前用户可访问（macOS / Linux 为 700，Windows 为仅当前用户且子项继承的 ACL）
+  static Future<void> restrictDirectory(String path) async {
+    if (!await FilePermissions.current().restrictDirectory(path)) AppLog.w('platform', '收紧目录权限失败：$path');
   }
 }
