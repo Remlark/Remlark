@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def version():
     """从应用声明中读取版本，保留预发布后缀但不把构建号放入标签。"""
-    return re.search(r'^version:\s*(\S+)', (ROOT / 'pubspec.yaml').read_text(), re.M)[1].split('+')[0]
+    return re.search(r'^version:\s*(\S+)', (ROOT / 'pubspec.yaml').read_text(encoding='utf-8'), re.M)[1].split('+')[0]
 
 
 def validate_tag():
@@ -61,7 +61,7 @@ def manifest():
         with path.open('rb') as payload:
             digest = hashlib.file_digest(payload, 'sha256').hexdigest()
         lines.append(f'{digest}  {name}\n')
-    (dist / 'SHA256SUMS').write_text(''.join(lines))
+    (dist / 'SHA256SUMS').write_text(''.join(lines), encoding='utf-8')
 
 
 if __name__ == '__main__':
