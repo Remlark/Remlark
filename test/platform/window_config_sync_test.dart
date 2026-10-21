@@ -11,7 +11,8 @@ void main() {
   String src(String path) => File(path).readAsStringSync();
 
   test('原生窗口默认尺寸与最小尺寸与 window_config.dart 一致', () {
-    final w = kDefaultWindowSize.width.toInt(), h = kDefaultWindowSize.height.toInt();
+    final w = kDefaultWindowSize.width.toInt(),
+        h = kDefaultWindowSize.height.toInt();
     final mw = kMinWindowSize.width.toInt(), mh = kMinWindowSize.height.toInt();
 
     final mac = src('macos/Runner/MainFlutterWindow.swift');
@@ -29,25 +30,61 @@ void main() {
     expect(winFrame, contains('MulDiv($mh, dpi, 96)'));
   });
 
+  test('FreeRDP 使用依赖自身版本，避免应用 Release 标签改变库名', () {
+    for (final name in ['build.sh', 'build.ps1', 'build_test_server.sh']) {
+      expect(
+        File('native/rdp/scripts/$name').readAsStringSync(),
+        contains('-DUSE_VERSION_FROM_GIT_TAG=OFF'),
+      );
+    }
+    expect(
+      File('native/rdp/scripts/build.ps1').readAsStringSync(),
+      contains(r'$env:SystemRoot\System32\tar.exe'),
+    );
+  });
+
   test('原生库构建钩子与构建脚本覆盖三个平台及 x64 / arm64', () {
     final hook = src('hook/build.dart');
     for (final os in ['OS.macOS', 'OS.linux', 'OS.windows']) {
       expect(hook, contains(os));
     }
     for (final lib in ['native/rdp', 'native/ssh_crypto']) {
-      expect(File('$lib/scripts/build.sh').existsSync(), isTrue, reason: '$lib 缺少 macOS / Linux 构建脚本');
-      expect(File('$lib/scripts/build.ps1').existsSync(), isTrue, reason: '$lib 缺少 Windows 构建脚本');
+      expect(
+        File('$lib/scripts/build.sh').existsSync(),
+        isTrue,
+        reason: '$lib 缺少 macOS / Linux 构建脚本',
+      );
+      expect(
+        File('$lib/scripts/build.ps1').existsSync(),
+        isTrue,
+        reason: '$lib 缺少 Windows 构建脚本',
+      );
       // Windows 脚本支持 x64 与 arm64，输出目录与构建钩子的 windows-x86_64 / windows-arm64 一致
       final ps = src('$lib/scripts/build.ps1');
       // Windows PowerShell 5.1 按系统代码页读取无 BOM 脚本，中文标点可能破坏字符串解析。
-      expect(File('$lib/scripts/build.ps1').readAsBytesSync().take(3), [0xef, 0xbb, 0xbf]);
-      expect(ps, contains('[ValidateSet("x86_64", "arm64")]'), reason: '$lib/scripts/build.ps1');
-      expect(ps, contains(r'build\native\windows-$Arch'), reason: '$lib/scripts/build.ps1');
+      expect(File('$lib/scripts/build.ps1').readAsBytesSync().take(3), [
+        0xef,
+        0xbb,
+        0xbf,
+      ]);
+      expect(
+        ps,
+        contains('[ValidateSet("x86_64", "arm64")]'),
+        reason: '$lib/scripts/build.ps1',
+      );
+      expect(
+        ps,
+        contains(r'build\native\windows-$Arch'),
+        reason: '$lib/scripts/build.ps1',
+      );
       expect(ps, contains('Invoke-BuildCommand cmake'));
       expect(ps, contains('-DCMAKE_C_COMPILER=cl'));
     }
     // 构建钩子中 Windows / macOS 的 arm64 目录名为 arm64，Linux 为 aarch64
-    expect(hook, contains("Architecture.arm64 => os == OS.linux ? 'aarch64' : 'arm64'"));
+    expect(
+      hook,
+      contains("Architecture.arm64 => os == OS.linux ? 'aarch64' : 'arm64'"),
+    );
     // macOS / Linux 测试服务端必须从同一前缀查找 OpenSSL 和 pkg-config 元数据。
     final testServer = src('native/rdp/scripts/build_test_server.sh');
     expect(testServer, contains(r'-DCMAKE_PREFIX_PATH="$PREFIX"'));
@@ -62,7 +99,10 @@ void main() {
     expect(rdpBuild, contains('credui'));
     final clipboard = src('native/rdp/src/rmk_clipboard.c');
     expect(clipboard, contains('FD_ATTRIBUTES | FD_FILESIZE | FD_PROGRESSUI'));
-    expect(clipboard.indexOf('#include "rmk_internal.h"'), lessThan(clipboard.indexOf('#include <winpr/shell.h>')));
+    expect(
+      clipboard.indexOf('#include "rmk_internal.h"'),
+      lessThan(clipboard.indexOf('#include <winpr/shell.h>')),
+    );
     expect(src('windows/CMakeLists.txt'), contains('/utf-8'));
     for (final lib in ['rdp', 'ssh_crypto']) {
       expect(src('native/$lib/CMakeLists.txt'), contains('/utf-8'));
@@ -106,11 +146,17 @@ void main() {
         ". './native/utils/windows_build.ps1'; Invoke-BuildCommand cmd /c exit 7; exit 0",
       ]);
       expect(result.exitCode, isNot(0));
-      expect('${result.stdout}${result.stderr}', contains('Build command failed (7)'));
+      expect(
+        '${result.stdout}${result.stderr}',
+        contains('Build command failed (7)'),
+      );
     } else {
       // POSIX 脚本已有严格错误检查，两个库必须保持一致。
       for (final lib in ['rdp', 'ssh_crypto']) {
-        expect(src('native/$lib/scripts/build.sh'), contains('set -euo pipefail'));
+        expect(
+          src('native/$lib/scripts/build.sh'),
+          contains('set -euo pipefail'),
+        );
       }
     }
   });

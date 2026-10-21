@@ -40,7 +40,7 @@ function Fetch($url, $dir) {
     Write-Host "==> download $url"
     $tar = "$DepsSrc\$dir.tar.gz"
     Invoke-WebRequest -Uri $url -OutFile $tar
-    Invoke-BuildCommand tar -xzf $tar -C $DepsSrc
+    Invoke-BuildCommand "$env:SystemRoot\System32\tar.exe" -xzf $tar -C $DepsSrc
   }
 }
 Fetch "https://github.com/openssl/openssl/releases/download/openssl-$OpenSslVersion/openssl-$OpenSslVersion.tar.gz" "openssl-$OpenSslVersion"
@@ -74,7 +74,7 @@ if (-not (Test-Path "$Prefix\lib\zlibstatic.lib")) {
 if (-not (Test-Path "$Prefix\lib\freerdp3.lib")) {
   Invoke-BuildCommand cmake -G Ninja -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -S "$DepsSrc\FreeRDP-$FreeRdpVersion" -B "$Out\freerdp-build" `
     -DCMAKE_BUILD_TYPE=Release "-DCMAKE_INSTALL_PREFIX=$Prefix" "-DCMAKE_PREFIX_PATH=$Prefix" `
-    -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF -DMSVC_RUNTIME=static -DWITH_CCACHE=OFF `
+    -DUSE_VERSION_FROM_GIT_TAG=OFF -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF -DMSVC_RUNTIME=static -DWITH_CCACHE=OFF `
     "-DZLIB_LIBRARY=$Prefix\lib\zlibstatic.lib" "-DZLIB_INCLUDE_DIR=$Prefix\include" `
     "-DOPENSSL_ROOT_DIR=$Prefix" -DOPENSSL_USE_STATIC_LIBS=ON -DOPENSSL_MSVC_STATIC_RT=ON `
     -DWITH_CLIENT_COMMON=ON -DWITH_CLIENT=OFF -DWITH_CLIENT_SDL=OFF -DWITH_SERVER=OFF -DWITH_SAMPLE=OFF `

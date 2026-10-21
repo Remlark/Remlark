@@ -73,17 +73,33 @@ jobs:
         with:
           arch: ${{ matrix.arch }}
       - name: Flutter dependencies
+        if: runner.os != 'Windows'
         run: |
           flutter config --no-analytics --enable-linux-desktop --enable-macos-desktop --enable-windows-desktop
           flutter --version
           make deps
       - name: Platform tests
+        if: runner.os != 'Windows'
+        run: make test-platform
+      - name: Windows Flutter dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          flutter config --no-analytics --enable-windows-desktop
+          if ($LASTEXITCODE -ne 0) { throw 'Flutter configuration failed' }
+          flutter --version
+          make deps
+          if ($LASTEXITCODE -ne 0) { throw 'Flutter dependencies failed' }
+      - name: Windows platform tests
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: make test-platform
       - name: Build Linux installers
         if: runner.os == 'Linux'
         run: make linux
       - name: Build Windows installers
         if: runner.os == 'Windows'
+        shell: pwsh
         run: make windows WINDOWS_ARCH=${{ matrix.arch }}
       - name: Build macOS universal installer
         if: runner.os == 'macOS'
