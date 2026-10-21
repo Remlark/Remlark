@@ -68,7 +68,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-07 | [runtime_lifecycle_test.dart](../test/platform/runtime_lifecycle_test.dart) | 实际启动 Dart 子进程；重新初始化后写入新日志目录，关闭后目录可删除 | 同步测试启动、日志句柄生命周期 |
 | P-08 | [windows_packaging_test.dart](../test/platform/windows_packaging_test.dart) | 三平台打包与启动入口；Windows VS 2022 / 2026 CRT 查找、按架构运行库、当前用户安装、数据保留与 BOM；实际暂存应用和 VC++ 运行库，覆盖中文空格路径、缺少原生库 / CRT 时终止；无 Make 启动参数与 PowerShell 解析 | Windows 安装器、开发启动与分发完整性 |
 | P-09 | [linux_packaging_test.dart](../test/platform/linux_packaging_test.dart) | 三平台保留独立打包入口；Linux x64 / arm64 架构命名；禁用无用 JNI；实际运行打包脚本，缺少原生库时立即终止；在中文、空格、引号、反斜线、% 等路径中实际注册桌面入口并用 GIO 启动 | Linux 安装器与分发完整性 |
-| P-10 | [release_workflow_test.dart](../test/platform/release_workflow_test.dart) | 拒绝错误版本标签、缺失附件时阻止发布、完整双架构矩阵生成正确 SHA-256 清单 | 自动发布 |
+| P-10 | [release_workflow_test.dart](../test/platform/release_workflow_test.dart) | 手工默认仅构建、正式标签仍发布，三个平台构建后强制加载原生库并重跑平台测试；配置读取兼容 CRLF / LF；拒绝错误版本标签、缺失附件时阻止发布、完整双架构矩阵生成正确 SHA-256 清单 | 自动发布与仅构建验证 |
 | P-11 | [rdp_h264_test.dart](../test/platform/rdp_h264_test.dart) | 三个平台都有硬件解码实现且设备类型正确，CMake 按平台选择；FFmpeg 只编译 H.264 解码器并按平台开启硬件加速，Windows 用 MSVC /MT 编译；FreeRDP 开启 FFmpeg 硬件解码；连接参数不再强制关闭 H.264，设置中的硬件解码开关传到原生库；原生库内置探测帧与测试资源一致；已编译原生库时：编入解码器、设备类型与当前平台一致，macOS 上 VideoToolbox 必须可用（Windows / Linux 取决于显卡，CI 无显卡时为软件解码），并用与连接相同的 FreeRDP AVC420 流程实际解码 [h264_320x240.h264](../test/platform/fixtures/h264_320x240.h264)：软件解码、硬件解码（不可用时为软件解码）的左右两半颜色都正确；平坦区域逐像素 RGB 差不超过 4，双色交界两侧各 2 像素的色度插值差不超过 64，输出差异列供核对，无效数据返回失败不崩溃 | RDP H.264 硬件解码 |
 | P-12 | [rdp_live_test.dart](../test/platform/rdp_live_test.dart) | 显式指定已授权的已保存 RDP 配置，默认跳过；通过 ORM 索引只读配置；测试硬解开关两种模式的真实认证、首帧、键盘触发更新，保存实际解码 PNG；通过 GDI TRACE 日志另行确认实际编码，不能用连接成功代替 H.264 / GPU 验证 | 真实 RDP、M-05 / M-17 部分验证 |
 
@@ -236,3 +236,22 @@ Windows ARM64 CI 发现系统 tar 创建中文路径时崩溃、ZIP 中文条目
 发布任务验证 10 个附件完整后生成 SHA256SUMS，先上传草稿再公开。浏览器已确认 Actions Success、Release 为 Latest，附件齐全。本机补验：33 项平台测试、2 项 Codex 安装器测试通过；通用 DMG 完整性、macOS 主程序 / FFI 双架构、Linux 两种 ELF 架构、Windows 分发 PE 架构和发布校验和核对见本轮验证。M-16 的干净机器交互安装 / 升级 / 卸载仍需按清单执行。
 
 2026-10-21 Linux H.264 补验（基于 `e2a7417`）：原生构建、平台测试、全量测试、静态检查、Release 构建和包内解码日志分别保存在 `build/validation/linux-h264-{native,platform,test,analyze,release,packaged-decode}.log`；图形启动日志为 `linux-h264-gui.log`，截图为 `linux-h264-gui/linux-release.png`。首次图形冒烟脚本未将 GDK_BACKEND 传给 Python，导致截图工具选择 Wayland 而失败；显式设置 `GDK_BACKEND=x11` 后，deb 解包启动与截图检查通过。NASM / libva-dev 的用户态依赖与复现方式见构建环境文档；没有实际 GPU 渲染节点，不将软件回退测试记为 GPU 硬解通过。
+
+
+### 2026-10-21 硬件加速版本 GitHub Actions 全矩阵验证（Step 84）
+
+[Desktop Build #11](https://github.com/Remlark/Remlark/actions/runs/39615318096) 使用提交 `2aa69f3`，五路构建与构建后测试全部成功。手工运行保持 `build_only=true`、tag 留空，构建 master 分支；发布任务已跳过，未修改现有 v1.0.0 Release。
+
+| runner / CPU | 构建后 make test-platform | H.264 实测 | 构建产物 |
+| --- | --- | --- | --- |
+| macos-15 / arm64 | 42 项通过 / 1 项跳过 | VideoToolbox；平坦区域最大 RGB 差 0，交界第 160 / 161 列差 49 | Intel / Apple Silicon 通用 zip + DMG，主程序与 FFI 双架构校验通过 |
+| windows-2022 / x64 | 47 项通过 / 1 项跳过 | D3D11VA 不可用，软件解码与请求硬解时回退，RGB 差 0 | setup.exe + 便携 zip |
+| windows-11-arm / arm64 | 47 项通过 / 1 项跳过 | D3D11VA 不可用，软件解码与请求硬解时回退，RGB 差 0 | ARM64 setup.exe + 便携 zip |
+| ubuntu-24.04 / x64 | 42 项通过 / 1 项跳过 | VAAPI 不可用，软件解码与请求硬解时回退，RGB 差 0 | amd64 deb + x64 tar.gz |
+| ubuntu-24.04-arm / arm64 | 42 项通过 / 1 项跳过 | VAAPI 不可用，软件解码与请求硬解时回退，RGB 差 0 | arm64 deb + tar.gz |
+
+五路均实际执行 P-11，构建后设置 `RMK_REQUIRE_RDP_NATIVE=1`，原生库无法加载时立即失败；唯一跳过项为需显式提供真实主机的 P-12。全部五组安装包上传到 Actions artifacts，保留 7 天。Windows / Linux 的真实 GPU 硬解及真实远程服务器协商编码仍需 M-17，不能由无显卡 runner 的软件回退测试代替。
+
+本轮修复：新增仅构建入口；修复新增 P-10 检查在 Windows CRLF 下的误报；P-11 原先要求整帧软硬解差不超过 4，macOS ARM64 在双色交界两列出现有限差异。现平坦区域仍逐像素要求不超过 4，只对交界两侧各 2 像素允许不超过 64，并输出差异列；云端证实平坦区域完全一致，没有把整帧颜色误差阈值放宽。
+
+本机补验：`make test-platform` 42 项通过 / P-12 跳过，启用强制原生库检查的 P-11 通过；静态检查通过。第二轮 Linux 双架构便携包已下载核对，主程序、RDP 与 SSH 加密库的 ELF 架构分别为 x86-64 / AArch64。最终五路日志与任务状态保存在忽略目录 `build/validation/github-h264/final/`。

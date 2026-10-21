@@ -592,12 +592,13 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - deb 解包后在 Xvfb 中隔离数据目录启动两次，1280×820 窗口、960×640 最小尺寸和密钥持久化通过，截图检查正常。日志、截图和依赖环境脚本保留在 `build/validation/linux-h264*`。
   - 真实 VAAPI GPU 解码、真实远程 Windows 主机 M-17、Linux ARM64 本轮未验证；macOS / Windows 本轮未重跑。
 
-- Step 84：硬件加速版本 GitHub Actions 全矩阵构建验证
+- [已完成] Step 84：硬件加速版本 GitHub Actions 全矩阵构建验证
   - Release 工作流增加默认开启的仅构建模式，手工运行可使用分支代码，复用五路编译与打包流程并跳过发布。
   - 三个平台在原生库编译后重新执行 `make test-platform`，覆盖 H.264 实际解码和硬件不可用时的软件回退。
   - 修复 Windows CRLF 导致工作流配置回归检查误报；构建后设置 `RMK_REQUIRE_RDP_NATIVE=1`，原生库加载失败即阻止通过。
   - macOS ARM64 云端发现双色边界的软硬解色度转换差异；P-11 保持平坦区域逐像素差 ≤4，仅双色交界两侧各 2 像素允许 ≤64 的插值差，并记录差异列。
-  - 验证中：macOS universal、Windows x64 / arm64、Linux x64 / arm64；记录云端问题与修复结果。
+  - 验证：[Desktop Build #11](https://github.com/Remlark/Remlark/actions/runs/39615318096)，提交 `2aa69f3`，五路构建、安装包与构建后平台测试全部通过；macOS / Linux 双架构各 42 项、Windows 双架构各 47 项通过，各仅跳过需显式启用的真实主机测试 P-12。五组安装包已上传，发布任务按仅构建模式跳过。
+  - macOS ARM64 VideoToolbox 实测：平坦区域差为 0，只有交界第 160 / 161 列差为 49；Windows / Linux runner 无硬解设备，实际验证软件解码与请求硬解时回退，RGB 差均为 0。真实 GPU 与远程主机仍按 M-17 手工验证。
 
 ## 构建与运行命令
 

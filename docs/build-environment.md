@@ -285,3 +285,5 @@ CI 同时支持 VS 2022 / VS 2026，从 VCToolsRedistDir 的目标架构目录�
 ### 仅验证 GitHub Actions 编译
 
 在 Desktop Release 中选择 Run workflow，选择待验证分支，tag 留空并保持 `build_only=true`。工作流执行完整五路构建、安装包生成与构建前后 `make test-platform`，产物保存在 Actions artifacts，不发布 Release。正式手工发布需填写与 pubspec.yaml 一致的已有版本标签，并关闭 `build_only`；推送 v* 标签仍自动发布。
+
+2026-10-21 已用此模式完成硬件加速版本五路验证：[Desktop Build #11](https://github.com/Remlark/Remlark/actions/runs/39615318096)，macOS universal、Windows / Linux x64 与 arm64 编译、打包、构建后平台测试全部通过。具体解码结果和实机验证范围见 [multi-platform-testing.md](multi-platform-testing.md#2026-10-21-硬件加速版本-github-actions-全矩阵验证step-84)。
