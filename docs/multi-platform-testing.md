@@ -278,3 +278,14 @@ Windows ARM64 CI 发现系统 tar 创建中文路径时崩溃、ZIP 中文条目
 P-13 在三个系统实际执行，隔离夹具的 VERSION 为 `2.3.4-rc.2+17`，pubspec 故意为 `9.9.9+9`，验证没有读取 pubspec；真实替身子进程验证编译版本、构建号、Dart define、开发 run 参数与退出码。macOS 旧应用元数据不匹配时拒绝打包，Windows 专项也验证旧 exe 被拒绝。发布清单夹具继续验证版本标签与十项附件 SHA-256。
 
 本机 `make test-platform` 48 项通过 / P-12 跳过，Codex 7 项、服务端 2 项通过，静态检查通过。实际 macOS Release 编译与 Info.plist 核对通过。日志与状态保存在忽略目录 `build/validation/version/`；M-18 的系统界面显示、安装升级等交互检查仍按手工清单验证。
+
+
+### 2026-10-21 macOS Dock 图标刷新验证（Step 86）
+
+Debug / Release 应用中的 AppIcon.icns 已为“连接之门”，旧图标现象不能归因于 PNG 未替换。新增启动完成时从当前应用包读取 AppIcon.icns 并设置 NSApplication.applicationIconImage，避免仅依赖系统历史图标；缺少资源时保留系统原图。Windows 继续使用 exe 内嵌 ICO，Linux 继续使用应用 ID / desktop 图标关联。
+
+[GitHub Actions](https://github.com/Remlark/Remlark/actions/runs/39625870166) 使用提交 `5eacd93`，五路编译 / 打包全部成功，发布任务跳过。构建前后 `make test-platform`：macOS / Linux 双架构各 50 项通过、Windows 双架构各 56 项通过，均仅跳过需真实主机的 P-12。
+
+P-14 在三个平台核对品牌 PNG、Windows ICO 最大帧的实际 RGBA 像素及系统图标入口。macOS 额外用 swiftc 编译实际 ApplicationIcon 实现，在禁止窗口和 Dock 项的隐藏测试进程中先设置其他图标，再刷新并读回 NSApplication 图标比较像素；缺失资源时保持原图标。macOS 15 将图标栅格化为 512 像素，macOS 26 使用 1024 像素，比较时使用包中相同密度的表示，只允许 8 位色彩转换的一档舍入差，避免跨密度缩放产生误报。
+
+本机 macOS 专项及 50 项平台测试通过，静态检查无问题，Debug / Release 均重新编译；通用 zip / DMG 已重新生成，并刷新本地 .app 目录时间。验证图像与云端日志位于 `build/validation/dock-icon/`；其中 actual.png / expected.png 为隐藏测试进程的图标读回结果，不是用户 Dock 截图。真实 Dock 固定项的退出 / 重开和旧路径副本仍按 M-19 手工确认。
