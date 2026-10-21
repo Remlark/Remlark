@@ -45,7 +45,14 @@ Future<(ServerSocket, StreamController<int>, List<List<int>>)> _server({bool fai
       ..setUint32(20, 1);
     s.add([...init.buffer.asUint8List(), ...'t'.codeUnits]);
     // 首次整屏：红色
-    s.add([0, 0, 0, 1, ..._rect(0, 0, 4, 2, 0), for (var i = 0; i < 8; i++) ...[0, 0, 255, 0]]);
+    s.add([
+      0,
+      0,
+      0,
+      1,
+      ..._rect(0, 0, 4, 2, 0),
+      for (var i = 0; i < 8; i++) ...[0, 0, 255, 0],
+    ]);
     // 后台读取客户端消息（记录鼠标事件）
     unawaited(() async {
       try {
@@ -274,7 +281,9 @@ void main() {
         ..setUint32(20, 1);
       s.add([...init.buffer.asUint8List(), ...'t'.codeUnits]);
       // 首帧整屏（真实服务器连接后总会先发整屏）
-      s.add([0, 0, 0, 1, ..._rect(0, 0, 1920, 1080, 0), ...Uint8List(1920 * 1080 * 4)]);
+      // 大帧直接发送字节缓冲，避免构造数百万个整数的中间列表。
+      s.add([0, 0, 0, 1, ..._rect(0, 0, 1920, 1080, 0)]);
+      s.add(Uint8List(1920 * 1080 * 4));
       try {
         while (true) {
           final t = await r.u8();
@@ -306,9 +315,14 @@ void main() {
       } catch (_) {}
     });
     final c = RfbIsolateClient();
-    c.onFrame = () => c.takeFrame();
+    final firstFrame = Completer<void>();
+    c.onFrame = () {
+      c.takeFrame();
+      if (!firstFrame.isCompleted) firstFrame.complete();
+    };
     await c.connect('127.0.0.1', server.port);
-    await Future.delayed(const Duration(milliseconds: 300));
+    // 首帧为 8MB，必须等它实际处理完成，避免增量变化被并入首帧而不触发补刷新。
+    await firstFrame.future.timeout(const Duration(seconds: 30));
     // 滚轮不触发补刷新
     c.sendPointer(100, 100, 16, input: true);
     c.sendPointer(100, 100, 0);
@@ -316,10 +330,14 @@ void main() {
     expect(regions, isEmpty, reason: '滚轮不应触发补刷新');
 
     c.sendPointer(600, 105, 4, input: true);
-    await Future.delayed(const Duration(milliseconds: 110));
-    // 更新停止约 30ms 后（早于固定的 120ms 补刷新）补刷新：高亮行与菜单都要被补刷新区域（含 16 像素外扩）覆盖
+    // 跨平台的 socket 与 isolate 调度耗时不同，按覆盖结果等待，避免固定 110ms 导致误报。
     bool covered(List<int> a) =>
         regions.any((r) => a[0] >= r[0] && a[1] >= r[1] && a[0] + a[2] <= r[0] + r[2] && a[1] + a[3] <= r[1] + r[3]);
+    final deadline = Stopwatch()..start();
+    while ((!covered([184, 84, 832, 52]) || !covered([484, 94, 332, 432])) &&
+        deadline.elapsed < const Duration(seconds: 3)) {
+      await Future.delayed(const Duration(milliseconds: 10));
+    }
     expect(covered([184, 84, 832, 52]), isTrue, reason: '覆盖高亮行');
     expect(covered([484, 94, 332, 432]), isTrue, reason: '覆盖菜单（含与高亮行重叠的部分）');
     sock.destroy();

@@ -19,12 +19,18 @@ target_include_directories(remlark_rdp PRIVATE
 
 set(DEPS_LIB ${REMLARK_DEPS_PREFIX}/lib)
 if(WIN32)
+  # 与 macOS / Linux 一样使用 UTF-8 源码，不依赖 Windows 当前代码页。
+  target_compile_options(remlark_rdp PRIVATE /utf-8)
+  # 避免 windows.h 引入旧 Winsock，与 FreeRDP / WinPR 头文件冲突。
+  # FreeRDP 头文件默认按 DLL 导入；静态链接需使用直接符号，避免生成 __imp_* 引用。
+  target_compile_definitions(remlark_rdp PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX FREERDP_EXPORTS)
   set(STATIC_LIBS
-    ${DEPS_LIB}/freerdp-client3.lib ${DEPS_LIB}/freerdp3/remdesk-common.lib
+    # FreeRDP 在 Windows 将通道公共库安装到前缀根目录，POSIX 则放在 lib/freerdp3。
+    ${DEPS_LIB}/freerdp-client3.lib ${REMLARK_DEPS_PREFIX}/remdesk-common.lib
     ${DEPS_LIB}/freerdp3.lib ${DEPS_LIB}/winpr3.lib
-    ${DEPS_LIB}/libssl.lib ${DEPS_LIB}/libcrypto.lib)
+    ${DEPS_LIB}/libssl.lib ${DEPS_LIB}/libcrypto.lib ${DEPS_LIB}/zlibstatic.lib)
   target_link_libraries(remlark_rdp PRIVATE ${STATIC_LIBS}
-    ws2_32 crypt32 secur32 ntdsapi rpcrt4 shlwapi dbghelp userenv winmm shell32 ole32 advapi32 user32 gdi32 bcrypt ncrypt)
+    ws2_32 crypt32 secur32 ntdsapi rpcrt4 shlwapi dbghelp userenv winmm shell32 ole32 advapi32 user32 gdi32 bcrypt ncrypt credui)
 else()
   set(STATIC_LIBS
     ${DEPS_LIB}/libfreerdp-client3.a ${DEPS_LIB}/freerdp3/libremdesk-common.a

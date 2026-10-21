@@ -128,7 +128,21 @@
   - 拖拽上传：经内置 SSH（兼容旧关联）上传；远程为 macOS 时由辅助小程序 RemlarkFinder 查询 Finder 窗口布局，按松手位置传到对应 Finder 窗口文件夹（无窗口为桌面），无法识别时提示原因不上传；非 macOS 传到主目录。
 - VNC 与 RDP 共用 RemoteScreen 渲染组件（会话实现 RemoteDisplay 接口）。
 
+### 最小窗口下的远程工具栏
+
+- RDP 工具栏可用宽度不足 780 时收起按钮文字，保留原操作位置与中英文提示，避免英文界面在 960×640 窗口下溢出；宽窗口仍显示文字。
+
+## Windows 安装与分发
+
+- 开发运行提供 `windows/run.ps1`，普通 PowerShell 中无须安装 Make；缺少原生库时初始化 VS x64 环境并构建，已有库时直接运行，修改原生代码后用 `-RebuildNative`。
+
+- `make windows` / Windows 下 `make` 生成版本化的 Inno Setup 安装向导 `.exe` 和便携 zip；安装器源文件集中在 `windows/packaging/`。
+- 默认安装到当前用户的 `%LOCALAPPDATA%\Programs\Remlark`，中英文向导、开始菜单入口、可选桌面快捷方式；固定 AppId 支持覆盖升级，卸载保留用户数据库、凭据与日志。
+- 安装器和便携包附带应用本地 VC++ 运行库；打包前检查 Flutter 引擎、RDP / 加密 / sqlite DLL 与 AOT 资源，阻止缺项分发。
+- 工具链和使用方法见 [build-environment.md](build-environment.md)。
+
 ## 运行日志
+- 日志重新初始化时先关闭旧文件；`AppLog.close()` 刷新并释放文件句柄，确保 Windows 下可以删除或切换日志目录。
 - `<数据目录>/logs/remlark-yyyy-MM-dd.log`，按天切分、保留 7 天；设置 → 数据 可打开日志文件夹。
 - 关键流程（连接、认证、上传、同步、异常）均记录日志，以便从日志定位问题；不记录密码、私钥、口令。
 - 远程桌面会话不提供 AI Agent 功能。

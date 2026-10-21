@@ -6,7 +6,10 @@ import 'package:remlark/utils/app_log.dart';
 void main() {
   test('日志：初始化前的记录补写入文件，按级别与模块格式化，清理过期文件', () async {
     final dir = Directory.systemTemp.createTempSync('rmk_log');
-    addTearDown(() => dir.deleteSync(recursive: true));
+    addTearDown(() async {
+      await AppLog.close();
+      dir.deleteSync(recursive: true);
+    });
     final logs = Directory('${dir.path}/logs')..createSync();
     final old = File('${logs.path}/remlark-2000-01-01.log')..writeAsStringSync('old');
     old.setLastModifiedSync(DateTime.now().subtract(const Duration(days: 30)));

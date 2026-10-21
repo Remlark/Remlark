@@ -1,0 +1,81 @@
+﻿# Windows x64 分发：校验 Release，附带应用本地 VC++ 运行库，生成安装程序和便携包。
+param(
+  [string]$ReleaseDir,
+  [string]$OutputDir = 'dist',
+  [string]$CompilerPath = $env:ISCC,
+  [string]$RuntimeDir = $env:VC_REDIST_DIR,
+  [switch]$StageOnly
+)
+$ErrorActionPreference = 'Stop'
+$Root = (Resolve-Path "$PSScriptRoot\..\..").Path
+. "$Root\native\utils\windows_build.ps1"
+
+# 将相对参数统一解释为仓库路径，支持从其他工作目录调用。
+function Resolve-RepoPath([string]$Path) {
+  if ([IO.Path]::IsPathRooted($Path)) { return [IO.Path]::GetFullPath($Path) }
+  return [IO.Path]::GetFullPath((Join-Path $Root $Path))
+}
+
+# 依次查找用户指定路径、PATH 与标准安装目录中的 Inno Setup 编译器。
+function Find-InstallerCompiler {
+  if ($CompilerPath) { return (Resolve-Path -LiteralPath $CompilerPath).Path }
+  $command = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+  if ($command) { return $command.Source }
+  foreach ($base in @(${env:ProgramFiles(x86)}, $env:ProgramFiles)) {
+    if ($base) {
+      $candidate = Join-Path $base 'Inno Setup 6\ISCC.exe'
+      if (Test-Path -LiteralPath $candidate) { return $candidate }
+    }
+  }
+  throw 'Inno Setup 6.5+ not found. Install it or set ISCC to the full path of ISCC.exe.'
+}
+
+# 优先使用显式 VC_REDIST_DIR，否则使用当前 Visual Studio 的可再分发运行库。
+function Find-RuntimeDirectory {
+  if ($RuntimeDir) { return (Resolve-Path -LiteralPath $RuntimeDir).Path }
+  if ($env:VCToolsRedistDir) {
+    $candidate = Join-Path $env:VCToolsRedistDir 'x64\Microsoft.VC143.CRT'
+    if (Test-Path -LiteralPath $candidate) { return $candidate }
+  }
+  throw 'VC++ x64 runtime not found. Use a VS 2022 developer shell or set VC_REDIST_DIR to Microsoft.VC143.CRT.'
+}
+
+if (-not $ReleaseDir) { $ReleaseDir = 'build/windows/x64/runner/Release' }
+$ReleaseDir = Resolve-RepoPath $ReleaseDir
+$OutputDir = Resolve-RepoPath $OutputDir
+# 每次使用独立暂存目录，避免把旧版本残留文件带入安装包，也不删除已有产物。
+$StageDir = Join-Path $Root ('build\packaging\windows-x64-' + [Guid]::NewGuid().ToString('N'))
+$required = @('remlark.exe', 'flutter_windows.dll', 'remlark_rdp.dll', 'remlark_crypto.dll',
+  'sqlite3.dll', 'data\app.so', 'data\icudtl.dat', 'data\flutter_assets')
+foreach ($file in $required) {
+  if (-not (Test-Path -LiteralPath (Join-Path $ReleaseDir $file))) {
+    throw "Incomplete Release bundle, missing: $file"
+  }
+}
+$runtime = Find-RuntimeDirectory
+$runtimeFiles = @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
+foreach ($file in $runtimeFiles) {
+  if (-not (Test-Path -LiteralPath (Join-Path $runtime $file))) { throw "Missing VC++ runtime: $file" }
+}
+$compiler = $null
+if (-not $StageOnly) { $compiler = Find-InstallerCompiler }
+New-Item -ItemType Directory -Force -Path $StageDir, $OutputDir | Out-Null
+Get-ChildItem -LiteralPath $ReleaseDir | Copy-Item -Destination $StageDir -Recurse -Force
+foreach ($file in $runtimeFiles) { Copy-Item -LiteralPath (Join-Path $runtime $file) -Destination $StageDir -Force }
+if ($StageOnly) { Write-Output $StageDir; exit 0 }
+
+# 与 pubspec 的应用版本、构建号同步；Inno 的资源版本必须是四段数字。
+$pubspec = [IO.File]::ReadAllText((Join-Path $Root 'pubspec.yaml'))
+$version = [regex]::Match($pubspec, '(?m)^version:\s*(\d+\.\d+\.\d+)(?:-([\w.-]+))?(?:\+(\d+))?\s*$')
+if (-not $version.Success) { throw 'Invalid version in pubspec.yaml' }
+$appVersion = $version.Groups[1].Value
+if ($version.Groups[2].Success) { $appVersion += '-' + $version.Groups[2].Value }
+$buildNumber = '0'
+if ($version.Groups[3].Success) { $buildNumber = $version.Groups[3].Value }
+$resourceVersion = $version.Groups[1].Value + '.' + $buildNumber
+$installerName = "remlark-$appVersion-windows-x64-setup"
+Invoke-BuildCommand $compiler "/DSourceDir=$StageDir" "/DDistDir=$OutputDir" "/DAppVersion=$appVersion" `
+  "/DResourceVersion=$resourceVersion" "/DInstallerName=$installerName" "$PSScriptRoot\remlark.iss"
+Compress-Archive -Force -Path "$StageDir\*" -DestinationPath (Join-Path $OutputDir 'remlark-windows-x64.zip')
+Write-Host "Installer: $(Join-Path $OutputDir ($installerName + '.exe'))"
+Write-Host "Portable: $(Join-Path $OutputDir 'remlark-windows-x64.zip')"

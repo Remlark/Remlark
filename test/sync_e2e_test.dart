@@ -15,6 +15,8 @@ import 'package:remlark/modules/sync/sync_service.dart';
 import 'package:remlark/utils/crypto_utils.dart';
 import 'package:remlark/utils/secret_store.dart';
 
+import 'helpers/platform_tools.dart';
+
 /// 模拟一个客户端（独立内存数据库）
 class _Client {
   _Client(String url) {
@@ -44,14 +46,14 @@ HostEntry _host(String uuid, String name) => HostEntry(
 );
 
 void main() {
-  late Process server;
+  Process? server;
   late String url;
 
   setUpAll(() async {
     SecretStore.initForTest(CryptoUtils.randomBytes(32));
     final port = 18000 + DateTime.now().millisecond;
     final dbFile = '${Directory.systemTemp.createTempSync('rmk').path}/s.sqlite';
-    server = await Process.start('dart', [
+    final process = await Process.start(dartExecutable(), [
       'run',
       'bin/server.dart',
       '--port',
@@ -61,16 +63,20 @@ void main() {
       '--db',
       dbFile,
     ], workingDirectory: 'server');
+    server = process;
     final ready = Completer<void>();
-    server.stdout.transform(utf8.decoder).listen((l) {
+    process.stdout.transform(utf8.decoder).listen((l) {
       if (l.contains('listening') && !ready.isCompleted) ready.complete();
     });
-    server.stderr.transform(utf8.decoder).listen((_) {});
+    process.stderr.transform(utf8.decoder).listen((_) {});
     await ready.future.timeout(const Duration(seconds: 60));
     url = 'http://127.0.0.1:$port';
   });
 
-  tearDownAll(() => server.kill());
+  tearDownAll(() async {
+    server?.kill();
+    await server?.exitCode;
+  });
 
   test('两个客户端通过服务器同步：上传、拉取、更新、删除标记、口令错误', () async {
     final a = _Client(url);

@@ -12,6 +12,8 @@ target_include_directories(remlark_crypto PRIVATE ${REMLARK_DEPS_PREFIX}/include
 
 set(DEPS_LIB ${REMLARK_DEPS_PREFIX}/lib)
 if(WIN32)
+  # 与 macOS / Linux 一样使用 UTF-8 源码，不依赖 Windows 当前代码页。
+  target_compile_options(remlark_crypto PRIVATE /utf-8)
   target_link_libraries(remlark_crypto PRIVATE ${DEPS_LIB}/libcrypto.lib ws2_32 crypt32 advapi32 user32 bcrypt)
 else()
   find_package(Threads REQUIRED)

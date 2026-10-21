@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +8,10 @@ import 'package:remlark/ui_kit/file_drop_target.dart';
 
 /// 模拟原生层发来的拖放事件：在 [at] 处进入、移动，然后松手放下文件
 Future<void> _drop(WidgetTester tester, Offset at) async {
+  // Windows 原生事件使用物理坐标，插件会按视图缩放转换为逻辑坐标。
+  if (Platform.isWindows || Platform.isAndroid) {
+    at *= tester.view.devicePixelRatio;
+  }
   Future<void> send(String method, Object args) => tester.binding.defaultBinaryMessenger.handlePlatformMessage(
     'desktop_drop',
     const StandardMethodCodec().encodeMethodCall(MethodCall(method, args)),

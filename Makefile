@@ -76,11 +76,10 @@ linux: deps native-lib
 	tar -czf $(DIST_DIR)/$(APP_NAME)-linux-x64.tar.gz -C build/linux/x64/release bundle
 	@echo "输出：$(DIST_DIR)/$(APP_NAME)-linux-x64.tar.gz"
 
-# Windows：生成 Release 目录并打包为 zip
+# Windows：生成安装向导 exe 与便携 zip（需要 Inno Setup 6.5+）
 windows: deps native-lib
 	flutter build windows --release
-	powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path $(DIST_DIR) | Out-Null; Compress-Archive -Force -Path build/windows/x64/runner/Release/* -DestinationPath $(DIST_DIR)/$(APP_NAME)-windows-x64.zip"
-	@echo "输出：$(DIST_DIR)/$(APP_NAME)-windows-x64.zip"
+	powershell -NoProfile -ExecutionPolicy Bypass -File windows/packaging/build.ps1 -OutputDir "$(DIST_DIR)"
 
 # 运行当前程序（当前平台）
 run: deps native-lib

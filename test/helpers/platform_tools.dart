@@ -2,6 +2,17 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+import 'package:remlark/utils/platform_utils.dart';
+
+/// 定位真正的 Dart 可执行文件，避免 Windows 上直接启动 dart.bat 失败。
+String dartExecutable() {
+  final dart = PlatformUtils.which('dart');
+  if (dart == null) throw StateError('Dart SDK not found in PATH');
+  if (!dart.toLowerCase().endsWith('.bat')) return dart;
+  final executable = p.join(p.dirname(dart), 'cache', 'dart-sdk', 'bin', 'dart.exe');
+  if (!File(executable).existsSync()) throw StateError('Dart executable not found: $executable');
+  return executable;
+}
 
 /// 当前平台原生库的构建目录名（与 hook/build.dart、native/*/scripts 的输出目录一致）：
 /// macos-x86_64 / macos-arm64、linux-x86_64 / linux-aarch64、windows-x86_64 / windows-arm64。

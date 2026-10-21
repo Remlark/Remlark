@@ -128,53 +128,64 @@ class _RdpViewState extends State<RdpView> {
     return Container(
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: [
-          ToolButton(
-            compact: true,
-            icon: Icons.keyboard_outlined,
-            label: 'Ctrl + Alt + Del',
-            onPressed: connected ? s.sendCtrlAltDel : null,
-          ),
-          const SizedBox(width: 8),
-          ToolButton(
-            compact: true,
-            icon: Icons.window,
-            label: context.tr('rdp.win_key'),
-            onPressed: connected ? s.sendWinKey : null,
-          ),
-          Container(
-            width: 1,
-            height: 20,
-            margin: const EdgeInsets.symmetric(horizontal: 10),
-            color: context.palette.border,
-          ),
-          ToolButton(
-            compact: true,
-            icon: Icons.upload_file_outlined,
-            label: context.tr('rdp.send_files'),
-            onPressed: connected
-                ? () async {
-                    final files = await openFiles();
-                    await _drop(files.map((f) => f.path).toList());
-                  }
-                : null,
-          ),
-          const SizedBox(width: 8),
-          ToolButton(
-            compact: true,
-            icon: Icons.folder_open_outlined,
-            label: context.tr('rdp.open_folder'),
-            onPressed: s.openSharedDir,
-          ),
-          const SizedBox(width: 8),
-          ToolButton(
-            compact: true,
-            icon: Icons.refresh,
-            label: context.tr('terminal.reconnect'),
-            onPressed: s.state == SessionState.connecting ? null : s.reconnect,
-          ),
-        ],
+      // 最小窗口下英文按钮更宽，收起文字并保留本地化提示，所有操作仍可直接访问。
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final showLabels = constraints.maxWidth >= 780;
+          return Row(
+            children: [
+              ToolButton(
+                compact: true,
+                icon: Icons.keyboard_outlined,
+                label: showLabels ? 'Ctrl + Alt + Del' : null,
+                tooltip: 'Ctrl + Alt + Del',
+                onPressed: connected ? s.sendCtrlAltDel : null,
+              ),
+              const SizedBox(width: 8),
+              ToolButton(
+                compact: true,
+                icon: Icons.window,
+                label: showLabels ? context.tr('rdp.win_key') : null,
+                tooltip: context.tr('rdp.win_key'),
+                onPressed: connected ? s.sendWinKey : null,
+              ),
+              Container(
+                width: 1,
+                height: 20,
+                margin: const EdgeInsets.symmetric(horizontal: 10),
+                color: context.palette.border,
+              ),
+              ToolButton(
+                compact: true,
+                icon: Icons.upload_file_outlined,
+                label: showLabels ? context.tr('rdp.send_files') : null,
+                tooltip: context.tr('rdp.send_files'),
+                onPressed: connected
+                    ? () async {
+                        final files = await openFiles();
+                        await _drop(files.map((f) => f.path).toList());
+                      }
+                    : null,
+              ),
+              const SizedBox(width: 8),
+              ToolButton(
+                compact: true,
+                icon: Icons.folder_open_outlined,
+                label: showLabels ? context.tr('rdp.open_folder') : null,
+                tooltip: context.tr('rdp.open_folder'),
+                onPressed: s.openSharedDir,
+              ),
+              const SizedBox(width: 8),
+              ToolButton(
+                compact: true,
+                icon: Icons.refresh,
+                label: showLabels ? context.tr('terminal.reconnect') : null,
+                tooltip: context.tr('terminal.reconnect'),
+                onPressed: s.state == SessionState.connecting ? null : s.reconnect,
+              ),
+            ],
+          );
+        },
       ),
     );
   }

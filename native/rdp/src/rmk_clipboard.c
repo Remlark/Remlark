@@ -23,14 +23,15 @@
 #define rmk_fseek fseeko
 #endif
 
+/* 先加载 FreeRDP 类型，避免 Windows Shell 的 NIIF_* 宏污染 rail.h 的枚举。 */
+#include "rmk_internal.h"
+
 #include <freerdp/channels/cliprdr.h>
 #include <freerdp/utils/cliprdr_utils.h>
 #include <winpr/shell.h>
 #include <winpr/string.h>
 #include <winpr/sysinfo.h>
 #include <winpr/user.h>
-
-#include "rmk_internal.h"
 
 /* 本客户端为文件列表格式分配的格式 id */
 #define RMK_FILEDESC_ID 0xC0BC
@@ -390,7 +391,8 @@ static void rmk_files_add(RmkClipboard* clip, const char* path, const char* rel,
 	memset(f, 0, sizeof(*f));
 	f->path = _strdup(path);
 	f->size = dir ? 0 : size;
-	f->desc.dwFlags = FD_ATTRIBUTES | FD_FILESIZE | FD_SHOWPROGRESSUI;
+	/* SDK 与 WinPR 均提供 FD_PROGRESSUI，旧别名只在 POSIX 的兼容头中存在。 */
+	f->desc.dwFlags = FD_ATTRIBUTES | FD_FILESIZE | FD_PROGRESSUI;
 	f->desc.dwFileAttributes = dir ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_NORMAL;
 	f->desc.nFileSizeHigh = (UINT32)(f->size >> 32);
 	f->desc.nFileSizeLow = (UINT32)(f->size & 0xFFFFFFFF);

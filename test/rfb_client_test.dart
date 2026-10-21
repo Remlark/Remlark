@@ -288,9 +288,10 @@ void main() {
         ..setUint32(20, 1);
       s.add([...init.buffer.asUint8List(), ...'t'.codeUnits]);
       // 一次画面变化被拆成 3 个更新连续发送（与 macOS 行为一致）
-      for (var x = 0; x < 3; x++) {
-        s.add([0, 0, 0, 1, ..._rect(x, 0, 1, 1, 0), 0x11, 0x22, 0x33, 0]);
-      }
+      // 同一批数据写入缓冲：TCP 不保证多次 add 会在各平台合并为一个接收事件。
+      s.add([
+        for (var x = 0; x < 3; x++) ...[0, 0, 0, 1, ..._rect(x, 0, 1, 1, 0), 0x11, 0x22, 0x33, 0],
+      ]);
       await later.future;
       s.add([0, 0, 0, 1, ..._rect(0, 0, 1, 1, 0), 0x44, 0x55, 0x66, 0]);
     });

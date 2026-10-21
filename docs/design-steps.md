@@ -507,12 +507,31 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - K-06（xdg-open）不处理。
   - 验证：macOS 上 test/platform、codex_installer、ssh / rdp / rdp_clipboard 端到端测试通过；Windows / Linux 待实机验证。
 
+- [已完成] Step 75.2：Windows 自动化测试与构建修复
+  - 修复 PowerShell 中文脚本编码、MSVC UTF-8 编译、原生命令错误码检查及 OpenSSL 库目录一致性。
+  - 补齐 Windows 静态 zlib、MSVC 与 ccache 选择、RDP 头文件冲突及静态链接依赖；三平台统一剪贴板进度标志。
+  - 修复日志句柄释放、同步测试 Dart 子进程定位、Windows 拖放测试坐标与 VNC 网络时序假设。
+  - RDP 工具栏在窄窗口使用图标按钮并保留本地化提示，修复英文界面最小窗口溢出。
+  - 扩展 P-06，新增 P-07；验证结果与未执行的实机项目记录在 `docs/multi-platform-testing.md`。
+  - 验证：全量 123 项通过 / 18 项按条件跳过；最新平台专项与原生库加载、加密测试共 25 项通过；dsh 真实端到端 2 项、服务端测试 2 项通过；默认 `make` 生成含两个原生 DLL 的 Windows Release zip，`make server` 生成同步服务端。macOS / Linux 与手工远程联调待验证。
+
+- [已完成] Step 76：Windows 安装程序与编译环境文档
+  - Windows 默认打包目标生成中英文 Inno Setup 安装向导及便携包，当前用户安装、可选桌面入口、固定 AppId 升级并保留用户数据。
+  - 分发前校验 Flutter / 原生库 / AOT 资源，附带应用本地 Visual C++ 运行库；增加 P-08 平台打包测试。
+  - 新增 `docs/build-environment.md`，说明三平台工具链、Windows 开发者终端、依赖、打包产物与排障。
+  - 验证：Windows 默认 `make` 生成 `dist/remlark-1.0.0-windows-x64-setup.exe` 与便携 zip；安装包 71 个条目完整性检查、中英文语言与运行库检查通过；`make test-platform` 26 项通过，新增测试静态检查无问题。安装 / 升级 / 卸载交互及 macOS / Linux 专项重跑待实机验证。
+
+- [已完成] Step 77：Windows 无 Make 开发启动入口
+  - 新增 `windows/run.ps1`，准备 Flutter 依赖、按需构建原生库并运行 Windows 应用；支持 `-RebuildNative` 与 `-PrepareOnly`，首次原生构建自动初始化 VS x64 环境。
+  - README 与编译环境文档补充无需 Make 的运行命令；扩展 P-08 启动脚本验证。
+  - 验证：从 PATH 移除 Make 后 `-PrepareOnly` 依赖准备通过（已有原生库），平台测试 28 项通过，新增测试静态检查无问题；图形启动及干净环境首次编译按 M-15 手工验证。
+
 ## 构建与运行命令
 
 | 命令 | 说明 |
 | --- | --- |
 | `make` | 按当前平台打包 |
-| `make mac` / `make linux` / `make windows` | 分平台打包（需在对应系统上执行，输出到 dist/） |
+| `make mac` / `make linux` / `make windows` | 分平台打包（需在对应系统上执行，输出到 dist/；Windows 生成安装 exe 与便携 zip） |
 | `make run` | 运行当前程序 |
 | `make test` | 运行客户端与服务端测试 |
 | `make test-platform` | 运行多平台单元测试（见 docs/multi-platform-testing.md，三个平台分别执行） |
@@ -525,14 +544,14 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
 
 ## 已知限制
 
-- RDP 原生库在本机（macOS x86_64）编译并测试通过，arm64 为交叉编译未实机运行；Linux（build.sh）与 Windows（build.ps1）脚本已编写但未实际构建验证。
-- SSH 加密原生库同上：macOS x86_64 编译测试通过，arm64 交叉编译未实机运行，Linux / Windows 脚本未实际构建验证（缺失时自动退回纯 Dart 加密）。
+- RDP 原生库已在 macOS x86_64 编译与连接测试通过、Windows x64 编译与 FFI 加载测试通过；Windows 真实远程连接、arm64 与 Linux 仍待实机验证。
+- SSH 加密原生库已在 macOS x86_64 与 Windows x64 编译测试通过；arm64 与 Linux 仍待实机验证（库缺失时自动退回纯 Dart 加密）。
 - RDP 暂未启用 H.264（AVC）编码，使用 RemoteFX / Progressive / Planar 等编码；暂不支持声音重定向。
 - RDP 远程鼠标指针形状未同步，显示本地指针。
 - RDP 远程复制的文件会立即下载到本地（上限 2GB），超过上限不传输并提示。
 - 剪贴板测试使用自写的测试服务端，尚未与真实 Windows 服务器联调。
 - VNC 剪贴板为 RFB 标准文本剪贴板（Latin-1，兼容 UTF-8 服务器）；VNC 协议没有文件传输标准，文件传输通过内置 SSH（兼容旧关联）经 SFTP 完成；增强剪贴板和 Finder/锁屏检测面向远程 macOS。
 - AI 操作终端时命令是否结束由 Agent 根据输出判断；全屏程序（vim、top 等）与需要交互输入的命令由用户在终端处理。
-- DeepSeek Harness 安装需要访问 nodejs.org 与 registry.npmjs.org（暂不支持镜像地址），依赖约占 1GB；Windows / Linux 安装流程未实机验证。
+- DeepSeek Harness 安装需要访问 nodejs.org 与 registry.npmjs.org（暂不支持镜像地址），依赖约占 1GB；Windows x64 真实安装与终端 JSON 协议端到端测试已通过，Linux 仍待实机验证。
 - Codex 安装需要访问 GitHub（api.github.com 与 Release 下载地址，暂不支持镜像）；GitHub 未登录接口每小时限 60 次查询；OpenAI 兼容 API 不支持选择推理强度。
 - 终端粘贴 / 拖拽上传无法自动获知 shell 当前目录，上传前会确认目标目录（默认 SFTP 最近浏览目录或用户主目录）。

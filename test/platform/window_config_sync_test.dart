@@ -39,14 +39,75 @@ void main() {
       expect(File('$lib/scripts/build.ps1').existsSync(), isTrue, reason: '$lib 缺少 Windows 构建脚本');
       // Windows 脚本支持 x64 与 arm64，输出目录与构建钩子的 windows-x86_64 / windows-arm64 一致
       final ps = src('$lib/scripts/build.ps1');
+      // Windows PowerShell 5.1 按系统代码页读取无 BOM 脚本，中文标点可能破坏字符串解析。
+      expect(File('$lib/scripts/build.ps1').readAsBytesSync().take(3), [0xef, 0xbb, 0xbf]);
       expect(ps, contains('[ValidateSet("x86_64", "arm64")]'), reason: '$lib/scripts/build.ps1');
       expect(ps, contains(r'build\native\windows-$Arch'), reason: '$lib/scripts/build.ps1');
+      expect(ps, contains('Invoke-BuildCommand cmake'));
+      expect(ps, contains('-DCMAKE_C_COMPILER=cl'));
     }
     // 构建钩子中 Windows / macOS 的 arm64 目录名为 arm64，Linux 为 aarch64
     expect(hook, contains("Architecture.arm64 => os == OS.linux ? 'aarch64' : 'arm64'"));
     final makefile = src('Makefile');
+    expect(src('native/rdp/scripts/build.ps1'), contains('zlibstatic.lib'));
+    expect(src('native/rdp/scripts/build.ps1'), contains('-DWITH_CCACHE=OFF'));
+    expect(src('native/rdp/CMakeLists.txt'), contains('zlibstatic.lib'));
+    final rdpBuild = src('native/rdp/CMakeLists.txt');
+    expect(rdpBuild, contains('WIN32_LEAN_AND_MEAN NOMINMAX FREERDP_EXPORTS'));
+    expect(rdpBuild, contains(r'${REMLARK_DEPS_PREFIX}/remdesk-common.lib'));
+    expect(rdpBuild, contains('credui'));
+    final clipboard = src('native/rdp/src/rmk_clipboard.c');
+    expect(clipboard, contains('FD_ATTRIBUTES | FD_FILESIZE | FD_PROGRESSUI'));
+    expect(clipboard.indexOf('#include "rmk_internal.h"'), lessThan(clipboard.indexOf('#include <winpr/shell.h>')));
+    expect(src('windows/CMakeLists.txt'), contains('/utf-8'));
+    for (final lib in ['rdp', 'ssh_crypto']) {
+      expect(src('native/$lib/CMakeLists.txt'), contains('/utf-8'));
+    }
     for (final target in ['mac:', 'linux:', 'windows:', 'run:']) {
       expect(makefile, contains(target));
+    }
+  });
+
+  test('Windows PowerShell 可以解析两个原生库构建脚本', () async {
+    if (!Platform.isWindows) return; // 其他平台的原生构建使用 build.sh。
+    for (final lib in ['rdp', 'ssh_crypto']) {
+      final result = await Process.run('powershell', [
+        '-NoProfile',
+        '-Command',
+        '\$tokens = \$null; \$errors = \$null; '
+            '[System.Management.Automation.Language.Parser]::ParseFile('
+            "'native/$lib/scripts/build.ps1', [ref]\$tokens, [ref]\$errors) | Out-Null; "
+            'if (\$errors.Count) { \$errors | Out-String | Write-Output; exit 1 }',
+      ]);
+      expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
+    }
+  });
+
+  test('原生构建遇到外部命令失败时立即报错', () async {
+    if (Platform.isWindows) {
+      final forwarded = await Process.run('powershell', [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        ". './native/utils/windows_build.ps1'; Invoke-BuildCommand cmd /c echo -C preserved",
+      ]);
+      expect(forwarded.exitCode, 0, reason: '${forwarded.stderr}');
+      expect(forwarded.stdout, contains('-C preserved'));
+      final result = await Process.run('powershell', [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        ". './native/utils/windows_build.ps1'; Invoke-BuildCommand cmd /c exit 7; exit 0",
+      ]);
+      expect(result.exitCode, isNot(0));
+      expect('${result.stdout}${result.stderr}', contains('Build command failed (7)'));
+    } else {
+      // POSIX 脚本已有严格错误检查，两个库必须保持一致。
+      for (final lib in ['rdp', 'ssh_crypto']) {
+        expect(src('native/$lib/scripts/build.sh'), contains('set -euo pipefail'));
+      }
     }
   });
 }

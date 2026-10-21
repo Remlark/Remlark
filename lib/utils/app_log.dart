@@ -41,6 +41,7 @@ class AppLog {
 
   /// 初始化：指定数据目录，清理过期日志，接管未捕获的异常
   static Future<void> init(Directory dataDir) async {
+    await close();
     final dir = Directory(p.join(dataDir.path, 'logs'));
     if (!dir.existsSync()) dir.createSync(recursive: true);
     _dir = dir;
@@ -66,7 +67,8 @@ class AppLog {
 
   static void d(String tag, String msg) => _log(LogLevel.debug, tag, msg);
   static void i(String tag, String msg) => _log(LogLevel.info, tag, msg);
-  static void w(String tag, String msg, [Object? error, StackTrace? stack]) => _log(LogLevel.warn, tag, msg, error, stack);
+  static void w(String tag, String msg, [Object? error, StackTrace? stack]) =>
+      _log(LogLevel.warn, tag, msg, error, stack);
   static void e(String tag, String msg, [Object? error, StackTrace? stack]) =>
       _log(LogLevel.error, tag, msg, error, stack);
 
@@ -129,6 +131,18 @@ class AppLog {
     try {
       await _sink?.flush();
     } catch (_) {}
+  }
+
+  /// 关闭日志文件并释放句柄，允许重新初始化或删除数据目录。
+  static Future<void> close() async {
+    final sink = _sink;
+    _sink = null;
+    _sinkDay = null;
+    _dir = null;
+    if (sink != null) {
+      await sink.flush();
+      await sink.close();
+    }
   }
 
   /// 删除超过保留天数的日志文件
