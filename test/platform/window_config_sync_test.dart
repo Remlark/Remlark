@@ -143,6 +143,9 @@ void main() {
       'powershell',
       [
         '-NoProfile',
+        // 只放行当前测试进程中的项目脚本，保持系统全局执行策略不变。
+        '-ExecutionPolicy',
+        'Bypass',
         '-Command',
         ". './native/utils/windows_build.ps1'; "
             r"$env:MAKEFLAGS = '-- bad=value'; "

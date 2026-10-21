@@ -60,11 +60,21 @@ void main() {
     expect(sh, contains('--enable-hwaccel=h264_vaapi'));
     expect(msvc, contains('h264_d3d11va'));
     expect(msvc, contains('--toolchain=msvc'));
+    // 普通 Windows 开发者终端未设置 MSYS2 PATH，路径转换前必须先加入工具目录。
+    expect(msvc.indexOf(r'export PATH="/usr/bin:$PATH"'), greaterThanOrEqualTo(0));
+    expect(msvc.indexOf(r'export PATH="/usr/bin:$PATH"'), lessThan(msvc.indexOf(r'SRC="$(cygpath')));
+    expect(msvc, contains(r'export MSYS2_ENV_CONV_EXCL="${MSYS2_ENV_CONV_EXCL:+$MSYS2_ENV_CONV_EXCL;}CL"'));
+    expect(msvc, contains('export VSLANG=1033'));
+    expect(msvc, contains('Visual Studio English language pack (en-US)'));
     // FFmpeg 与 FreeRDP 一样静态链接 MSVC 运行库；MSVC 的 link.exe 排在 MSYS2 的 link 之前
     expect(msvc, contains('--extra-cflags=-MT'));
     expect(msvc, contains(r'export PATH="$CL_DIR:/usr/bin:$PATH"'));
     // Windows 下 FreeRDP 按 MSVC 库名查找 FFmpeg
     expect(ps, contains('avcodec.lib'));
+    expect(ps, contains('FFmpeg MSVC static library missing:'));
+    expect(ps, isNot(contains(r'Move-Item -Force "$Prefix\lib\lib$lib.a"')));
+    // FreeRDP 的硬解错误标签位于块末尾，MSVC C11 需要空语句。
+    expect(ps, contains(r'fail_hwdevice_create:;$1'));
     expect(src('native/rdp/CMakeLists.txt'), contains(r'${DEPS_LIB}/avcodec.lib'));
     // Linux 链接 libva，macOS 链接 VideoToolbox
     expect(src('native/rdp/CMakeLists.txt'), contains('va va-drm'));

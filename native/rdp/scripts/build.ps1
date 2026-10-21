@@ -50,6 +50,14 @@ function Fetch($url, $dir) {
 Fetch "https://github.com/openssl/openssl/releases/download/openssl-$OpenSslVersion/openssl-$OpenSslVersion.tar.gz" "openssl-$OpenSslVersion"
 Fetch "https://github.com/FreeRDP/FreeRDP/archive/refs/tags/$FreeRdpVersion.tar.gz" "FreeRDP-$FreeRdpVersion"
 
+# FreeRDP 3.32.2 的硬解分支在块末尾留下空标签，MSVC 的 C11 不接受；补空语句，重复构建不重复修改。
+$H264Source = "$DepsSrc\FreeRDP-$FreeRdpVersion\libfreerdp\codec\h264_ffmpeg.c"
+$H264Code = [IO.File]::ReadAllText($H264Source)
+$H264Patched = $H264Code -replace 'fail_hwdevice_create:([ \t]*\r?\n)', 'fail_hwdevice_create:;$1'
+if ($H264Patched -ne $H264Code) {
+  [IO.File]::WriteAllText($H264Source, $H264Patched, [Text.UTF8Encoding]::new($false))
+}
+
 # 1. OpenSSL（静态，/MT）
 if (-not (Test-Path "$Prefix\lib\libcrypto.lib")) {
   $build = "$Out\openssl-build"
@@ -87,9 +95,11 @@ if (-not (Test-Path "$Prefix\lib\avcodec.lib")) {
     throw "未找到 MSYS2（$Bash）：请安装 MSYS2 并执行 pacman -S make diffutils，或用 MSYS2_ROOT 指定安装目录"
   }
   Invoke-BuildCommand $Bash "$Native\scripts\build_ffmpeg_msvc.sh" "$DepsSrc\ffmpeg-$FfmpegVersion" "$Out\ffmpeg-build" $Prefix $Arch
-  # FFmpeg 的 MSVC 静态库命名为 libxxx.a，改为 FreeRDP 与胶水库查找的 xxx.lib
-  foreach ($lib in @("avcodec", "swscale", "avutil")) {
-    Move-Item -Force "$Prefix\lib\lib$lib.a" "$Prefix\lib\$lib.lib"
+}
+# MSVC 工具链已直接生成 xxx.lib；检查全部产物，不按 MinGW 的 libxxx.a 命名重命名。
+foreach ($lib in @("avcodec", "swscale", "avutil")) {
+  if (-not (Test-Path "$Prefix\lib\$lib.lib")) {
+    throw "FFmpeg MSVC static library missing: $Prefix\lib\$lib.lib"
   }
 }
 

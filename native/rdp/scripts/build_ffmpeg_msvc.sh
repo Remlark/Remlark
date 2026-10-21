@@ -5,6 +5,13 @@
 # 用法：build_ffmpeg_msvc.sh <FFmpeg 源码目录> <编译目录> <安装前缀> <x86_64|arm64>
 set -euo pipefail
 
+# 普通 PowerShell 直接启动 bash 时不会加载 MSYS2 profile，先加入工具路径再调用 cygpath。
+export PATH="/usr/bin:$PATH"
+# CL 保存 MSVC 编译选项（如 /FS），禁止 MSYS2 将它们当作 Unix 路径转换。
+export MSYS2_ENV_CONV_EXCL="${MSYS2_ENV_CONV_EXCL:+$MSYS2_ENV_CONV_EXCL;}CL"
+# FFmpeg 通过英文版本输出识别 MSVC；中文 VS 输出会使其误用通用编译器参数。
+export VSLANG=1033
+
 SRC="$(cygpath -u "$1")"
 BUILD="$(cygpath -u "$2")"
 PREFIX="$(cygpath -m "$3")"
@@ -13,6 +20,13 @@ ARCH="$4"
 # MSVC 的 link.exe 必须排在 MSYS2 自带的 /usr/bin/link 之前
 CL_DIR="$(dirname "$(command -v cl.exe)")"
 export PATH="$CL_DIR:/usr/bin:$PATH"
+
+# 仅安装中文资源时 VSLANG 不生效；提前提示安装英文包，避免 configure 误判编译器。
+CL_BANNER="$(cl.exe 2>&1 || true)"
+if ! grep -q '^Microsoft' <<<"$CL_BANNER"; then
+  echo "FFmpeg requires the Visual Studio English language pack (en-US); install it with Visual Studio Installer." >&2
+  exit 1
+fi
 
 FF_ARCH=()
 case "$ARCH" in

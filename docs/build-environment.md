@@ -50,7 +50,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\windows\run.ps1 -PrepareOn
 | --- | --- |
 | Windows | 本轮在 Windows 11 25H2 x64 验证；安装器最低设置 Windows 10，Windows 10 尚未实机验证 |
 | Flutter | 将 Flutter 的 `bin` 加入 PATH；Dart 使用同一 Flutter SDK 自带版本 |
-| Visual Studio 2022 | 安装“使用 C++ 的桌面开发”，包括 MSVC v143、Windows SDK、C++ CMake 工具；本轮 VS 17.14 / MSVC 14.44 |
+| Visual Studio 2022 | 安装“使用 C++ 的桌面开发”，包括 MSVC v143、Windows SDK、C++ CMake 工具与 English（en-US）语言包（FFmpeg 识别编译器所需）；本轮 VS 17.14 / MSVC 14.44 |
 | GNU Make | 使用 Makefile 时需要 `make.exe`；仅通过 `windows/run.ps1` 开发运行时不需要。Git Bash 自身不保证包含 Make |
 | CMake / Ninja | 可使用 VS 自带版本；本轮 VS CMake 3.31.6；应能在开发者终端中直接执行 |
 | Strawberry Perl | 使用原生 Windows Perl，不能使用 Git / MSYS 的 Perl 替代 OpenSSL 的 Windows 构建环境 |
@@ -127,6 +127,9 @@ Makefile 按 Windows 主机选择 x64 / arm64，安装器通过 `-Arch` 选择�
 ### 已固定的原生构建约定
 
 - `native/rdp/scripts/build.ps1` 固定 OpenSSL 3.6.5、FFmpeg 8.1.3、FreeRDP 3.32.2、zlib 1.3.1，静态链接依赖；FFmpeg 只含 H.264 解码器与 D3D11VA / DXVA2 硬件解码，由 `build_ffmpeg_msvc.sh` 在 MSYS2 bash 中用 MSVC（/MT）编译，ARM64 关闭汇编；`native/ssh_crypto/scripts/build.ps1` 复用同一 OpenSSL。
+- FFmpeg 的 MSVC 检测依赖英文版本输出，Visual Studio Installer 的语言包中需同时安装 English（en-US）；脚本设置 `VSLANG=1033`，缺少英文资源时提前报错。普通 PowerShell 直接调用 MSYS2 bash 时，脚本先加入 `/usr/bin` 再转换路径，并禁止将 `CL` 中的 `/FS` 等编译选项转换成路径。
+- FFmpeg 的 MSVC 静态库直接生成为 `avcodec.lib` / `swscale.lib` / `avutil.lib`，构建脚本检查三项产物，不使用 MinGW 的 `libxxx.a` 命名规则。
+- FreeRDP 3.32.2 的 H.264 硬解错误标签位于块末尾，MSVC C11 会报 C2143；Windows 构建脚本自动为 `fail_hwdevice_create` 补空语句，重复运行不会重复修改。
 - 明确使用当前 VS 目标架构的 MSVC，并关闭 FreeRDP 自动探测 ccache，避免误用 MinGW 工具链。
 - PowerShell 脚本使用 UTF-8 BOM，C / C++ 使用 `/utf-8`；外部编译命令返回非零时立即终止。
 - 安装器打包前检查 RDP、SSH 加密、sqlite、Flutter 引擎、AOT 与 VC++ 运行库；缺少任何必需项都会报错。
@@ -137,6 +140,7 @@ Makefile 按 Windows 主机选择 x64 / arm64，安装器通过 `-Arch` 选择�
 | --- | --- |
 | 找不到 `cl` / `nmake`，或目标架构不一致 | 重新进入 VS x64 开发者终端，确认 `VSCMD_ARG_TGT_ARCH=x64` |
 | 未找到 MSYS2 或 FFmpeg configure 失败 | 安装 MSYS2 并执行 `pacman -S --needed make diffutils`，或用 `MSYS2_ROOT` 指定目录；查看 `build\native\windows-<架构>\ffmpeg-build\ffmpeg-configure.log` 与同目录的 `ffbuild/config.log` |
+| FFmpeg 提示缺少 English language pack，或误报 MSVC 版本不支持 | 在 Visual Studio Installer → 修改 → 语言包中安装 English（en-US），保留现有中文包；重新运行原生构建 |
 | OpenSSL Configure 失败 | 检查 `perl -v` 为原生 Windows Strawberry Perl，`nasm -v` 可运行 |
 | 找不到 Inno Setup | 安装 6.5+ 或指定 `ISCC`；它是 `ISCC.exe` 的完整路径，不是目录 |
 | 找不到 VC++ x64 runtime | 在 VS 开发者终端打包，或将 `VC_REDIST_DIR` 指向包含三项 DLL 的 CRT 目录 |
