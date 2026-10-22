@@ -270,7 +270,7 @@ git push origin v1.0.0
 
 固定 Flutter 3.47.7，从官方源码标签启动 SDK，以便 ARM64 runner 下载原生 Dart SDK。Linux 使用 Ubuntu 24.04（x64 / arm64）及发行版配套 C++ 库，Windows 使用 windows-2022 / windows-11-arm、MSVC、原生 Perl、NASM 和 Inno Setup，macOS 使用 macos-15，构建双架构原生库和通用 app。每个任务运行 `make test-platform`；所有构建通过后统一上传 10 个安装 / 便携附件及 SHA256SUMS，并公开 Release。失败时保留构建日志，发布任务不会执行。
 
-Windows ARM64 自动选择匹配架构的 CRT 和安装器；手工可执行 `make windows WINDOWS_ARCH=arm64`，必须在原生 ARM64 Windows 与对应 VS 环境运行。打包脚本支持 `-Arch arm64`。macOS DMG 包含应用与 Applications 入口，通用 zip 同时保留。安装包目前未配置签名 / 公证，仍需 M-16 实机验证。
+Windows ARM64 自动选择匹配架构的 CRT 和安装器；手工可执行 `make windows WINDOWS_ARCH=arm64`，必须在原生 ARM64 Windows 与对应 VS 环境运行。打包脚本支持 `-Arch arm64`。macOS DMG 包含应用与 Applications 入口，通用 zip 同时保留。macOS CI 已接入固定自签证书（未公证），Windows 安装包仍未签名；需 M-16 / M-20 实机验证。
 
 Release CI 额外固定 FreeRDP `USE_VERSION_FROM_GIT_TAG=OFF`，防止读取应用标签后生成错误的 ABI 库名。Windows 构建步骤使用原生 PowerShell，源码解压显式调用系统 tar，避免 Git Bash 工具覆盖系统命令。
 
@@ -304,3 +304,21 @@ python3 tools/utils/app_version.py flutter build macos --release
 手工编译时将 macos 替换为当前平台的 windows / linux。工具从脚本所在仓库读取 VERSION，支持路径包含中文、空格及 CRLF。缺失或无效版本立即报错。Flutter build 的数字版本与构建号用于系统元数据；预发布标识保留在 Dart 完整版本、发布标签和安装包名称中，Debian 元数据用 `~` 表示预发布。Flutter run 没有 build-name / build-number 参数，开发运行只注入 Dart 版本，系统元数据使用 Flutter 默认值；分发请使用 make 或上述 build 入口。
 
 修改 VERSION 后重新编译再打包；macOS DMG 和 Windows 安装器会拒绝元数据不匹配的旧应用。Windows 独立开发入口也需要 PATH 中存在 Python 3（`python3`），与打包及 CI 使用相同解析器。
+
+
+### macOS CI 自签证书
+
+在仓库 Settings → Secrets and variables → Actions → Secrets 配置：
+
+| Secret | 内容 |
+| --- | --- |
+| `MACOS_CERTIFICATE_BASE64` | 包含私钥的 P12 的 Base64，可用 `base64 < remlark-signing.p12 | tr -d '\r\n' | pbcopy` 复制 |
+| `MACOS_CERTIFICATE_PASSWORD` | 导出 P12 的非空密码 |
+| `MACOS_SIGNING_IDENTITY` | 固定证书完整名称，例如 `Remlark Code Signing`，不能是 `-` |
+| `MACOS_KEYCHAIN_PASSWORD` | CI 临时钥匙串的随机非空密码，与 Mac 登录密码无关 |
+
+证书使用钥匙串访问 → 证书助理 → 创建证书，类型选择自签名根证书 / 代码签名；从“我的证书”导出带私钥的 `.p12`。所有版本复用同一证书及私钥，离线备份，不提交到仓库。
+
+Release CI 在 macOS 编译前检查配置并导入临时钥匙串，保存并临时更新钥匙串搜索列表，不修改证书信任设置。编译后按由内到外顺序重签嵌套二进制和 App，使用 Release.entitlements，严格验证全部架构；再重建 zip / DMG 并签 DMG。导入、签名、验证任何一步失败即阻止发布；始终清理临时钥匙串并还原搜索列表。Windows / Linux 打包和平台测试仍走原有入口。
+
+本地 `make mac` 仍使用原有临时签名；GitHub 自签不包含 Apple 公证，也不保证 Gatekeeper 或隐私权限免重新授权。真实下载与升级按 M-20 测试。

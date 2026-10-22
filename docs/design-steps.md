@@ -616,6 +616,16 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - [GitHub Actions](https://github.com/Remlark/Remlark/actions/runs/39625870166)，提交 `5eacd93`，五路编译与打包全部通过；macOS / Linux 双架构构建前后各 50 项、Windows 双架构各 56 项平台测试通过，均只跳过 P-12。macOS 15 使用 512 像素、macOS 26 使用 1024 像素，P-14 按系统实际密度比较并只允许一档色彩舍入差。
   - 本地应用包目录时间已刷新，重新生成 dist/remlark-macos.zip 与 dist/remlark-1.0.0-macos-universal.dmg；真实 Dock 固定项的退出 / 重开与旧路径迁移仍按 M-19 手工确认。
 
+- [已完成] Step 87：GitHub macOS 固定自签证书发布
+  - 使用 MACOS_CERTIFICATE_BASE64 / MACOS_CERTIFICATE_PASSWORD / MACOS_SIGNING_IDENTITY / MACOS_KEYCHAIN_PASSWORD 四个 Secrets；临时钥匙串导入与清理，配置错误立即失败。
+  - 由内到外签 App，重新生成 zip / DMG 后签 DMG；保持 Release 权限，无公证。
+  - 新增 P-15：三平台输入与失败保护、顺序检查；macOS 一次性证书真实签名、固定证书要求与清理。
+  - 本机 macOS：make test-platform 52 项通过 / P-12 跳过；新增测试静态检查通过。P-15 使用一次性自签证书实际签 App，重复签名的证书要求一致，zip 解压后的严格签名验证与 DMG 签名验证通过，钥匙串搜索列表正确还原。
+
+- Step 87.1：固定自签发布的云端与实机验证
+  - 待推送后使用仓库 Secrets 执行五路仅构建 CI；Windows / Linux 仍需实际执行 make test-platform。
+  - 用户实际证书导入、Intel / Apple Silicon 下载放行与升级权限按 M-20 验证。
+
 ## 构建与运行命令
 
 | 命令 | 说明 |

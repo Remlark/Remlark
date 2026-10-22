@@ -44,6 +44,12 @@ def macos():
             raise SystemExit(f'missing native library: {name}')
     for binary in binaries:
         subprocess.run(['lipo', str(binary), '-verify_arch', 'x86_64', 'arm64'], check=True)
+    # CI 在 make mac 后重签 App，重新生成 zip，确保两个附件包含同一份签名。
+    dist = ROOT / 'dist'
+    dist.mkdir(exist_ok=True)
+    archive = dist / 'remlark-macos.zip'
+    archive.unlink(missing_ok=True)
+    subprocess.run(['ditto', '-c', '-k', '--keepParent', str(app), str(archive)], check=True)
     output = ROOT / 'dist' / f'remlark-{version()}-macos-universal.dmg'
     with tempfile.TemporaryDirectory(prefix='remlark-dmg-') as stage:
         subprocess.run(['ditto', str(app), f'{stage}/remlark.app'], check=True)
