@@ -24,11 +24,11 @@ void main() {
     for (final name in [
       'MACOS_CERTIFICATE_BASE64',
       'MACOS_CERTIFICATE_PASSWORD',
-      'MACOS_SIGNING_IDENTITY',
-      'MACOS_KEYCHAIN_PASSWORD',
     ]) {
       expect(install, contains('secrets.$name'));
     }
+    expect(workflow, isNot(contains('secrets.MACOS_SIGNING_IDENTITY')));
+    expect(workflow, isNot(contains('secrets.MACOS_KEYCHAIN_PASSWORD')));
     final build = workflow.substring(
       workflow.indexOf('      - name: Build macOS universal installer'),
       workflow.indexOf('      # 原生库编译后'),

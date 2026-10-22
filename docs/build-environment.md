@@ -314,8 +314,8 @@ python3 tools/utils/app_version.py flutter build macos --release
 | --- | --- |
 | `MACOS_CERTIFICATE_BASE64` | 包含私钥的 P12 的 Base64，可用 `base64 < remlark-signing.p12 | tr -d '\r\n' | pbcopy` 复制 |
 | `MACOS_CERTIFICATE_PASSWORD` | 导出 P12 的非空密码 |
-| `MACOS_SIGNING_IDENTITY` | 固定证书完整名称，例如 `Remlark Code Signing`，不能是 `-` |
-| `MACOS_KEYCHAIN_PASSWORD` | CI 临时钥匙串的随机非空密码，与 Mac 登录密码无关 |
+
+只需要上述两个 Secrets。CI 自动从专用钥匙串读取唯一代码签名身份，并生成临时钥匙串密码；旧的 `MACOS_SIGNING_IDENTITY` / `MACOS_KEYCHAIN_PASSWORD` 已不再使用，可以删除。P12 必须包含一个带私钥的代码签名身份，缺失或多个身份均在导入后明确报错。
 
 证书使用钥匙串访问 → 证书助理 → 创建证书，类型选择自签名根证书 / 代码签名；从“我的证书”导出带私钥的 `.p12`。所有版本复用同一证书及私钥，离线备份，不提交到仓库。
 

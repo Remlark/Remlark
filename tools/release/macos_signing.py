@@ -7,6 +7,8 @@ import json
 import os
 import plistlib
 from pathlib import Path
+import re
+import secrets
 import shlex
 import subprocess
 import sys
@@ -45,12 +47,8 @@ def keychain():
 
 def install():
     """将带私钥的 P12 导入临时钥匙串，不修改系统或用户的证书信任。"""
-    names = ('MACOS_CERTIFICATE_BASE64', 'MACOS_CERTIFICATE_PASSWORD',
-             'MACOS_SIGNING_IDENTITY', 'MACOS_KEYCHAIN_PASSWORD')
+    names = ('MACOS_CERTIFICATE_BASE64', 'MACOS_CERTIFICATE_PASSWORD')
     values = {name: required(name) for name in names}
-    identity = values['MACOS_SIGNING_IDENTITY']
-    if identity == '-':
-        raise ValueError('MACOS_SIGNING_IDENTITY must not be ad-hoc (-)')
     # 兼容复制时带换行的 Base64，损坏输入必须在调用系统工具前失败。
     payload = base64.b64decode(''.join(values['MACOS_CERTIFICATE_BASE64'].split()),
                                validate=True)
@@ -66,7 +64,7 @@ def install():
         # codesign 仍需通过用户搜索列表访问私钥，--keychain 本身不足够。
         previous = shlex.split(run('security', 'list-keychains', '-d', 'user').decode())
         search_list.write_text(json.dumps(previous), encoding='utf-8')
-        password = values['MACOS_KEYCHAIN_PASSWORD']
+        password = secrets.token_urlsafe(32)
         run('security', 'create-keychain', '-p', password, chain)
         run('security', 'set-keychain-settings', '-lut', '21600', chain)
         run('security', 'unlock-keychain', '-p', password, chain)
@@ -75,19 +73,24 @@ def install():
             '-k', chain, '-T', '/usr/bin/codesign')
         run('security', 'set-key-partition-list', '-S', 'apple-tool:,apple:,codesign:',
             '-s', '-k', password, chain)
-        # 自签身份不要求系统信任；-v 会过滤掉未受信任的自签证书。
-        identities = run('security', 'find-identity', '-p', 'codesigning', chain)
-        if identity.encode() not in identities:
-            raise ValueError('Signing identity is unavailable or has no valid private key')
+        signing_identity()
     finally:
         p12.unlink(missing_ok=True)
 
 
+def signing_identity():
+    """从专用钥匙串自动选出唯一代码签名身份，使用指纹避免名称歧义。"""
+    # 自签身份不要求系统信任；-v 会过滤掉未受信任的自签证书。
+    output = run('security', 'find-identity', '-p', 'codesigning', keychain()).decode()
+    identities = set(re.findall(r'^\s*\d+\) ([0-9A-Fa-f]{40}) "', output, re.MULTILINE))
+    if len(identities) != 1:
+        raise ValueError('P12 must contain exactly one code signing identity with a private key')
+    return identities.pop()
+
+
 def sign(path, entitlements=None):
-    """使用固定身份签名，不请求自签证书无法使用的可信时间戳。"""
-    identity = required('MACOS_SIGNING_IDENTITY')
-    if identity == '-':
-        raise ValueError('MACOS_SIGNING_IDENTITY must not be ad-hoc (-)')
+    """使用证书自动识别的身份签名，不请求自签证书无法使用的可信时间戳。"""
+    identity = signing_identity()
     args = ['codesign', '--force', '--sign', identity, '--keychain', keychain(),
             '--timestamp=none']
     if entitlements:

@@ -235,7 +235,7 @@
 
 ## 自动发布
 
-- macOS CI 必须从四个 `MACOS_*` Secrets 导入固定自签身份到临时钥匙串；缺失配置、导入或签名失败即阻止发布，不退回临时签名。`tools/release/macos_signing.py` 封装 Apple 系统工具，仅 macOS 调用；Windows / Linux 保持各自打包入口，不导入 Apple 凭据。
+- macOS CI 必须从两个证书 Secrets 导入固定自签身份到临时钥匙串；签名身份从导入证书自动读取 SHA-1 指纹，临时钥匙串密码随机生成，无需额外配置；缺失配置、导入或签名失败即阻止发布，不退回临时签名。`tools/release/macos_signing.py` 封装 Apple 系统工具，仅 macOS 调用；Windows / Linux 保持各自打包入口，不导入 Apple 凭据。
 - 签名顺序为嵌套 Mach-O / Framework → 主 App（保留 Release.entitlements）→ 重新生成 zip / DMG → 签 DMG；严格校验 App 全部架构与嵌套代码。自签不使用可信时间戳、不公证；工作流成功或失败均删除临时钥匙串并还原钥匙串搜索列表。固定自签身份不等于 Gatekeeper 默认信任，安装放行及隐私权限延续须实机验证。
 - `.github/workflows/release.yml` 在推送与 VERSION 中版本号一致的 `v*` 标签或手工指定已有标签后运行。
 - 手工运行默认仅验证构建（`build_only=true`），tag 留空时使用所选分支；与正式发布共用完整五路编译、安装包和构建后平台测试，跳过标签校验与发布任务。正式手工发布需指定版本标签并关闭 `build_only`。

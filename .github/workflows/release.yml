@@ -70,8 +70,6 @@ jobs:
         env:
           MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
-          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
         run: python3 tools/release/macos_signing.py install
       - name: macOS build dependencies
         if: runner.os == 'macOS'
@@ -132,8 +130,6 @@ jobs:
         run: make windows WINDOWS_ARCH=${{ matrix.arch }}
       - name: Build macOS universal installer
         if: runner.os == 'macOS'
-        env:
-          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
         run: |
           make mac
           python3 tools/release/macos_signing.py sign-app

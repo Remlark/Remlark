@@ -31,22 +31,44 @@ class SigningChecks(unittest.TestCase):
             'RUNNER_TEMP': str(self.root),
             'MACOS_CERTIFICATE_BASE64': base64.b64encode(b'fake-p12').decode(),
             'MACOS_CERTIFICATE_PASSWORD': 'fake-p12-password',
-            'MACOS_SIGNING_IDENTITY': 'Test Signing',
-            'MACOS_KEYCHAIN_PASSWORD': 'fake-keychain-password',
         })
         env.start()
         self.addCleanup(env.stop)
 
     def test_missing_and_invalid_credentials(self):
-        """缺失、损坏或临时签名配置均在调用系统工具前失败。"""
+        """缺失或损坏的两项凭据在调用系统工具前失败。"""
         for name, value in [('MACOS_CERTIFICATE_PASSWORD', ''),
-                            ('MACOS_CERTIFICATE_BASE64', '%%%'),
-                            ('MACOS_SIGNING_IDENTITY', '-')]:
+                            ('MACOS_CERTIFICATE_BASE64', '%%%')]:
             with self.subTest(name=name), patch.dict(os.environ, {name: value}), \
                     patch.object(signing, 'run') as run:
                 with self.assertRaises(ValueError):
                     signing.install()
                 run.assert_not_called()
+
+    def test_identity_selection(self):
+        """自动读取指纹，同一身份重复出现允许，缺失或多身份明确拒绝。"""
+        first, second = 'A' * 40, 'B' * 40
+        valid = f'  1) {first} "测试证书" (CSSMERR_TP_NOT_TRUSTED)\n'.encode()
+        with patch.object(signing, 'run', return_value=valid + valid):
+            self.assertEqual(signing.signing_identity(), first)
+        for output in (b'0 identities found', valid + f'  2) {second} "Other"\n'.encode()):
+            with patch.object(signing, 'run', return_value=output):
+                with self.assertRaisesRegex(ValueError, 'exactly one'):
+                    signing.signing_identity()
+
+    def test_import_needs_only_certificate_and_password(self):
+        """只传两项凭据即可导入，钥匙串密码自动生成且不写入文件。"""
+        def fake_run(*args):
+            """模拟含私钥的代码签名身份，其他系统命令默认成功。"""
+            if args[1] == 'find-identity':
+                return f'  1) {"A" * 40} "Test Signing"\n'.encode()
+            return b''
+        with patch.object(signing, 'run', side_effect=fake_run) as run, \
+                patch.object(signing.secrets, 'token_urlsafe', return_value='generated-password'):
+            signing.install()
+        create = next(call for call in run.call_args_list if call.args[1] == 'create-keychain')
+        self.assertIn('generated-password', create.args)
+        self.assertFalse(signing.keychain().with_suffix('.p12').exists())
 
     def test_import_failure_removes_private_file(self):
         """密码错误时删除 P12，不继续签名，也不保留私钥中间文件。"""
@@ -130,8 +152,7 @@ class SigningChecks(unittest.TestCase):
         entitlements = self.root / 'macos/Runner/Release.entitlements'
         entitlements.parent.mkdir(parents=True)
         shutil.copy2(ROOT / 'macos/Runner/Release.entitlements', entitlements)
-        with patch.dict(os.environ, {'MACOS_SIGNING_IDENTITY': identity,
-                                     'MACOS_CERTIFICATE_PASSWORD': 'fixture-password',
+        with patch.dict(os.environ, {'MACOS_CERTIFICATE_PASSWORD': 'fixture-password',
                                      'MACOS_CERTIFICATE_BASE64': base64.b64encode(p12.read_bytes()).decode()}), \
                 patch.object(signing, 'ROOT', self.root):
             original_chains = command('security', 'list-keychains', '-d', 'user')
