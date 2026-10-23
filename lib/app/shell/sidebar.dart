@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../modules/updates/updates_controller.dart';
 import '../../modules/sync/sync_service.dart';
 import '../../modules/workspace/workspace_controller.dart';
 import '../../ui_kit/nav_tile.dart';
@@ -58,6 +59,16 @@ class Sidebar extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          if (context.watch<UpdatesController>().hasUpdate)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+              child: NavTile(
+                icon: Icons.system_update_alt_rounded,
+                label: context.tr('updates.available_short', {'version': context.read<UpdatesController>().release!.version}),
+                selected: false,
+                onTap: () => nav.goSettings(SettingsSection.updates),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
             child: NavTile(

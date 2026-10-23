@@ -667,6 +667,16 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
 | `make rdp-lib` | 编译 RDP 原生库（首次约 10 分钟；mac / linux / windows 打包会自动执行） |
 | `make rdp-test-server` | 编译 RDP 端到端测试用的服务端 |
 
+- [已完成] Step 92：GitHub 软件更新基础
+  - 新增独立更新模块、“软件更新”设置分区、后台检查、侧栏提示、语义版本比较、GitHub 附件 SHA-256/大小校验、中英文与深浅主题；P-18 验证平台包映射。
+  - 初版的应用内 Token 配置及手动安装流程已由 Step 93 替换，以 Step 93 和设计文档为准。
+
+- [已完成] Step 93：复用本机 Git 凭据，点击升级后自动安装并重启
+  - 移除 Token 输入和持久化，迁移删除旧配置；匿名失败时通过非交互 Git credential helper 读取本机 HTTPS 凭据，公开仓库不调用 Git。已在本机实际读取私有最新 Release v1.0.1，凭据不写入日志或文件。
+  - “升级并重启”触发下载、校验、安装准备、助手握手、提交与有序退出；授权取消和准备失败保持当前应用运行。macOS zip/App 交换、Windows Inno 无人值守安装、Linux deb/便携分流及原用户重启。
+  - P-19 实际隔离测试 POSIX 等待退出、未提交不安装、替换失败回滚、macOS 签名/版本与 App 交换、Git helper；Windows 同文件含本机安装助手/失败恢复测试。升级控制器另验证执行顺序及失败不退出。
+  - 验证：静态检查无问题；更新业务/升级控制器/UI/全应用中英文布局共 21 项通过；macOS make test-platform 71 项通过，P-12 与 Windows 专属助手用例共跳过 3 项。三平台系统授权、真实安装重启按 M-23 验证；Windows/Linux make test-platform 尚待对应系统执行。
+
 ## 已知限制
 
 - RDP 原生库已在 macOS x86_64 编译与连接测试通过、Windows x64 编译与 FFI 加载、Linux x64 编译与测试服务端端到端通过；真实 Windows 远程连接与 arm64 仍待实机验证。
@@ -680,3 +690,13 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
 - DeepSeek Harness 安装需要访问 nodejs.org 与 registry.npmjs.org（暂不支持镜像地址），依赖约占 1GB；Windows x64 与 Linux x64 真实安装与终端 JSON 协议端到端测试已通过。
 - Codex 安装需要访问 GitHub（api.github.com 与 Release 下载地址，暂不支持镜像）；GitHub 未登录接口每小时限 60 次查询；OpenAI 兼容 API 不支持选择推理强度。
 - 终端粘贴 / 拖拽上传无法自动获知 shell 当前目录，上传前会确认目标目录（默认 SFTP 最近浏览目录或用户主目录）。
+
+- [已完成] Step 94：SSH 首次 TCP 不可达恢复
+  - 根据 macOS 日志确认首次 TCP 建连 0–1ms 返回 errno 65、手动重连成功；底层系统原因仍需实机确认。
+  - 在 utils 新增共用有限重试，分别封装 macOS/Linux/Windows 错误码策略；直连和代理 TCP 使用同一超时预算，最多四次，不重试 SSH 认证或代理握手。
+  - 新增 P-20 三平台策略回归与 M-24 手工检查；定向回归（含本机 SSH 端到端）40 项通过；macOS `make test-platform` 90 项通过、3 项跳过，相关静态检查无问题。Windows/Linux 执行及真实问题复测待对应环境验证。
+
+- [已完成] Step 95：修复数据库迁移重复添加代理列导致启动黑屏
+  - 日志及只读检查确认 `user_version=2` 与已存在的 schema 3 结构不一致，启动抛出 `duplicate column name: proxy_uuid`。
+  - 公共迁移工具按实际结构补齐列和索引，迁移 DDL 加事务保护；保留业务数据，兼容部分升级及重复打开。
+  - 迁移/代理仓库回归 8 项通过；真实数据库隔离副本成功升级为 3，全部业务表数据摘要不变；macOS Debug 应用编译通过，原数据库未修改。

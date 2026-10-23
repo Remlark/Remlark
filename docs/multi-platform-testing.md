@@ -53,8 +53,10 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 测试 Dart 子进程与日志关闭 | `test/helpers/platform_tools.dart`、`lib/utils/app_log.dart` | Dart 可执行文件；关闭日志释放句柄 | 定位 SDK 的 `dart.exe`；删除日志目录前关闭句柄 | 同 macOS | P-07 | M-01、M-13 |
 | 编译与发布版本 | `VERSION`、`tools/utils/app_version.py`、`lib/utils/app_version.dart`、各平台打包入口 | Flutter build 数字版本 / 构建号写入 Info.plist；DMG 打包校验系统元数据 | Flutter build 写入 exe 四段资源，安装器校验并复用；独立 run 复用 Python 工具 | deb control 从 VERSION 读取，预发布映射为 ~ | P-13、P-10 | M-18 |
 | Release CI | `.github/workflows/release.yml`、`tools/release/` | Intel / Apple Silicon 通用 zip + DMG，lipo 校验 | x64 / arm64 安装 exe + zip；匹配 CRT 与 Inno 架构 | 原生 x64 / arm64 runner，deb + tar.gz | P-10、P-08、P-09、P-11（原生库编译后重新执行 make test-platform，实际解码）；手工 build_only 验证分支且不发布，构建后 RMK_REQUIRE_RDP_NATIVE=1 禁止跳过解码 | M-16 |
+| GitHub 软件更新 | `lib/modules/updates/`、`utils/git_credentials/` | 通用 zip，签名/版本校验，App 交换、按需系统授权 | x64/arm64 Inno 静默安装到原目录，备份与失败恢复、按需 UAC | dpkg 管理的 deb 或便携 bundle 交换，按需 polkit | P-18/P-19；Git credential fill、助手握手、等待退出、非提权重启 | M-23 |
 | macOS 发布自签 | `tools/release/macos_signing.py`、Release CI | 两个 Secrets 导入临时钥匙串，重签嵌套代码 / App / DMG，重建 zip；始终清理凭据并还原钥匙串搜索列表 | 不调用 Apple 工具，保持原有打包 | 不调用 Apple 工具，保持原有打包 | P-15 | M-20 |
 | 共享代理配置与重连 | `modules/proxies/`、`host_repository.dart`、`ssh_connector.dart`、`rdp_session.dart` | 共用 drift/加密存储；SSH 与内嵌 RDP 在新连接/重连时解析共享配置 | 同左，不新增系统代理或注册表设置 | 同左，不修改系统代理环境变量 | P-16 | M-21 |
+| SSH TCP 首次连接恢复 | `utils/network/`、`modules/ssh/proxy_socket.dart` | 独立策略识别 51/65 | 独立策略识别 10051/10065 | 独立策略识别 101/113 | P-20：有限重试、预算和非瞬态错误 | M-24 |
 | 代理连通性检测 | `modules/proxies/proxy_connection_test.dart`、`modules/ssh/proxy_socket.dart`、`utils/network_endpoint.dart` | ProxyConnectionTest 接口，Dart Socket 的 HTTP CONNECT/SOCKS5 握手、认证、超时和取消；IPv6 目标 | 同左，不访问注册表或系统代理 | 同左，不调用系统网络命令 | P-17 | M-22 |
 
 ## 2. 单元测试（test/platform）
@@ -81,6 +83,9 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-15 | [macos_signing_test.dart](../test/platform/macos_signing_test.dart)、`fixtures/macos_signing_checks.py` | 三平台检查仅两项凭据、自动识别唯一身份 / 拒绝缺失或多身份、自动生成钥匙串密码、缺失 / 损坏凭据、失败日志不泄密、嵌套签名顺序及部分失败清理；Windows / Linux 拒绝 Apple 工具；macOS 创建一次性证书，真实导入 / 重签 App / 严格验证 / 还原搜索列表并移除私钥 | macOS 发布自签 |
 | P-16 | [proxy_profiles_test.dart](../test/platform/proxy_profiles_test.dart) | 真实 ORM 存储共享代理，SSH/RDP/VNC 内置 SSH 共用引用；变更后重连解析新参数、连接快照及目标端口保持、引用计数和删除保护；三平台执行相同实现 | 共享代理配置与重连 |
 | P-17 | [proxy_connection_test.dart](../test/platform/proxy_connection_test.dart) | 三平台真实本地 Socket 夹具；HTTP 认证/407、SOCKS5 认证/非法响应、总超时与慢速响应、取消断开、禁止无代理直连、目标格式与 IPv6 authority/地址类型 | 可选代理连通性检测 |
+| P-18 | [update_platform_test.dart](../test/platform/update_platform_test.dart) | 六种平台/架构附件映射、Linux deb/便携分流、不支持架构拒绝、current() 选择 | GitHub 升级、M-23 |
+| P-20 | [connect_retry_test.dart](../test/platform/connect_retry_test.dart) | 三平台错误码分别验证；首次不可达后恢复、持续失败最多四次、总预算不重置；连接拒绝/权限/非 Socket 错误不重试；当前平台策略选择 | SSH TCP 首次连接恢复、M-24 |
+| P-19 | [update_installation_test.dart](../test/platform/update_installation_test.dart) | 实际隔离 Git helper；POSIX 未提交不安装、等待退出、失败回滚、特殊路径；macOS 真实签名/版本校验及 App 替换；Linux 便携解压与交换；Windows 实际 PowerShell 助手与假安装器成功/失败恢复 | 点击升级后安装、M-23 |
 
 P-11 的测试帧由 libx264 生成（BT.709 全范围，与 FreeRDP 的 YUV 转换一致），同一份字节内置在 [rmk_h264_probe_frame.h](../native/rdp/src/rmk_h264_probe_frame.h) 中，原生库首次连接时用它实际硬件解码一帧，解码成功且颜色正确才启用硬件（虚拟机、驱动异常等能创建设备却无法解码的环境会改用软件解码）。重新生成时两处同步更新：
 
@@ -321,3 +326,30 @@ Step 88（两项 Secrets 简化）：本机 `make test-platform` 52 项通过 / 
 ### Step 91：紧凑管理与连接测试
 
 本机 macOS `make test-platform` 62 项通过，P-12 仍因缺少真实 RDP 配置跳过；新增 P-17 的 9 项使用本地回环 TCP 服务验证真实协议，不访问默认外网测试目标。既有临时 sshd 的 12 项回归通过，覆盖带认证的 SOCKS5、HTTP 和跳板。Windows/Linux 未在本机执行，需运行相同 make test-platform 和 M-22；共享 Socket 实现无 OS 分支，不代表真实三平台远端代理链路已全部验证。
+
+### M-23：GitHub 点击升级后自动安装（macOS / Windows / Linux）
+
+1. 私有仓库无 Git HTTPS 凭据时显示访问提示，不出现 Token 表单或交互登录；配置 Git 凭据助手后检查/下载成功。仅 SSH 密钥不能视为 API 授权。测试 Git 未安装、helper 超时、失效/无权限凭据；公开后即使 Git 缺失或凭据失效，也能匿名检查和升级。
+2. 启动应用及每 6 小时仅检查，发现新版显示侧栏入口。点击“升级并重启”才下载，无保存对话框；升级过程中展示下载及准备安装状态，切页不丢失进度，重复点击不会启动第二份安装。
+3. 断网、磁盘满、摘要/大小错误、解包/签名/内嵌版本错误均不得退出或安装。系统授权取消/超时、助手无法启动时应用继续运行；退出前关闭连接和数据库；助手等待 PID 消失并检查 commit/abort 后才开始替换。
+4. macOS Intel/Apple Silicon：普通可写 Applications 与需管理员授权的位置分别验证；应用从 DMG/AppTranslocation 运行时拒绝升级。完成 App 替换并以原用户重启，当前版本更新、配置/凭据/数据库保留；提交失败恢复旧 App，签名与 Gatekeeper 按 M-20 验证。
+5. Windows x64/arm64：当前用户安装、需 UAC 目录与便携目录分别验证。Inno 无人值守安装到原目录、不重启系统、不强制关闭其他进程；备份不完整时不能覆盖原安装；安装失败恢复程序目录。以原用户重启。便携版将变为原目录安装版；检查卸载器、快捷方式和用户数据保留。
+6. Linux x64/arm64：deb 路径由 dpkg-query 确认，pkexec 授权后安装并保持包数据库一致；依赖/锁失败时正确提示，按 dpkg 恢复。便携包在可写与受保护目录分别验证，同级替换失败恢复旧 bundle。重启工作目录是安装目录，不是随后清理的暂存目录。
+7. 重启后核对实际版本与预期一致才确认成功；版本不符或上次失败显示失败并保留恢复目录。成功后普通用户能清理的备份自动回收；受保护位置残留备份需管理员清理。启动后崩溃不具备自动健康回滚，不能记为已验证能力。
+8. 中英文、深浅主题、最小窗口检查更新页、新版提示、升级进度和错误；连接关闭提示应在点击前可见。更新逻辑不得写入或导出 Git 凭据，旧 `updates.github_token` 经 ORM 主键迁移删除。
+
+### 2026-10-23 软件更新验证（Step 93）
+
+- 本机通过 Git credential helper 成功访问私有 GitHub Releases API，HTTP 200、最新标签 v1.0.1；不输出、不持久化凭据。未下载真实安装包覆盖用户应用，也未发布新版本。
+- `flutter analyze` 无问题；更新网络/配置迁移、升级顺序/失败保护、UI 与全应用中英文布局共 21 项通过。截图 `build/validation/updates/settings-zh.png` 与 `settings-en-dark.png`，已目视确认无 Token 输入、主操作为升级并重启、连接关闭提示在点击前可见。
+- macOS `make test-platform` 71 项通过、3 项跳过（P-12 真实 RDP，以及仅 Windows 执行的两个安装助手用例）。P-19 在本机实际运行隔离 Git 凭据助手、POSIX 等待/提交/回滚、macOS zip 签名版本校验及 App 交换，并在本机验证 Linux 使用的便携包/脚本逻辑，不等同 Linux 实机测试。
+- Windows/Linux 的 `make test-platform` 与三平台 M-23 系统授权、真实应用安装重启仍待对应实机验证；当前仅有 macOS 环境，跨平台纯逻辑和隔离脚本测试不替代其他系统运行结果。受保护目录备份可能需管理员回收，安装后启动崩溃没有自动健康回滚。
+
+### M-24：SSH 首次连接的瞬时不可达恢复
+
+- 三个平台各执行 `make test-platform`；错误码单元测试在任意平台覆盖三份策略，但不替代对应系统执行。
+- macOS 完全退出并重新启动应用，首次连接局域网 SSH（原问题目标 `192.168.0.88:22`），重复数次；验证可直接进入终端。若出现瞬时不可达，日志应记录重试并随后认证成功，不必手动重新打开窗口。
+- macOS 本地网络权限尚未确认时接受系统提示后重试；明确拒绝权限或目标持续不可达时，有限重试后仍须显示失败，不把权限拒绝隐藏为成功。
+- Windows/Linux 分别在网络刚恢复时连接，确认有限重试；验证真实不可达主机、关闭的 SSH 端口及错误密码不会无限等待或重复认证。
+- 三平台检查直连、HTTP/SOCKS5 代理和跳板连接；代理握手/认证错误应立即按原流程返回。代理检测等待期间取消或关闭弹窗，后续迟到的 Socket 应释放。
+- 2026-10-23 macOS `make test-platform`：90 项通过、3 项跳过；P-20 在本机覆盖三份错误码策略。定向网络/SSH 端到端回归 40 项通过，相关静态检查通过。Windows/Linux 的 `make test-platform` 和三平台真实网络切换/权限交互待实机验证。

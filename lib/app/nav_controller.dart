@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 enum AppPage { hosts, sessions, snippets, keys, ai, settings }
 
 /// 设置页分区
-enum SettingsSection { general, terminal, remoteDesktop, proxies, sync, agents, data }
+enum SettingsSection { general, terminal, remoteDesktop, proxies, sync, agents, data, updates }
 
 /// 主导航控制器（打开会话时自动切换到工作区页）
 class NavController extends ChangeNotifier {

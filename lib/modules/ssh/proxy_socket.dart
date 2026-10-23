@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 
 import '../../utils/async_byte_reader.dart';
+import '../../utils/network/connect_retry.dart';
 import '../hosts/host_model.dart';
 
 /// 出口代理连接：支持 HTTP CONNECT 与 SOCKS5，返回可供 SSHClient 使用的 [SSHSocket]
@@ -17,14 +18,19 @@ class ProxyConnector {
 
   /// 打开到 [host]:[port] 的连接；[proxy] 未启用时直连
   static Future<SSHSocket> connect(
-    String host, int port, ProxyConfig proxy, {
+    String host,
+    int port,
+    ProxyConfig proxy, {
     Duration timeout = _timeout,
     void Function(Socket socket)? onSocket,
   }) async {
     if (!proxy.enabled) {
-      return SSHSocket.connect(host, port, timeout: timeout);
+      return ConnectRetry.run((remaining) => SSHSocket.connect(host, port, timeout: remaining), timeout: timeout);
     }
-    final socket = await Socket.connect(proxy.host, proxy.port, timeout: timeout);
+    final socket = await ConnectRetry.run(
+      (remaining) => Socket.connect(proxy.host, proxy.port, timeout: remaining),
+      timeout: timeout,
+    );
     final reader = AsyncByteReader(socket);
     try {
       // 调用方可在测试取消、超时或弹窗关闭时立即释放已建立的连接。

@@ -39,6 +39,8 @@
 - 模块划分见 `docs/design-steps.md`。跨平台差异通过接口隔离：`RdpLauncher`（Windows / FreeRDP 两个实现）、`SshInteraction`（连接过程中的用户交互）、`AiAgent`（各类 Agent）、`SnippetAction`（快捷指令动作）。
 
 ## SSH 登录流程
+- TCP 建连统一通过 `utils/network/ConnectRetry` 处理短暂不可达：正常连接无额外等待；仅网络/主机不可达时等待 500ms、1s、2s，最多四次，总建连预算仍为 15s（代理检测使用其自身预算）。直连和代理服务器 TCP 建连均生效，不重试代理握手、SSH 认证或跳板内部通道，持续失败返回最终系统异常。
+- 系统错误码通过 `ConnectErrorPolicy` 接口分离 macOS（51/65）、Linux（101/113）、Windows（10051/10065）实现；重试写入日志以便区分短暂恢复与持续拒绝。macOS 首次启动日志中的 0–1ms `errno=65` 与稍后重连成功提示本地网络检查或路由初始化的可能性，不能仅凭此认定权限故障；拒绝本地网络权限仍需用户在系统设置中授权。
 1. 解析跳板链（检测循环与缺失），第一跳使用自身代理配置（没有则使用目标主机的代理），后续每一跳通过上一跳的 `direct-tcpip` 通道连接。
 2. 每一跳独立认证：
    - 密码认证：有保存的密码直接使用；没有则弹出密码框（可勾选“记住密码”）；密码错误时再次弹框并提示“密码错误”，最多 5 次；登录成功且勾选记住时才保存。
@@ -285,3 +287,25 @@
 - 通过 `ProxyConnectionTest` 接口隔离 UI 和网络，实现使用三平台共用的 Dart Socket 与既有 ProxyConnector，不修改系统代理。总超时为 8 秒，慢速零碎响应不能延长检测；目标/协议/地址/端口/认证变更即清除旧结果，保存或关闭时取消连接，迟到结果不更新新状态。
 - 网络端点解析放在 `utils/network_endpoint.dart`；HTTP CONNECT 的 IPv6 authority 使用方括号，SOCKS5 IPv6 目标使用 16 字节地址类型。代理协商严格验证响应版本及认证，错误的普通 TCP 服务不能误判为可用代理。
 - 验证见 P-17 与 `test/proxy_ui_test.dart`：本地 HTTP/SOCKS5 夹具不依赖外网；覆盖认证、拒绝、超时、取消、IPv6，以及失败/进行中仍可保存、修改参数失效与单条/多条布局。手工验证见 M-22。
+
+
+## GitHub 软件更新
+
+- `lib/modules/updates/` 独立负责 Remlark 更新，与 Codex/dsh 运行环境分开。固定查询 `Remlark/Remlark` 的 `/releases/latest`，只接受正式 Release 和严格版本标签；复用 `VersionUtils` 比较语义版本，忽略构建号，不提示降级。开发构建仅检查版本，不安装。
+- 默认启动后后台检查、之后每 6 小时检查，可关闭；网络检查不阻塞启动。发现新版在侧栏保留入口，不弹窗打断连接。手动检查去重；普通失败冷却 1 分钟，403/429 冷却 1 小时，保留上次成功结果与时间。
+- 设置“软件更新”分区顶部显示当前版本、来源、上次检查和状态。新版可用时主操作为“升级并重启”，旁边保留次级检查；下方为更新说明和自动检查开关。明确提醒安装会关闭当前连接、可能出现系统授权。移除 Token 输入、保存位置选择及手动安装步骤。中英文、深浅主题和最小窗口共同验证。
+- 每次请求先匿名访问，API 返回 401/403/404 时才调用独立的 `GitCredentials.githubToken()`：执行非交互 `git credential fill`，让 Git 按系统/全局/当前工作目录仓库配置访问 HTTPS 凭据助手。凭据只在当前请求内存中使用，不持久化、不输出到日志、不带往 CDN。仅有 SSH 密钥不能授权 REST API；无凭据时显示访问失败。启动时通过 ORM 主键删除旧方案的 `updates.github_token`。仓库公开后不调用 Git；后续可单独移除该凭据提供器。
+- 点击升级后创建应用数据目录下独立暂存目录，按平台下载并用 GitHub digest 或同 Release 的 SHA256SUMS 校验 SHA-256 和大小；失败不启动安装、不退出当前应用。GitHub 下载仅允许固定仓库 API/Release 和 GitHub 附件 HTTPS 主机，重定向不继承 Authorization。
+- 安装由 `UpdatePlatform` 的三个实现生成独立助手。助手完成权限获取后写 ready，控制器写 commit，再复用 `AppServices.shutdown()` 关闭连接、子进程及数据库后退出。助手等原进程消失且存在 commit、没有 abort 才安装；等待超时和取消系统授权不能修改运行中的应用。退出流程幂等，防止系统退出和更新退出重复关闭数据库。
+- macOS：下载通用 `remlark-macos.zip`，ditto 解包，验证签名与内嵌版本；拒绝磁盘镜像和 AppTranslocation 内的运行位置。在目标同级复制完整新 App，再备份旧 App、原位替换，提交失败回滚；不可写目录通过 AppleScript 系统管理员授权。非提权监督进程使用 open 重启应用。
+- Windows：选择 x64/arm64 setup.exe；助手等待进程退出，完整备份应用目录，再以 `/VERYSILENT /SUPPRESSMSGBOXES /SP- /NORESTART /NOCLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /DIR=原目录` 调用 Inno Setup。备份完整后才允许失败恢复，禁止用不完整备份覆盖原目录。不可写目录请求 UAC；监督进程以原用户重新启动应用。便携版通过安装器升级后会成为原目录下的安装版。
+- Linux：`/opt/remlark` 中经 dpkg-query 确认的系统安装使用对应 amd64/arm64 deb，并验证包名、版本，通过 polkit 授权后 dpkg 安装；包管理失败需按 dpkg 状态恢复，不声称可事务回滚包数据库。其他有效 bundle 使用便携 tar.gz，解压校验目录后同级复制、备份与交换，提交失败回滚；不可写父目录使用 polkit。应用以原用户、原安装目录为工作目录重启。
+- 安装结果及预期版本记录在本机更新状态；下一次启动必须确认实际版本一致才显示成功，失败保留恢复材料。成功启动后尽力清理暂存及对应备份；受保护目录中无法由普通用户删除的备份可能保留，需管理员回收。不自动回滚已经启动但随后崩溃的应用，不把该机制描述为完整启动健康监测。
+- 验证：网络与迁移见 `updates_test.dart`，升级串行/授权失败/退出失败/结果确认见 `update_upgrade_test.dart`，UI 见 `updates_ui_test.dart`，平台映射 P-18、安装脚本与 Git 凭据 P-19，系统授权/真实安装交互见 M-23。
+- 参考：[GitHub Releases API](https://docs.github.com/en/rest/releases/releases)、[Git 凭据接口](https://git-scm.com/docs/git-credential)、[Inno Setup 无人值守参数](https://jrsoftware.org/ishelp/topic_setupcmdline.htm)。
+
+## 数据库升级中断恢复
+- 启动在 `runApp` 前加载数据库；若结构升级异常，界面无法启动。已确认的一种黑屏原因是 `user_version=2`、实际已存在 schema 3 的 `hosts.proxy_uuid` 和代理表/索引，重复添加列抛出异常。
+- 升级通过 `DatabaseMigrationUtils` 检查指定列和索引的系统元数据，只补齐缺失结构；不删除、重建业务表，也不靠直接修改版本号跳过迁移。
+- schema 1→3、2→3 的 DDL 在同一事务中执行，出错整体回滚；升级成功由 Drift 更新版本。兼容历史上已部分升级或结构齐全但版本号滞后的数据库。
+- `test/database_migration_test.dart` 覆盖旧版本升级、代理结构部分/全部存在、再次打开及索引创建失败时事务回滚；真实数据库副本另验证升级前后业务数据摘要一致。

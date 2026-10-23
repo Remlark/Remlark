@@ -22,6 +22,7 @@ class RemlarkApp extends StatelessWidget {
       providers: [
         Provider.value(value: services),
         ChangeNotifierProvider.value(value: services.settings),
+        ChangeNotifierProvider.value(value: services.updates),
         ChangeNotifierProvider.value(value: services.hosts),
         ChangeNotifierProvider.value(value: services.proxies),
         ChangeNotifierProvider.value(value: services.workspace),

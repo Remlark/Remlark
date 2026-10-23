@@ -1,4 +1,5 @@
 import '../data/database.dart';
+import '../modules/updates/updates_controller.dart';
 import '../utils/app_log.dart';
 import '../modules/ai/agent_options_controller.dart';
 import '../modules/ai/agent_repository.dart';
@@ -38,6 +39,7 @@ class AppServices {
       chatRepo = ChatRepository(db),
       tokenRepo = TokenRepository(db) {
     settings = SettingsController(settingsRepo);
+    updates = UpdatesController(settingsRepo);
     hosts = HostsController(hostRepo, groupRepo);
     proxies = ProxiesController(proxyRepo)..onChanged = hosts.load;
     connector = SshConnector(hostRepo, keyRepo);
@@ -63,6 +65,7 @@ class AppServices {
   final TokenRepository tokenRepo;
 
   late final SettingsController settings;
+  late final UpdatesController updates;
   late final HostsController hosts;
   late final ProxiesController proxies;
   late final SshConnector connector;
@@ -82,6 +85,7 @@ class AppServices {
   /// 启动时加载数据
   Future<void> init({required String installKeySnippetName}) async {
     await settings.load();
+    await updates.load();
     await snippetRepo.seedDefaults(installKeyName: installKeySnippetName);
     await hostRepo.migrateInlineProxies();
     await hosts.load();
@@ -95,7 +99,13 @@ class AppServices {
   /// 必须在引擎关闭前完成：否则数据库所在的后台 isolate 被直接销毁，sqlite 语句的清理回调
   /// 在连接释放后运行，退出时崩溃（EXC_BAD_ACCESS @ sqlite3_finalize）。
   /// 每一步单独限时并忽略错误，保证退出不会卡住
-  Future<void> shutdown() async {
+  Future<void>? _shutdownFuture;
+
+  /// 避免系统退出与升级退出同时释放数据库和会话。
+  Future<void> shutdown() => _shutdownFuture ??= _shutdown();
+
+  /// 实际执行退出清理。
+  Future<void> _shutdown() async {
     Future<void> step(String name, Future<void> Function() action, Duration limit) async {
       try {
         await action().timeout(limit);
@@ -106,6 +116,7 @@ class AppServices {
 
     AppLog.i('app', '退出：释放资源');
     sync.stop();
+    updates.dispose();
     await step('关闭会话', workspace.closeAll, const Duration(seconds: 3));
     await step('结束 dsh', DshAcpService.shared.shutdown, const Duration(seconds: 3));
     await step('结束 Codex', CodexAppServer.shared.shutdown, const Duration(seconds: 3));

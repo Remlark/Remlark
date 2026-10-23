@@ -6,6 +6,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../ui_kit/nav_tile.dart';
 import '../../../ui_kit/page_header.dart';
 import 'agent_settings_section.dart';
+import '../../updates/ui/updates_section.dart';
 import 'data_section.dart';
 import 'general_section.dart';
 import 'remote_desktop_section.dart';
@@ -27,6 +28,7 @@ class SettingsPage extends StatelessWidget {
       (SettingsSection.sync, Icons.sync_rounded, context.tr('settings.sync')),
       (SettingsSection.agents, Icons.auto_awesome_outlined, context.tr('settings.agents')),
       (SettingsSection.data, Icons.storage_rounded, context.tr('settings.data')),
+      (SettingsSection.updates, Icons.system_update_alt_rounded, context.tr('updates.title')),
     ];
     final Widget content = switch (nav.settingsSection) {
       SettingsSection.general => const GeneralSection(),
@@ -36,6 +38,7 @@ class SettingsPage extends StatelessWidget {
       SettingsSection.sync => const SyncSettingsSection(),
       SettingsSection.agents => const AgentSettingsSection(),
       SettingsSection.data => const DataSection(),
+      SettingsSection.updates => const UpdatesSection(),
     };
     return PageFrame(
       header: PageHeader(title: context.tr('nav.settings'), subtitle: context.tr('settings.subtitle')),
