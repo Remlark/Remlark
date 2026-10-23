@@ -11,6 +11,7 @@ import '../../keys/ui/key_dialogs.dart';
 import '../host_model.dart';
 import '../hosts_controller.dart';
 import 'host_form.dart';
+import 'jump_host_picker_dialog.dart';
 import '../../../ui_kit/app_menu.dart';
 
 /// 编辑分区标题
@@ -253,16 +254,22 @@ class JumpChainSection extends StatelessWidget {
             },
           ),
         if (candidates.isNotEmpty)
-          AppMenuAnchor<String>(
-            builder: (ctx, open) => TextButton.icon(
-              icon: const Icon(Icons.add, size: 16),
-              label: Text(context.tr('host.jump.add')),
-              onPressed: open,
-            ),
-            items: (ctx) => [
-              for (final h in candidates) AppMenuItem(value: h.uuid, label: '${h.name}  ${h.endpoint}'),
-            ],
-            onSelected: (uuid) => f.update(() => f.jumpChain.add(uuid)),
+          TextButton.icon(
+            icon: const Icon(Icons.add, size: 16),
+            label: Text(context.tr('host.jump.add')),
+            onPressed: () async {
+              final uuid = await JumpHostPickerDialog.show(
+                context,
+                candidates: candidates,
+                groups: hosts.groups,
+              );
+              if (!context.mounted || uuid == null) return;
+              // 确认时再次校验，避免弹窗期间候选被删除或重复加入。
+              if (hosts.sshHosts.any((h) => h.uuid == uuid) &&
+                  !f.jumpChain.contains(uuid)) {
+                f.update(() => f.jumpChain.add(uuid));
+              }
+            },
           ),
       ],
     );

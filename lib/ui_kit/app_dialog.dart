@@ -18,6 +18,7 @@ class AppDialog extends StatelessWidget {
     this.scrollable = true,
     this.contentPadding = const EdgeInsets.fromLTRB(24, 4, 24, 20),
     this.headerExtra,
+    this.subtitle,
   });
 
   final String title;
@@ -37,6 +38,9 @@ class AppDialog extends StatelessWidget {
 
   /// 标题右侧附加内容（如协议切换）
   final Widget? headerExtra;
+
+  /// 可选说明文字，与标题共用固定头部，避免正文被重复留白挤压。
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -68,17 +72,27 @@ class AppDialog extends StatelessWidget {
                     const SizedBox(width: 14),
                   ],
                   Expanded(
-                    child: Row(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Flexible(
-                          child: Text(
-                            title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: p.text),
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: p.text),
+                              ),
+                            ),
+                            if (headerExtra != null) ...[const SizedBox(width: 20), headerExtra!],
+                          ],
                         ),
-                        if (headerExtra != null) ...[const SizedBox(width: 20), headerExtra!],
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 6),
+                          Text(subtitle!, style: TextStyle(fontSize: 13, color: p.textMuted)),
+                        ],
                       ],
                     ),
                   ),
