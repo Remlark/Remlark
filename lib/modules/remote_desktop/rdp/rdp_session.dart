@@ -125,6 +125,15 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
   /// 进行一次连接，返回结果与附加信息（错误描述或新证书指纹）
   Future<(_Attempt, String?)> _attempt(String password) async {
     _disposeClient();
+    // 重连时读取共享配置；解析失败显示错误，不静默直连或停留在连接中。
+    late final ProxyConfig proxy;
+    try {
+      proxy = (await _hosts.resolveProxy(host)).proxy;
+    } on StateError {
+      return (_Attempt.failed, 'proxy.missing');
+    } catch (_) {
+      return (_Attempt.failed, 'proxy.load_failed');
+    }
     final c = RdpClient();
     _client = c;
     final done = Completer<(_Attempt, String?)>();
@@ -189,7 +198,6 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
     final size = _viewSize;
     final fixedW = (host.extra['width'] as num?)?.toInt();
     final fixedH = (host.extra['height'] as num?)?.toInt();
-    final proxy = host.proxy;
     c.connect(
       RdpConnectOptions(
         host: host.address,

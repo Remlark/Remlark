@@ -16,6 +16,7 @@ class HostGroups extends Table {
 @TableIndex(name: 'idx_hosts_protocol_group', columns: {#protocol, #groupUuid})
 @TableIndex(name: 'idx_hosts_sync', columns: {#syncEnabled})
 @TableIndex(name: 'idx_hosts_last_connected', columns: {#lastConnectedAt})
+@TableIndex(name: 'idx_hosts_proxy_uuid', columns: {#proxyUuid})
 class Hosts extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get uuid => text()();
@@ -43,6 +44,9 @@ class Hosts extends Table {
   IntColumn get proxyPort => integer().withDefault(const Constant(0))();
   TextColumn get proxyUser => text().withDefault(const Constant(''))();
   TextColumn get proxyPassEnc => text().nullable()();
+
+  /// 本地代理配置引用；原代理字段保留为同步、导出和旧数据兼容快照。
+  TextColumn get proxyUuid => text().nullable()();
 
   /// 自动探测到的系统 id（如 ubuntu、rhel）与可读名称
   TextColumn get osId => text().nullable()();

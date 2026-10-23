@@ -14,6 +14,8 @@ import '../modules/ai/token_repository.dart';
 import '../modules/hosts/group_repository.dart';
 import '../modules/hosts/host_repository.dart';
 import '../modules/hosts/hosts_controller.dart';
+import '../modules/proxies/proxy_repository.dart';
+import '../modules/proxies/proxies_controller.dart';
 import '../modules/import_export/import_export_service.dart';
 import '../modules/keys/key_repository.dart';
 import '../modules/settings/settings_controller.dart';
@@ -28,6 +30,7 @@ class AppServices {
   AppServices(this.db)
     : settingsRepo = SettingsRepository(db),
       hostRepo = HostRepository(db),
+      proxyRepo = ProxyRepository(db),
       groupRepo = GroupRepository(db),
       keyRepo = KeyRepository(db),
       snippetRepo = SnippetRepository(db),
@@ -36,6 +39,7 @@ class AppServices {
       tokenRepo = TokenRepository(db) {
     settings = SettingsController(settingsRepo);
     hosts = HostsController(hostRepo, groupRepo);
+    proxies = ProxiesController(proxyRepo)..onChanged = hosts.load;
     connector = SshConnector(hostRepo, keyRepo);
     sync = SyncService(settingsRepo, hostRepo, groupRepo, keyRepo)..onHostsChanged = hosts.load;
     agents = AgentsController(agentRepo);
@@ -50,6 +54,7 @@ class AppServices {
   final AppDatabase db;
   final SettingsRepository settingsRepo;
   final HostRepository hostRepo;
+  final ProxyRepository proxyRepo;
   final GroupRepository groupRepo;
   final KeyRepository keyRepo;
   final SnippetRepository snippetRepo;
@@ -59,6 +64,7 @@ class AppServices {
 
   late final SettingsController settings;
   late final HostsController hosts;
+  late final ProxiesController proxies;
   late final SshConnector connector;
   late final SyncService sync;
   late final AgentsController agents;
@@ -77,7 +83,9 @@ class AppServices {
   Future<void> init({required String installKeySnippetName}) async {
     await settings.load();
     await snippetRepo.seedDefaults(installKeyName: installKeySnippetName);
+    await hostRepo.migrateInlineProxies();
     await hosts.load();
+    await proxies.load();
     await agents.load();
     await sync.load();
   }

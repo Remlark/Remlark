@@ -54,6 +54,8 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 编译与发布版本 | `VERSION`、`tools/utils/app_version.py`、`lib/utils/app_version.dart`、各平台打包入口 | Flutter build 数字版本 / 构建号写入 Info.plist；DMG 打包校验系统元数据 | Flutter build 写入 exe 四段资源，安装器校验并复用；独立 run 复用 Python 工具 | deb control 从 VERSION 读取，预发布映射为 ~ | P-13、P-10 | M-18 |
 | Release CI | `.github/workflows/release.yml`、`tools/release/` | Intel / Apple Silicon 通用 zip + DMG，lipo 校验 | x64 / arm64 安装 exe + zip；匹配 CRT 与 Inno 架构 | 原生 x64 / arm64 runner，deb + tar.gz | P-10、P-08、P-09、P-11（原生库编译后重新执行 make test-platform，实际解码）；手工 build_only 验证分支且不发布，构建后 RMK_REQUIRE_RDP_NATIVE=1 禁止跳过解码 | M-16 |
 | macOS 发布自签 | `tools/release/macos_signing.py`、Release CI | 两个 Secrets 导入临时钥匙串，重签嵌套代码 / App / DMG，重建 zip；始终清理凭据并还原钥匙串搜索列表 | 不调用 Apple 工具，保持原有打包 | 不调用 Apple 工具，保持原有打包 | P-15 | M-20 |
+| 共享代理配置与重连 | `modules/proxies/`、`host_repository.dart`、`ssh_connector.dart`、`rdp_session.dart` | 共用 drift/加密存储；SSH 与内嵌 RDP 在新连接/重连时解析共享配置 | 同左，不新增系统代理或注册表设置 | 同左，不修改系统代理环境变量 | P-16 | M-21 |
+| 代理连通性检测 | `modules/proxies/proxy_connection_test.dart`、`modules/ssh/proxy_socket.dart`、`utils/network_endpoint.dart` | ProxyConnectionTest 接口，Dart Socket 的 HTTP CONNECT/SOCKS5 握手、认证、超时和取消；IPv6 目标 | 同左，不访问注册表或系统代理 | 同左，不调用系统网络命令 | P-17 | M-22 |
 
 ## 2. 单元测试（test/platform）
 
@@ -77,6 +79,8 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-13 | [app_version_test.dart](../test/platform/app_version_test.dart) | VERSION 是唯一来源，兼容 CRLF / 中文空格路径，拒绝无效 / 缺失 / 越界版本；构建号默认 1；预发布与 Windows 四段资源 / Debian ~ 映射；发布标签去掉构建号；实际子进程验证三平台编译参数与开发 run 参数、退出码；拒绝命令行覆盖和给旧 macOS 应用换名打包 | 编译与发布版本 |
 | P-14 | [app_icon_test.dart](../test/platform/app_icon_test.dart) | 三平台品牌图标与系统关联；macOS 编译实际 Swift 实现，在隐藏进程中更新 NSApplication 图标并比较像素，缺少图标时保留原图标；不启动真实应用或访问用户配置 | 应用图标与 Dock |
 | P-15 | [macos_signing_test.dart](../test/platform/macos_signing_test.dart)、`fixtures/macos_signing_checks.py` | 三平台检查仅两项凭据、自动识别唯一身份 / 拒绝缺失或多身份、自动生成钥匙串密码、缺失 / 损坏凭据、失败日志不泄密、嵌套签名顺序及部分失败清理；Windows / Linux 拒绝 Apple 工具；macOS 创建一次性证书，真实导入 / 重签 App / 严格验证 / 还原搜索列表并移除私钥 | macOS 发布自签 |
+| P-16 | [proxy_profiles_test.dart](../test/platform/proxy_profiles_test.dart) | 真实 ORM 存储共享代理，SSH/RDP/VNC 内置 SSH 共用引用；变更后重连解析新参数、连接快照及目标端口保持、引用计数和删除保护；三平台执行相同实现 | 共享代理配置与重连 |
+| P-17 | [proxy_connection_test.dart](../test/platform/proxy_connection_test.dart) | 三平台真实本地 Socket 夹具；HTTP 认证/407、SOCKS5 认证/非法响应、总超时与慢速响应、取消断开、禁止无代理直连、目标格式与 IPv6 authority/地址类型 | 可选代理连通性检测 |
 
 P-11 的测试帧由 libx264 生成（BT.709 全范围，与 FreeRDP 的 YUV 转换一致），同一份字节内置在 [rmk_h264_probe_frame.h](../native/rdp/src/rmk_h264_probe_frame.h) 中，原生库首次连接时用它实际硬件解码一帧，解码成功且颜色正确才启用硬件（虚拟机、驱动异常等能创建设备却无法解码的环境会改用软件解码）。重新生成时两处同步更新：
 
@@ -162,6 +166,10 @@ P-06 还检查 macOS / Linux 测试服务端与应用使用同一 OpenSSL 前缀
 | M-16 | Release 安装验证 | 在干净的 Windows / Linux x64、arm64 与 Intel / Apple Silicon macOS 下载附件，验证 SHA256SUMS，安装、启动、升级、卸载并连接 SSH / RDP；macOS DMG 拖入 Applications。macOS CI 使用固定自签证书，尚未公证；Windows 未签名，CI 成功不代替实机交互验证 |
 
 M-20：下载新 CI 的 macOS zip / DMG，核对 `codesign -dv --verbose=4` 的 Authority 是固定自签名称、不是 `Signature=adhoc`，执行 `codesign --verify --deep --strict --all-architectures /Applications/remlark.app`。分别在 Intel / Apple Silicon 干净系统检查首次 Gatekeeper 放行，再覆盖安装同证书的新版本，记录是否再次放行及辅助功能等隐私权限是否保留；不以自签或单元测试保证系统免授权。检查 Actions 日志不含证书密码，缺失 Secret 应在构建前失败，失败构建不得上传可发布附件。
+
+M-21：在 macOS / Windows / Linux 分别新增 HTTP 和 SOCKS5 代理（含认证），在 SSH 与 RDP 主机中选择并实际连接；两台主机引用同一代理后修改地址/凭据，确认已建立会话不被打断、新连接和重连使用新参数。VNC 内置 SSH 验证终端/文件传输代理，不把 RFB 画面当作代理隧道。使用中的代理不能删除；切换主机代理后才可删除。导入旧配置和跨设备同步后检查代理参数、认证、分组及主机同步状态；未保存主机时打开管理弹窗再取消，原选择不变。
+
+M-22：三平台分别打开只有一条代理和较多代理的管理弹窗，检查紧凑布局、内部滚动、固定搜索/关闭及中英文最小窗口。添加/编辑代理时验证 HTTP、SOCKS5（含认证）连接指定目标；错误密码、无法访问的目标、无响应端口应显示失败或超时，但仍能保存有效配置。测试进行中修改参数应取消并清除旧结果，保存或关闭不等待测试结束；再次打开不显示旧结果。内网限制下改用允许访问的目标，测试目标不随代理持久化。检测通过只表示代理隧道建立，不替代 SSH/RDP 登录验证。
 
 ## 5. 已发现的平台问题
 
@@ -303,3 +311,13 @@ Windows / Linux 本轮尚未执行，Release CI 保留五路构建前后的 `mak
 
 
 Step 88（两项 Secrets 简化）：本机 `make test-platform` 52 项通过 / P-12 跳过。P-15 的 9 项 Python 检查覆盖证书指纹自动识别、同身份去重、无身份与多身份拒绝、钥匙串密码自动生成，以及只提供证书 / 密码时的真实 App / zip / DMG 签名。Windows / Linux 的完整平台测试及仓库实际证书导入待新版 CI 执行。
+
+
+### Step 90：共享代理配置
+
+本机 macOS `make test-platform` 53 项通过，P-12 真实 RDP 因未提供已授权配置而跳过。新增 P-16 无平台分支，三平台共用同一仓库与解析逻辑；未修改原生代理接口。Windows/Linux 当前未执行新版 `make test-platform`，需由对应系统或现有 CI 验证；M-21 的真实远程代理链路仍待实机验证。本机临时 sshd 的 SSH、跳板、HTTP 和 SOCKS5 回归已通过，不以此替代真实 RDP 认证。
+
+
+### Step 91：紧凑管理与连接测试
+
+本机 macOS `make test-platform` 62 项通过，P-12 仍因缺少真实 RDP 配置跳过；新增 P-17 的 9 项使用本地回环 TCP 服务验证真实协议，不访问默认外网测试目标。既有临时 sshd 的 12 项回归通过，覆盖带认证的 SOCKS5、HTTP 和跳板。Windows/Linux 未在本机执行，需运行相同 make test-platform 和 M-22；共享 Socket 实现无 OS 分支，不代表真实三平台远端代理链路已全部验证。

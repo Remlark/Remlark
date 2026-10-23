@@ -10,8 +10,9 @@ import 'data_section.dart';
 import 'general_section.dart';
 import 'remote_desktop_section.dart';
 import 'sync_settings_section.dart';
+import '../../proxies/ui/proxy_settings_section.dart';
 
-/// 设置页：页头 + 左侧分区导航（通用、终端、远程桌面、同步、AI Agent、数据）+ 当前分区内容
+/// 设置页：页头 + 左侧分区导航（通用、终端、远程桌面、代理、同步、AI Agent、数据）+ 当前分区内容
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
 
@@ -22,6 +23,7 @@ class SettingsPage extends StatelessWidget {
       (SettingsSection.general, Icons.tune_rounded, context.tr('settings.general')),
       (SettingsSection.terminal, Icons.terminal_rounded, context.tr('settings.terminal')),
       (SettingsSection.remoteDesktop, Icons.desktop_windows_outlined, context.tr('settings.remote_desktop')),
+      (SettingsSection.proxies, Icons.hub_outlined, context.tr('settings.proxies')),
       (SettingsSection.sync, Icons.sync_rounded, context.tr('settings.sync')),
       (SettingsSection.agents, Icons.auto_awesome_outlined, context.tr('settings.agents')),
       (SettingsSection.data, Icons.storage_rounded, context.tr('settings.data')),
@@ -30,6 +32,7 @@ class SettingsPage extends StatelessWidget {
       SettingsSection.general => const GeneralSection(),
       SettingsSection.terminal => const TerminalSection(),
       SettingsSection.remoteDesktop => const RemoteDesktopSection(),
+      SettingsSection.proxies => const ProxySettingsSection(),
       SettingsSection.sync => const SyncSettingsSection(),
       SettingsSection.agents => const AgentSettingsSection(),
       SettingsSection.data => const DataSection(),

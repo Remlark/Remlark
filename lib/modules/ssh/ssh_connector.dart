@@ -75,6 +75,7 @@ class SshConnector {
 
   /// 连接到 [target]，必要时通过跳板链与代理
   Future<SshConnection> connect(HostEntry target, SshInteraction ui) async {
+    target = await _hosts.resolveProxy(target);
     final chain = await _resolveChain(target);
     final clients = <SSHClient>[];
     final sw = Stopwatch()..start();

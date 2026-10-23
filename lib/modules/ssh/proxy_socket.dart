@@ -16,20 +16,27 @@ class ProxyConnector {
   static const _timeout = Duration(seconds: 15);
 
   /// 打开到 [host]:[port] 的连接；[proxy] 未启用时直连
-  static Future<SSHSocket> connect(String host, int port, ProxyConfig proxy) async {
+  static Future<SSHSocket> connect(
+    String host, int port, ProxyConfig proxy, {
+    Duration timeout = _timeout,
+    void Function(Socket socket)? onSocket,
+  }) async {
     if (!proxy.enabled) {
-      return SSHSocket.connect(host, port, timeout: _timeout);
+      return SSHSocket.connect(host, port, timeout: timeout);
     }
-    final socket = await Socket.connect(proxy.host, proxy.port, timeout: _timeout);
+    final socket = await Socket.connect(proxy.host, proxy.port, timeout: timeout);
     final reader = AsyncByteReader(socket);
     try {
+      // 调用方可在测试取消、超时或弹窗关闭时立即释放已建立的连接。
+      onSocket?.call(socket);
       if (proxy.type == ProxyType.http) {
-        await _httpConnect(socket, reader, host, port, proxy);
+        await _httpConnect(socket, reader, host, port, proxy, timeout);
       } else {
-        await _socks5Connect(socket, reader, host, port, proxy);
+        await _socks5Connect(socket, reader, host, port, proxy, timeout);
       }
     } catch (e) {
       socket.destroy();
+      await reader.cancel();
       rethrow;
     }
     return _detach(socket, reader);
@@ -42,8 +49,9 @@ class ProxyConnector {
     String host,
     int port,
     ProxyConfig proxy,
+    Duration timeout,
   ) async {
-    final target = '$host:$port';
+    final target = host.contains(':') && !host.startsWith('[') ? '[$host]:$port' : '$host:$port';
     final buf = StringBuffer()
       ..write('CONNECT $target HTTP/1.1\r\n')
       ..write('Host: $target\r\n');
@@ -53,10 +61,10 @@ class ProxyConnector {
     }
     buf.write('\r\n');
     socket.add(utf8.encode(buf.toString()));
-    final header = await reader.readUntil(utf8.encode('\r\n\r\n'), timeout: _timeout);
+    final header = await reader.readUntil(utf8.encode('\r\n\r\n'), timeout: timeout);
     final statusLine = utf8.decode(header, allowMalformed: true).split('\r\n').first;
     final parts = statusLine.split(' ');
-    if (parts.length < 2 || parts[1] != '200') {
+    if (parts.length < 2 || !parts[0].startsWith('HTTP/') || parts[1] != '200') {
       throw ProxyException('HTTP proxy: $statusLine');
     }
   }
@@ -68,32 +76,40 @@ class ProxyConnector {
     String host,
     int port,
     ProxyConfig proxy,
+    Duration timeout,
   ) async {
     final useAuth = proxy.username.isNotEmpty;
     socket.add(useAuth ? [5, 2, 0, 2] : [5, 1, 0]);
-    final method = await reader.read(2);
+    final method = await reader.read(2, timeout: timeout);
     if (method[0] != 5) throw ProxyException('SOCKS5: bad version');
     if (method[1] == 2) {
+      if (!useAuth) throw ProxyException('SOCKS5: no acceptable auth method');
       final u = utf8.encode(proxy.username);
       final p = utf8.encode(proxy.password ?? '');
+      if (u.length > 255 || p.length > 255) throw ProxyException('SOCKS5: authentication value too long');
       socket.add([1, u.length, ...u, p.length, ...p]);
-      final r = await reader.read(2);
-      if (r[1] != 0) throw ProxyException('SOCKS5: authentication failed');
+      final r = await reader.read(2, timeout: timeout);
+      if (r[0] != 1 || r[1] != 0) throw ProxyException('SOCKS5: authentication failed');
     } else if (method[1] != 0) {
       throw ProxyException('SOCKS5: no acceptable auth method');
     }
     final h = utf8.encode(host);
-    socket.add([5, 1, 0, 3, h.length, ...h, (port >> 8) & 0xff, port & 0xff]);
-    final head = await reader.read(4);
+    if (h.isEmpty || h.length > 255) throw ProxyException('SOCKS5: invalid target');
+    final literal = InternetAddress.tryParse(host);
+    // IPv6 使用协议规定的 16 字节地址形式，避免让代理把冒号地址当作域名。
+    final destination = literal?.type == InternetAddressType.IPv6 ? [4, ...literal!.rawAddress] : [3, h.length, ...h];
+    socket.add([5, 1, 0, ...destination, (port >> 8) & 0xff, port & 0xff]);
+    final head = await reader.read(4, timeout: timeout);
+    if (head[0] != 5 || head[2] != 0) throw ProxyException('SOCKS5: bad reply');
     if (head[1] != 0) throw ProxyException('SOCKS5: connect failed (code ${head[1]})');
     switch (head[3]) {
       case 1:
-        await reader.read(4 + 2);
+        await reader.read(4 + 2, timeout: timeout);
       case 3:
-        final len = (await reader.read(1))[0];
-        await reader.read(len + 2);
+        final len = (await reader.read(1, timeout: timeout))[0];
+        await reader.read(len + 2, timeout: timeout);
       case 4:
-        await reader.read(16 + 2);
+        await reader.read(16 + 2, timeout: timeout);
       default:
         throw ProxyException('SOCKS5: bad address type');
     }

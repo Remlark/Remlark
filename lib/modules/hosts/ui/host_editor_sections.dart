@@ -12,6 +12,7 @@ import '../host_model.dart';
 import '../hosts_controller.dart';
 import 'host_form.dart';
 import 'jump_host_picker_dialog.dart';
+import '../../proxies/ui/host_proxy_selector.dart';
 import '../../../ui_kit/app_menu.dart';
 
 /// 编辑分区标题
@@ -282,69 +283,9 @@ class ProxySection extends StatelessWidget {
 
   final HostForm form;
 
+  /// 复用集中管理的可搜索代理选择器。
   @override
-  Widget build(BuildContext context) {
-    final f = form;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SegmentedButton<ProxyType>(
-          segments: [
-            ButtonSegment(value: ProxyType.none, label: Text(context.tr('proxy.none'))),
-            const ButtonSegment(value: ProxyType.http, label: Text('HTTP')),
-            const ButtonSegment(value: ProxyType.socks5, label: Text('SOCKS5')),
-          ],
-          selected: {f.proxyType},
-          onSelectionChanged: (s) => f.update(() => f.proxyType = s.first),
-        ),
-        if (f.proxyType != ProxyType.none) ...[
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 3,
-                child: LabeledField(
-                  label: context.tr('proxy.host'),
-                  child: TextField(controller: f.proxyHost),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: LabeledField(
-                  label: context.tr('host.port'),
-                  child: TextField(
-                    controller: f.proxyPort,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: LabeledField(
-                  label: context.tr('proxy.user'),
-                  child: TextField(controller: f.proxyUser),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: LabeledField(
-                  label: context.tr('proxy.password'),
-                  child: TextField(controller: f.proxyPass, obscureText: true),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
+  Widget build(BuildContext context) => HostProxySelector(form: form);
 }
 
 /// RDP 选项分区

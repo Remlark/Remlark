@@ -553,6 +553,17 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, Host> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _proxyUuidMeta = const VerificationMeta(
+    'proxyUuid',
+  );
+  @override
+  late final GeneratedColumn<String> proxyUuid = GeneratedColumn<String>(
+    'proxy_uuid',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _osIdMeta = const VerificationMeta('osId');
   @override
   late final GeneratedColumn<String> osId = GeneratedColumn<String>(
@@ -683,6 +694,7 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, Host> {
     proxyPort,
     proxyUser,
     proxyPassEnc,
+    proxyUuid,
     osId,
     osName,
     hostKeyFingerprint,
@@ -828,6 +840,12 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, Host> {
           data['proxy_pass_enc']!,
           _proxyPassEncMeta,
         ),
+      );
+    }
+    if (data.containsKey('proxy_uuid')) {
+      context.handle(
+        _proxyUuidMeta,
+        proxyUuid.isAcceptableOrUnknown(data['proxy_uuid']!, _proxyUuidMeta),
       );
     }
     if (data.containsKey('os_id')) {
@@ -984,6 +1002,10 @@ class $HostsTable extends Hosts with TableInfo<$HostsTable, Host> {
         DriftSqlType.string,
         data['${effectivePrefix}proxy_pass_enc'],
       ),
+      proxyUuid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}proxy_uuid'],
+      ),
       osId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}os_id'],
@@ -1061,6 +1083,9 @@ class Host extends DataClass implements Insertable<Host> {
   final String proxyUser;
   final String? proxyPassEnc;
 
+  /// 本地代理配置引用；原代理字段保留为同步、导出和旧数据兼容快照。
+  final String? proxyUuid;
+
   /// 自动探测到的系统 id（如 ubuntu、rhel）与可读名称
   final String? osId;
   final String? osName;
@@ -1095,6 +1120,7 @@ class Host extends DataClass implements Insertable<Host> {
     required this.proxyPort,
     required this.proxyUser,
     this.proxyPassEnc,
+    this.proxyUuid,
     this.osId,
     this.osName,
     this.hostKeyFingerprint,
@@ -1134,6 +1160,9 @@ class Host extends DataClass implements Insertable<Host> {
     map['proxy_user'] = Variable<String>(proxyUser);
     if (!nullToAbsent || proxyPassEnc != null) {
       map['proxy_pass_enc'] = Variable<String>(proxyPassEnc);
+    }
+    if (!nullToAbsent || proxyUuid != null) {
+      map['proxy_uuid'] = Variable<String>(proxyUuid);
     }
     if (!nullToAbsent || osId != null) {
       map['os_id'] = Variable<String>(osId);
@@ -1186,6 +1215,9 @@ class Host extends DataClass implements Insertable<Host> {
       proxyPassEnc: proxyPassEnc == null && nullToAbsent
           ? const Value.absent()
           : Value(proxyPassEnc),
+      proxyUuid: proxyUuid == null && nullToAbsent
+          ? const Value.absent()
+          : Value(proxyUuid),
       osId: osId == null && nullToAbsent ? const Value.absent() : Value(osId),
       osName: osName == null && nullToAbsent
           ? const Value.absent()
@@ -1231,6 +1263,7 @@ class Host extends DataClass implements Insertable<Host> {
       proxyPort: serializer.fromJson<int>(json['proxyPort']),
       proxyUser: serializer.fromJson<String>(json['proxyUser']),
       proxyPassEnc: serializer.fromJson<String?>(json['proxyPassEnc']),
+      proxyUuid: serializer.fromJson<String?>(json['proxyUuid']),
       osId: serializer.fromJson<String?>(json['osId']),
       osName: serializer.fromJson<String?>(json['osName']),
       hostKeyFingerprint: serializer.fromJson<String?>(
@@ -1267,6 +1300,7 @@ class Host extends DataClass implements Insertable<Host> {
       'proxyPort': serializer.toJson<int>(proxyPort),
       'proxyUser': serializer.toJson<String>(proxyUser),
       'proxyPassEnc': serializer.toJson<String?>(proxyPassEnc),
+      'proxyUuid': serializer.toJson<String?>(proxyUuid),
       'osId': serializer.toJson<String?>(osId),
       'osName': serializer.toJson<String?>(osName),
       'hostKeyFingerprint': serializer.toJson<String?>(hostKeyFingerprint),
@@ -1299,6 +1333,7 @@ class Host extends DataClass implements Insertable<Host> {
     int? proxyPort,
     String? proxyUser,
     Value<String?> proxyPassEnc = const Value.absent(),
+    Value<String?> proxyUuid = const Value.absent(),
     Value<String?> osId = const Value.absent(),
     Value<String?> osName = const Value.absent(),
     Value<String?> hostKeyFingerprint = const Value.absent(),
@@ -1328,6 +1363,7 @@ class Host extends DataClass implements Insertable<Host> {
     proxyPort: proxyPort ?? this.proxyPort,
     proxyUser: proxyUser ?? this.proxyUser,
     proxyPassEnc: proxyPassEnc.present ? proxyPassEnc.value : this.proxyPassEnc,
+    proxyUuid: proxyUuid.present ? proxyUuid.value : this.proxyUuid,
     osId: osId.present ? osId.value : this.osId,
     osName: osName.present ? osName.value : this.osName,
     hostKeyFingerprint: hostKeyFingerprint.present
@@ -1369,6 +1405,7 @@ class Host extends DataClass implements Insertable<Host> {
       proxyPassEnc: data.proxyPassEnc.present
           ? data.proxyPassEnc.value
           : this.proxyPassEnc,
+      proxyUuid: data.proxyUuid.present ? data.proxyUuid.value : this.proxyUuid,
       osId: data.osId.present ? data.osId.value : this.osId,
       osName: data.osName.present ? data.osName.value : this.osName,
       hostKeyFingerprint: data.hostKeyFingerprint.present
@@ -1409,6 +1446,7 @@ class Host extends DataClass implements Insertable<Host> {
           ..write('proxyPort: $proxyPort, ')
           ..write('proxyUser: $proxyUser, ')
           ..write('proxyPassEnc: $proxyPassEnc, ')
+          ..write('proxyUuid: $proxyUuid, ')
           ..write('osId: $osId, ')
           ..write('osName: $osName, ')
           ..write('hostKeyFingerprint: $hostKeyFingerprint, ')
@@ -1443,6 +1481,7 @@ class Host extends DataClass implements Insertable<Host> {
     proxyPort,
     proxyUser,
     proxyPassEnc,
+    proxyUuid,
     osId,
     osName,
     hostKeyFingerprint,
@@ -1476,6 +1515,7 @@ class Host extends DataClass implements Insertable<Host> {
           other.proxyPort == this.proxyPort &&
           other.proxyUser == this.proxyUser &&
           other.proxyPassEnc == this.proxyPassEnc &&
+          other.proxyUuid == this.proxyUuid &&
           other.osId == this.osId &&
           other.osName == this.osName &&
           other.hostKeyFingerprint == this.hostKeyFingerprint &&
@@ -1507,6 +1547,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
   final Value<int> proxyPort;
   final Value<String> proxyUser;
   final Value<String?> proxyPassEnc;
+  final Value<String?> proxyUuid;
   final Value<String?> osId;
   final Value<String?> osName;
   final Value<String?> hostKeyFingerprint;
@@ -1536,6 +1577,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
     this.proxyPort = const Value.absent(),
     this.proxyUser = const Value.absent(),
     this.proxyPassEnc = const Value.absent(),
+    this.proxyUuid = const Value.absent(),
     this.osId = const Value.absent(),
     this.osName = const Value.absent(),
     this.hostKeyFingerprint = const Value.absent(),
@@ -1566,6 +1608,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
     this.proxyPort = const Value.absent(),
     this.proxyUser = const Value.absent(),
     this.proxyPassEnc = const Value.absent(),
+    this.proxyUuid = const Value.absent(),
     this.osId = const Value.absent(),
     this.osName = const Value.absent(),
     this.hostKeyFingerprint = const Value.absent(),
@@ -1602,6 +1645,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
     Expression<int>? proxyPort,
     Expression<String>? proxyUser,
     Expression<String>? proxyPassEnc,
+    Expression<String>? proxyUuid,
     Expression<String>? osId,
     Expression<String>? osName,
     Expression<String>? hostKeyFingerprint,
@@ -1632,6 +1676,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
       if (proxyPort != null) 'proxy_port': proxyPort,
       if (proxyUser != null) 'proxy_user': proxyUser,
       if (proxyPassEnc != null) 'proxy_pass_enc': proxyPassEnc,
+      if (proxyUuid != null) 'proxy_uuid': proxyUuid,
       if (osId != null) 'os_id': osId,
       if (osName != null) 'os_name': osName,
       if (hostKeyFingerprint != null)
@@ -1665,6 +1710,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
     Value<int>? proxyPort,
     Value<String>? proxyUser,
     Value<String?>? proxyPassEnc,
+    Value<String?>? proxyUuid,
     Value<String?>? osId,
     Value<String?>? osName,
     Value<String?>? hostKeyFingerprint,
@@ -1695,6 +1741,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
       proxyPort: proxyPort ?? this.proxyPort,
       proxyUser: proxyUser ?? this.proxyUser,
       proxyPassEnc: proxyPassEnc ?? this.proxyPassEnc,
+      proxyUuid: proxyUuid ?? this.proxyUuid,
       osId: osId ?? this.osId,
       osName: osName ?? this.osName,
       hostKeyFingerprint: hostKeyFingerprint ?? this.hostKeyFingerprint,
@@ -1765,6 +1812,9 @@ class HostsCompanion extends UpdateCompanion<Host> {
     if (proxyPassEnc.present) {
       map['proxy_pass_enc'] = Variable<String>(proxyPassEnc.value);
     }
+    if (proxyUuid.present) {
+      map['proxy_uuid'] = Variable<String>(proxyUuid.value);
+    }
     if (osId.present) {
       map['os_id'] = Variable<String>(osId.value);
     }
@@ -1819,6 +1869,7 @@ class HostsCompanion extends UpdateCompanion<Host> {
           ..write('proxyPort: $proxyPort, ')
           ..write('proxyUser: $proxyUser, ')
           ..write('proxyPassEnc: $proxyPassEnc, ')
+          ..write('proxyUuid: $proxyUuid, ')
           ..write('osId: $osId, ')
           ..write('osName: $osName, ')
           ..write('hostKeyFingerprint: $hostKeyFingerprint, ')
@@ -5399,6 +5450,517 @@ class TokenUsagesCompanion extends UpdateCompanion<TokenUsage> {
   }
 }
 
+class $ProxyProfilesTable extends ProxyProfiles
+    with TableInfo<$ProxyProfilesTable, ProxyProfile> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ProxyProfilesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _uuidMeta = const VerificationMeta('uuid');
+  @override
+  late final GeneratedColumn<String> uuid = GeneratedColumn<String>(
+    'uuid',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _typeMeta = const VerificationMeta('type');
+  @override
+  late final GeneratedColumn<String> type = GeneratedColumn<String>(
+    'type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _hostMeta = const VerificationMeta('host');
+  @override
+  late final GeneratedColumn<String> host = GeneratedColumn<String>(
+    'host',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _portMeta = const VerificationMeta('port');
+  @override
+  late final GeneratedColumn<int> port = GeneratedColumn<int>(
+    'port',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _usernameMeta = const VerificationMeta(
+    'username',
+  );
+  @override
+  late final GeneratedColumn<String> username = GeneratedColumn<String>(
+    'username',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _passwordEncMeta = const VerificationMeta(
+    'passwordEnc',
+  );
+  @override
+  late final GeneratedColumn<String> passwordEnc = GeneratedColumn<String>(
+    'password_enc',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    uuid,
+    name,
+    type,
+    host,
+    port,
+    username,
+    passwordEnc,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'proxy_profiles';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ProxyProfile> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('uuid')) {
+      context.handle(
+        _uuidMeta,
+        uuid.isAcceptableOrUnknown(data['uuid']!, _uuidMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_uuidMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('type')) {
+      context.handle(
+        _typeMeta,
+        type.isAcceptableOrUnknown(data['type']!, _typeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_typeMeta);
+    }
+    if (data.containsKey('host')) {
+      context.handle(
+        _hostMeta,
+        host.isAcceptableOrUnknown(data['host']!, _hostMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hostMeta);
+    }
+    if (data.containsKey('port')) {
+      context.handle(
+        _portMeta,
+        port.isAcceptableOrUnknown(data['port']!, _portMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_portMeta);
+    }
+    if (data.containsKey('username')) {
+      context.handle(
+        _usernameMeta,
+        username.isAcceptableOrUnknown(data['username']!, _usernameMeta),
+      );
+    }
+    if (data.containsKey('password_enc')) {
+      context.handle(
+        _passwordEncMeta,
+        passwordEnc.isAcceptableOrUnknown(
+          data['password_enc']!,
+          _passwordEncMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {uuid};
+  @override
+  ProxyProfile map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ProxyProfile(
+      uuid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}uuid'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      type: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}type'],
+      )!,
+      host: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}host'],
+      )!,
+      port: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}port'],
+      )!,
+      username: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}username'],
+      )!,
+      passwordEnc: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}password_enc'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ProxyProfilesTable createAlias(String alias) {
+    return $ProxyProfilesTable(attachedDatabase, alias);
+  }
+}
+
+class ProxyProfile extends DataClass implements Insertable<ProxyProfile> {
+  final String uuid;
+  final String name;
+  final String type;
+  final String host;
+  final int port;
+  final String username;
+  final String? passwordEnc;
+  final int updatedAt;
+  const ProxyProfile({
+    required this.uuid,
+    required this.name,
+    required this.type,
+    required this.host,
+    required this.port,
+    required this.username,
+    this.passwordEnc,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['uuid'] = Variable<String>(uuid);
+    map['name'] = Variable<String>(name);
+    map['type'] = Variable<String>(type);
+    map['host'] = Variable<String>(host);
+    map['port'] = Variable<int>(port);
+    map['username'] = Variable<String>(username);
+    if (!nullToAbsent || passwordEnc != null) {
+      map['password_enc'] = Variable<String>(passwordEnc);
+    }
+    map['updated_at'] = Variable<int>(updatedAt);
+    return map;
+  }
+
+  ProxyProfilesCompanion toCompanion(bool nullToAbsent) {
+    return ProxyProfilesCompanion(
+      uuid: Value(uuid),
+      name: Value(name),
+      type: Value(type),
+      host: Value(host),
+      port: Value(port),
+      username: Value(username),
+      passwordEnc: passwordEnc == null && nullToAbsent
+          ? const Value.absent()
+          : Value(passwordEnc),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory ProxyProfile.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ProxyProfile(
+      uuid: serializer.fromJson<String>(json['uuid']),
+      name: serializer.fromJson<String>(json['name']),
+      type: serializer.fromJson<String>(json['type']),
+      host: serializer.fromJson<String>(json['host']),
+      port: serializer.fromJson<int>(json['port']),
+      username: serializer.fromJson<String>(json['username']),
+      passwordEnc: serializer.fromJson<String?>(json['passwordEnc']),
+      updatedAt: serializer.fromJson<int>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'uuid': serializer.toJson<String>(uuid),
+      'name': serializer.toJson<String>(name),
+      'type': serializer.toJson<String>(type),
+      'host': serializer.toJson<String>(host),
+      'port': serializer.toJson<int>(port),
+      'username': serializer.toJson<String>(username),
+      'passwordEnc': serializer.toJson<String?>(passwordEnc),
+      'updatedAt': serializer.toJson<int>(updatedAt),
+    };
+  }
+
+  ProxyProfile copyWith({
+    String? uuid,
+    String? name,
+    String? type,
+    String? host,
+    int? port,
+    String? username,
+    Value<String?> passwordEnc = const Value.absent(),
+    int? updatedAt,
+  }) => ProxyProfile(
+    uuid: uuid ?? this.uuid,
+    name: name ?? this.name,
+    type: type ?? this.type,
+    host: host ?? this.host,
+    port: port ?? this.port,
+    username: username ?? this.username,
+    passwordEnc: passwordEnc.present ? passwordEnc.value : this.passwordEnc,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  ProxyProfile copyWithCompanion(ProxyProfilesCompanion data) {
+    return ProxyProfile(
+      uuid: data.uuid.present ? data.uuid.value : this.uuid,
+      name: data.name.present ? data.name.value : this.name,
+      type: data.type.present ? data.type.value : this.type,
+      host: data.host.present ? data.host.value : this.host,
+      port: data.port.present ? data.port.value : this.port,
+      username: data.username.present ? data.username.value : this.username,
+      passwordEnc: data.passwordEnc.present
+          ? data.passwordEnc.value
+          : this.passwordEnc,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProxyProfile(')
+          ..write('uuid: $uuid, ')
+          ..write('name: $name, ')
+          ..write('type: $type, ')
+          ..write('host: $host, ')
+          ..write('port: $port, ')
+          ..write('username: $username, ')
+          ..write('passwordEnc: $passwordEnc, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    uuid,
+    name,
+    type,
+    host,
+    port,
+    username,
+    passwordEnc,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ProxyProfile &&
+          other.uuid == this.uuid &&
+          other.name == this.name &&
+          other.type == this.type &&
+          other.host == this.host &&
+          other.port == this.port &&
+          other.username == this.username &&
+          other.passwordEnc == this.passwordEnc &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ProxyProfilesCompanion extends UpdateCompanion<ProxyProfile> {
+  final Value<String> uuid;
+  final Value<String> name;
+  final Value<String> type;
+  final Value<String> host;
+  final Value<int> port;
+  final Value<String> username;
+  final Value<String?> passwordEnc;
+  final Value<int> updatedAt;
+  final Value<int> rowid;
+  const ProxyProfilesCompanion({
+    this.uuid = const Value.absent(),
+    this.name = const Value.absent(),
+    this.type = const Value.absent(),
+    this.host = const Value.absent(),
+    this.port = const Value.absent(),
+    this.username = const Value.absent(),
+    this.passwordEnc = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ProxyProfilesCompanion.insert({
+    required String uuid,
+    required String name,
+    required String type,
+    required String host,
+    required int port,
+    this.username = const Value.absent(),
+    this.passwordEnc = const Value.absent(),
+    required int updatedAt,
+    this.rowid = const Value.absent(),
+  }) : uuid = Value(uuid),
+       name = Value(name),
+       type = Value(type),
+       host = Value(host),
+       port = Value(port),
+       updatedAt = Value(updatedAt);
+  static Insertable<ProxyProfile> custom({
+    Expression<String>? uuid,
+    Expression<String>? name,
+    Expression<String>? type,
+    Expression<String>? host,
+    Expression<int>? port,
+    Expression<String>? username,
+    Expression<String>? passwordEnc,
+    Expression<int>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (uuid != null) 'uuid': uuid,
+      if (name != null) 'name': name,
+      if (type != null) 'type': type,
+      if (host != null) 'host': host,
+      if (port != null) 'port': port,
+      if (username != null) 'username': username,
+      if (passwordEnc != null) 'password_enc': passwordEnc,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ProxyProfilesCompanion copyWith({
+    Value<String>? uuid,
+    Value<String>? name,
+    Value<String>? type,
+    Value<String>? host,
+    Value<int>? port,
+    Value<String>? username,
+    Value<String?>? passwordEnc,
+    Value<int>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return ProxyProfilesCompanion(
+      uuid: uuid ?? this.uuid,
+      name: name ?? this.name,
+      type: type ?? this.type,
+      host: host ?? this.host,
+      port: port ?? this.port,
+      username: username ?? this.username,
+      passwordEnc: passwordEnc ?? this.passwordEnc,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (uuid.present) {
+      map['uuid'] = Variable<String>(uuid.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (type.present) {
+      map['type'] = Variable<String>(type.value);
+    }
+    if (host.present) {
+      map['host'] = Variable<String>(host.value);
+    }
+    if (port.present) {
+      map['port'] = Variable<int>(port.value);
+    }
+    if (username.present) {
+      map['username'] = Variable<String>(username.value);
+    }
+    if (passwordEnc.present) {
+      map['password_enc'] = Variable<String>(passwordEnc.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<int>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProxyProfilesCompanion(')
+          ..write('uuid: $uuid, ')
+          ..write('name: $name, ')
+          ..write('type: $type, ')
+          ..write('host: $host, ')
+          ..write('port: $port, ')
+          ..write('username: $username, ')
+          ..write('passwordEnc: $passwordEnc, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -5411,6 +5973,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ChatSessionsTable chatSessions = $ChatSessionsTable(this);
   late final $ChatMessagesTable chatMessages = $ChatMessagesTable(this);
   late final $TokenUsagesTable tokenUsages = $TokenUsagesTable(this);
+  late final $ProxyProfilesTable proxyProfiles = $ProxyProfilesTable(this);
   late final Index idxGroupsUuid = Index(
     'idx_groups_uuid',
     'CREATE UNIQUE INDEX idx_groups_uuid ON host_groups (uuid)',
@@ -5434,6 +5997,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final Index idxHostsLastConnected = Index(
     'idx_hosts_last_connected',
     'CREATE INDEX idx_hosts_last_connected ON hosts (last_connected_at)',
+  );
+  late final Index idxHostsProxyUuid = Index(
+    'idx_hosts_proxy_uuid',
+    'CREATE INDEX idx_hosts_proxy_uuid ON hosts (proxy_uuid)',
   );
   late final Index idxKeysUuid = Index(
     'idx_keys_uuid',
@@ -5491,6 +6058,18 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'idx_token_day_model',
     'CREATE INDEX idx_token_day_model ON token_usages (day, model)',
   );
+  late final Index idxProxiesUuid = Index(
+    'idx_proxies_uuid',
+    'CREATE UNIQUE INDEX idx_proxies_uuid ON proxy_profiles (uuid)',
+  );
+  late final Index idxProxiesName = Index(
+    'idx_proxies_name',
+    'CREATE INDEX idx_proxies_name ON proxy_profiles (name)',
+  );
+  late final Index idxProxiesEndpoint = Index(
+    'idx_proxies_endpoint',
+    'CREATE INDEX idx_proxies_endpoint ON proxy_profiles (type, host, port, username)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -5505,12 +6084,14 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     chatSessions,
     chatMessages,
     tokenUsages,
+    proxyProfiles,
     idxGroupsUuid,
     idxGroupsSort,
     idxHostsUuid,
     idxHostsProtocolGroup,
     idxHostsSync,
     idxHostsLastConnected,
+    idxHostsProxyUuid,
     idxKeysUuid,
     idxKeysCreated,
     idxSnippetsUuid,
@@ -5525,6 +6106,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     idxTokenDay,
     idxTokenDayAgent,
     idxTokenDayModel,
+    idxProxiesUuid,
+    idxProxiesName,
+    idxProxiesEndpoint,
   ];
 }
 
@@ -5745,6 +6329,7 @@ typedef $$HostsTableCreateCompanionBuilder = HostsCompanion Function({
   Value<int> proxyPort,
   Value<String> proxyUser,
   Value<String?> proxyPassEnc,
+  Value<String?> proxyUuid,
   Value<String?> osId,
   Value<String?> osName,
   Value<String?> hostKeyFingerprint,
@@ -5775,6 +6360,7 @@ typedef $$HostsTableUpdateCompanionBuilder = HostsCompanion Function({
   Value<int> proxyPort,
   Value<String> proxyUser,
   Value<String?> proxyPassEnc,
+  Value<String?> proxyUuid,
   Value<String?> osId,
   Value<String?> osName,
   Value<String?> hostKeyFingerprint,
@@ -5882,6 +6468,11 @@ class $$HostsTableFilterComposer extends Composer<_$AppDatabase, $HostsTable> {
 
   ColumnFilters<String> get proxyPassEnc => $composableBuilder(
     column: $table.proxyPassEnc,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get proxyUuid => $composableBuilder(
+    column: $table.proxyUuid,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6035,6 +6626,11 @@ class $$HostsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get proxyUuid => $composableBuilder(
+    column: $table.proxyUuid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get osId => $composableBuilder(
     column: $table.osId,
     builder: (column) => ColumnOrderings(column),
@@ -6155,6 +6751,9 @@ class $$HostsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get proxyUuid =>
+      $composableBuilder(column: $table.proxyUuid, builder: (column) => column);
+
   GeneratedColumn<String> get osId =>
       $composableBuilder(column: $table.osId, builder: (column) => column);
 
@@ -6238,6 +6837,7 @@ class $$HostsTableTableManager
                 Value<int> proxyPort = const Value.absent(),
                 Value<String> proxyUser = const Value.absent(),
                 Value<String?> proxyPassEnc = const Value.absent(),
+                Value<String?> proxyUuid = const Value.absent(),
                 Value<String?> osId = const Value.absent(),
                 Value<String?> osName = const Value.absent(),
                 Value<String?> hostKeyFingerprint = const Value.absent(),
@@ -6267,6 +6867,7 @@ class $$HostsTableTableManager
                 proxyPort: proxyPort,
                 proxyUser: proxyUser,
                 proxyPassEnc: proxyPassEnc,
+                proxyUuid: proxyUuid,
                 osId: osId,
                 osName: osName,
                 hostKeyFingerprint: hostKeyFingerprint,
@@ -6298,6 +6899,7 @@ class $$HostsTableTableManager
                 Value<int> proxyPort = const Value.absent(),
                 Value<String> proxyUser = const Value.absent(),
                 Value<String?> proxyPassEnc = const Value.absent(),
+                Value<String?> proxyUuid = const Value.absent(),
                 Value<String?> osId = const Value.absent(),
                 Value<String?> osName = const Value.absent(),
                 Value<String?> hostKeyFingerprint = const Value.absent(),
@@ -6327,6 +6929,7 @@ class $$HostsTableTableManager
                 proxyPort: proxyPort,
                 proxyUser: proxyUser,
                 proxyPassEnc: proxyPassEnc,
+                proxyUuid: proxyUuid,
                 osId: osId,
                 osName: osName,
                 hostKeyFingerprint: hostKeyFingerprint,
@@ -8211,6 +8814,274 @@ typedef $$TokenUsagesTableProcessedTableManager =
       TokenUsage,
       PrefetchHooks Function()
     >;
+typedef $$ProxyProfilesTableCreateCompanionBuilder =
+    ProxyProfilesCompanion Function({
+      required String uuid,
+      required String name,
+      required String type,
+      required String host,
+      required int port,
+      Value<String> username,
+      Value<String?> passwordEnc,
+      required int updatedAt,
+      Value<int> rowid,
+    });
+typedef $$ProxyProfilesTableUpdateCompanionBuilder =
+    ProxyProfilesCompanion Function({
+      Value<String> uuid,
+      Value<String> name,
+      Value<String> type,
+      Value<String> host,
+      Value<int> port,
+      Value<String> username,
+      Value<String?> passwordEnc,
+      Value<int> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$ProxyProfilesTableFilterComposer
+    extends Composer<_$AppDatabase, $ProxyProfilesTable> {
+  $$ProxyProfilesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get uuid => $composableBuilder(
+    column: $table.uuid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get host => $composableBuilder(
+    column: $table.host,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get port => $composableBuilder(
+    column: $table.port,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get username => $composableBuilder(
+    column: $table.username,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get passwordEnc => $composableBuilder(
+    column: $table.passwordEnc,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ProxyProfilesTableOrderingComposer
+    extends Composer<_$AppDatabase, $ProxyProfilesTable> {
+  $$ProxyProfilesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get uuid => $composableBuilder(
+    column: $table.uuid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get host => $composableBuilder(
+    column: $table.host,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get port => $composableBuilder(
+    column: $table.port,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get username => $composableBuilder(
+    column: $table.username,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get passwordEnc => $composableBuilder(
+    column: $table.passwordEnc,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ProxyProfilesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ProxyProfilesTable> {
+  $$ProxyProfilesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get uuid =>
+      $composableBuilder(column: $table.uuid, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get type =>
+      $composableBuilder(column: $table.type, builder: (column) => column);
+
+  GeneratedColumn<String> get host =>
+      $composableBuilder(column: $table.host, builder: (column) => column);
+
+  GeneratedColumn<int> get port =>
+      $composableBuilder(column: $table.port, builder: (column) => column);
+
+  GeneratedColumn<String> get username =>
+      $composableBuilder(column: $table.username, builder: (column) => column);
+
+  GeneratedColumn<String> get passwordEnc => $composableBuilder(
+    column: $table.passwordEnc,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$ProxyProfilesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ProxyProfilesTable,
+          ProxyProfile,
+          $$ProxyProfilesTableFilterComposer,
+          $$ProxyProfilesTableOrderingComposer,
+          $$ProxyProfilesTableAnnotationComposer,
+          $$ProxyProfilesTableCreateCompanionBuilder,
+          $$ProxyProfilesTableUpdateCompanionBuilder,
+          (
+            ProxyProfile,
+            BaseReferences<_$AppDatabase, $ProxyProfilesTable, ProxyProfile>,
+          ),
+          ProxyProfile,
+          PrefetchHooks Function()
+        > {
+  $$ProxyProfilesTableTableManager(_$AppDatabase db, $ProxyProfilesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ProxyProfilesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ProxyProfilesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ProxyProfilesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> uuid = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> type = const Value.absent(),
+                Value<String> host = const Value.absent(),
+                Value<int> port = const Value.absent(),
+                Value<String> username = const Value.absent(),
+                Value<String?> passwordEnc = const Value.absent(),
+                Value<int> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ProxyProfilesCompanion(
+                uuid: uuid,
+                name: name,
+                type: type,
+                host: host,
+                port: port,
+                username: username,
+                passwordEnc: passwordEnc,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String uuid,
+                required String name,
+                required String type,
+                required String host,
+                required int port,
+                Value<String> username = const Value.absent(),
+                Value<String?> passwordEnc = const Value.absent(),
+                required int updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => ProxyProfilesCompanion.insert(
+                uuid: uuid,
+                name: name,
+                type: type,
+                host: host,
+                port: port,
+                username: username,
+                passwordEnc: passwordEnc,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$ProxyProfilesTable, ProxyProfile>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $ProxyProfilesTable,
+                    ProxyProfile
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ProxyProfilesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ProxyProfilesTable,
+      ProxyProfile,
+      $$ProxyProfilesTableFilterComposer,
+      $$ProxyProfilesTableOrderingComposer,
+      $$ProxyProfilesTableAnnotationComposer,
+      $$ProxyProfilesTableCreateCompanionBuilder,
+      $$ProxyProfilesTableUpdateCompanionBuilder,
+      (
+        ProxyProfile,
+        BaseReferences<_$AppDatabase, $ProxyProfilesTable, ProxyProfile>,
+      ),
+      ProxyProfile,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -8233,4 +9104,6 @@ class $AppDatabaseManager {
       $$ChatMessagesTableTableManager(_db, _db.chatMessages);
   $$TokenUsagesTableTableManager get tokenUsages =>
       $$TokenUsagesTableTableManager(_db, _db.tokenUsages);
+  $$ProxyProfilesTableTableManager get proxyProfiles =>
+      $$ProxyProfilesTableTableManager(_db, _db.proxyProfiles);
 }

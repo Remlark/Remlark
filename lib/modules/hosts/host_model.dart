@@ -43,6 +43,10 @@ class ProxyConfig {
 
   bool get enabled => type != ProxyType.none && host.isNotEmpty && port > 0;
 
+  /// 比较完整连接配置，空密码和未设置密码具有相同语义。
+  bool sameConnectionAs(ProxyConfig other) => type == other.type && host == other.host &&
+      port == other.port && username == other.username && (password ?? '') == (other.password ?? '');
+
   Map<String, dynamic> toJson() => {
     'type': type.name,
     'host': host,
@@ -79,6 +83,7 @@ class HostEntry {
     this.keyUuid,
     this.jumpChain = const [],
     this.proxy = const ProxyConfig(),
+    this.proxyUuid,
     this.osId,
     this.osName,
     this.hostKeyFingerprint,
@@ -104,6 +109,9 @@ class HostEntry {
   final String? keyUuid;
   final List<String> jumpChain;
   final ProxyConfig proxy;
+
+  /// 本地共享代理标识；可移植载荷使用连接快照，避免跨设备悬空引用。
+  final String? proxyUuid;
   final String? osId;
   final String? osName;
   final String? hostKeyFingerprint;
@@ -145,6 +153,7 @@ class HostEntry {
     String? Function()? keyUuid,
     List<String>? jumpChain,
     ProxyConfig? proxy,
+    String? Function()? proxyUuid,
     String? Function()? osId,
     String? Function()? osName,
     String? Function()? hostKeyFingerprint,
@@ -170,6 +179,7 @@ class HostEntry {
       keyUuid: keyUuid != null ? keyUuid() : this.keyUuid,
       jumpChain: jumpChain ?? this.jumpChain,
       proxy: proxy ?? this.proxy,
+      proxyUuid: proxyUuid != null ? proxyUuid() : this.proxyUuid,
       osId: osId != null ? osId() : this.osId,
       osName: osName != null ? osName() : this.osName,
       hostKeyFingerprint: hostKeyFingerprint != null ? hostKeyFingerprint() : this.hostKeyFingerprint,

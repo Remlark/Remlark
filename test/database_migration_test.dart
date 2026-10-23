@@ -12,6 +12,8 @@ void main() {
     final db = AppDatabase(
       NativeDatabase.memory(
         setup: (raw) {
+          // 旧版本 fixture 同时包含主机表，供后续代理引用迁移使用。
+          raw.execute('CREATE TABLE hosts (uuid TEXT NOT NULL PRIMARY KEY)');
           raw.execute('''
             CREATE TABLE agent_configs (
               id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,

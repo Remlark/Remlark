@@ -5,12 +5,14 @@ import 'package:drift/drift.dart';
 import '../../data/database.dart';
 import '../../utils/secret_store.dart';
 import 'host_model.dart';
+import '../proxies/proxy_repository.dart';
 
 /// 主机仓库：负责主机表的读写，以及敏感字段的加解密
 class HostRepository {
-  HostRepository(this._db);
+  HostRepository(this._db) : _proxies = ProxyRepository(_db);
 
   final AppDatabase _db;
+  final ProxyRepository _proxies;
 
   SecretStore get _secrets => SecretStore.instance;
 
@@ -44,6 +46,7 @@ class HostRepository {
       savePassword: r.savePassword,
       keyUuid: r.keyUuid,
       jumpChain: chain,
+      proxyUuid: r.proxyUuid,
       proxy: ProxyConfig(
         type: ProxyType.parse(r.proxyType),
         host: r.proxyHost,
@@ -84,6 +87,7 @@ class HostRepository {
       proxyPort: Value(e.proxy.port),
       proxyUser: Value(e.proxy.username),
       proxyPassEnc: Value(await _secrets.seal(e.proxy.password)),
+      proxyUuid: Value(e.proxyUuid),
       osId: Value(e.osId),
       osName: Value(e.osName),
       hostKeyFingerprint: Value(e.hostKeyFingerprint),
@@ -127,8 +131,16 @@ class HostRepository {
   }
 
   /// 保存主机（按 uuid 插入或更新）。[touch] 为 true 时刷新 updatedAt
-  Future<HostEntry> save(HostEntry e, {bool touch = true}) async {
-    final entry = touch ? e.copyWith(updatedAt: now()) : e;
+  Future<HostEntry> save(HostEntry e, {bool touch = true}) => _db.transaction(() async {
+    // 引用代理时采用最新参数，旧配置和导入配置自动转为共享代理。
+    var entry = e;
+    if (e.proxyUuid != null) {
+      entry = await resolveProxy(e);
+    } else if (e.proxy.type != ProxyType.none) {
+      final proxy = await _proxies.ensureConfig(e.proxy);
+      entry = e.copyWith(proxyUuid: () => proxy.uuid);
+    }
+    if (touch) entry = entry.copyWith(updatedAt: now());
     final comp = await _toCompanion(entry);
     final existing = await (_db.select(_db.hosts)..where((t) => t.uuid.equals(entry.uuid))).getSingleOrNull();
     if (existing == null) {
@@ -137,6 +149,23 @@ class HostRepository {
       await (_db.update(_db.hosts)..where((t) => t.uuid.equals(entry.uuid))).write(comp);
     }
     return entry;
+  });
+
+  /// 启动时迁移旧版逐主机代理，保留原同步时间戳并可重复安全执行。
+  Future<void> migrateInlineProxies() => _db.transaction(() async {
+    final rows = await (_db.select(_db.hosts)..where((t) =>
+      t.proxyUuid.isNull() & t.proxyType.isIn(['http', 'socks5']))).get();
+    for (final row in rows) {
+      await save(await _toEntry(row), touch: false);
+    }
+  });
+
+  /// 新建连接和重连时解析最新共享代理；引用缺失时拒绝静默直连。
+  Future<HostEntry> resolveProxy(HostEntry entry) async {
+    if (entry.proxyUuid == null) return entry;
+    final proxy = await _proxies.get(entry.proxyUuid!);
+    if (proxy == null) throw StateError('Proxy profile no longer exists');
+    return entry.copyWith(proxy: proxy.config);
   }
 
   /// 删除主机（跳板链引用由控制器负责清理）

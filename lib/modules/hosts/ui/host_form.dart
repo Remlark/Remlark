@@ -28,6 +28,7 @@ class HostForm extends ChangeNotifier {
       keyUuid = e?.keyUuid,
       jumpChain = List.of(e?.jumpChain ?? const []),
       proxyType = e?.proxy.type ?? ProxyType.none,
+      proxyUuid = e?.proxyUuid,
       clipboard = e?.extra['clipboard'] != false,
       vncSsh = e == null ? const VncSshConfig() : (VncSshConfig.fromExtra(e.extra) ?? const VncSshConfig()),
       syncEnabled = e?.syncEnabled ?? false {
@@ -45,6 +46,18 @@ class HostForm extends ChangeNotifier {
   String? keyUuid;
   List<String> jumpChain;
   ProxyType proxyType;
+  String? proxyUuid;
+
+  /// 选用共享代理时同步表单快照，便于旧载荷和协议切换继续兼容。
+  void selectProxy(String? uuid, ProxyConfig config) {
+    proxyUuid = uuid;
+    proxyType = config.type;
+    proxyHost.text = config.host;
+    proxyPort.text = '${config.port}';
+    proxyUser.text = config.username;
+    proxyPass.text = config.password ?? '';
+    notifyListeners();
+  }
   bool clipboard;
   bool syncEnabled;
 
@@ -177,6 +190,7 @@ class HostForm extends ChangeNotifier {
       savePassword: savePassword && password.text.isNotEmpty,
       keyUuid: authType == AuthType.key ? keyUuid : null,
       jumpChain: protocol == HostProtocol.ssh || vncSsh.enabled ? jumpChain : const [],
+      proxyUuid: protocol != HostProtocol.vnc || vncSsh.enabled ? proxyUuid : null,
       proxy: protocol != HostProtocol.vnc || vncSsh.enabled
           ? ProxyConfig(
               type: proxyType,
