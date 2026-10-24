@@ -64,7 +64,8 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 代理连通性检测 | `modules/proxies/proxy_connection_test.dart`、`modules/ssh/proxy_socket.dart`、`utils/network_endpoint.dart` | ProxyConnectionTest 接口，Dart Socket 的 HTTP CONNECT/SOCKS5 握手、认证、超时和取消；IPv6 目标 | 同左，不访问注册表或系统代理 | 同左，不调用系统网络命令 | P-17 | M-22 |
 | RDP 显示控制协商 | `native/rdp/src/remlark_rdp.c` | 共用 FreeRDP 能力回调，协商后发送布局 | 同 macOS | 同 macOS | P-21 | M-25 |
 | 运行中构建覆盖保护 | `tools/utils/build_guard/`、`tools/utils/app_version.py`、`Makefile`、`windows/run.ps1` | ps 子进程固定 UTF-8 locale，读取未转义的中文完整路径 | CIM 显式输出 UTF-8 JSON，按 Windows 路径规则比较 | procfs 读取 exe，识别 deleted 文件，comm 显式按 UTF-8 读取 | P-22 | M-26 |
-| 构建保护真实进程测试夹具 | `tools/testing/build_guard_test.py` | 复制系统 `/bin/sleep`，仅复制字节及设置可执行权限，临时签名；验证默认/C locale | 复制 Python 为隔离应用，设置 PYTHONHOME / PATH；仓库文本显式 UTF-8；验证默认/C locale | 复制 Python 为隔离应用，设置 PYTHONHOME，兼容多入口 coreutils；验证默认/C locale | P-22 | — |
+| 构建保护真实进程测试夹具 | `tools/testing/build_guard_test.py`、`test/platform/fixtures/build_guard_probe.c` | xcrun clang 从源码编译本机架构的普通进程，避免复制系统二进制的 SIGKILL；等待就绪标记，验证默认/C locale | 复制 Python 为隔离应用，设置 PYTHONHOME / PATH；仓库文本显式 UTF-8；等待就绪标记，验证默认/C locale | 复制 Python 为隔离应用，设置 PYTHONHOME，兼容多入口 coreutils；等待就绪标记，验证默认/C locale | P-22 | — |
+| 发布前平台专项测试工作流 | `.github/workflows/test.yml` | Intel / ARM64 独立 runner；ARM64 复用精确匹配的 universal 原生缓存；Xcode 测试夹具 | x64 / ARM64 独立 runner；PowerShell、Make、MSVC 测试夹具 | x64 / ARM64 独立 runner；安装运行库及桌面入口测试依赖 | P-25 | M-28 |
 | Actions 临时产物清理 | `release.yml`、`tools/release/cleanup_artifacts.py` | 仅构建不上传，正式发布临时中转，结束后统一清理 | 同左 | 同左；清理在独立 Ubuntu 任务运行 | P-24 | M-27 |
 
 ## 2. 单元测试（test/platform）
@@ -98,6 +99,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-22 | [build_guard_test.dart](../test/platform/build_guard_test.dart) | 调用 12 项 Python 检查：三个桌面目标、路径边界/中文空格/大小写、独立副本放行、自定义输出和符号链接、三平台进程解析、查询环境透传及失败保护、默认/C locale 的真实进程存活时拒绝/退出后放行；包装入口失败时不启动 Flutter；仓库文本显式按 UTF-8 读取 | 构建覆盖保护、M-26 |
 | P-23 | [server_bundle_test.dart](../test/platform/server_bundle_test.dart)、[server_bundle_test.py](../tools/testing/server_bundle_test.py) | 六路服务端矩阵、发布依赖、macOS 双架构独立 runner；六种原生文件头与错误平台/架构、缺少/空主程序和 SQLite 库拒绝打包；压缩包布局与 POSIX 执行权限、额外资源保留；P-10 检查缺少服务端附件时禁止发布 | 同步服务端独立发布、M-13 |
 | P-24 | [artifact_cleanup_test.dart](../test/platform/artifact_cleanup_test.dart)、[artifact_cleanup_test.py](../tools/testing/artifact_cleanup_test.py) | 三平台执行相同清理逻辑；仅构建不上传、正式中转保留一天且始终清理；分页先快照再删除、历史运行复用查询、当前/已完成运行选择、保护其他工作流/并行运行/非托管文件及 API 失败上报 | Actions 存储、M-27 |
+| P-25 | [platform_test_workflow_test.dart](../test/platform/platform_test_workflow_test.dart) | 独立 test* 触发及手动入口、三平台双架构六路矩阵、锁文件与每路仅一次平台专项、禁止客户端全量/dsh/服务端测试及服务端依赖；精确原生缓存及缺失摘要；禁止应用/原生产品构建、上传产物、签名凭据及发布 | 发布前测试、M-28 |
 
 P-11 的测试帧由 libx264 生成（BT.709 全范围，与 FreeRDP 的 YUV 转换一致），同一份字节内置在 [rmk_h264_probe_frame.h](../native/rdp/src/rmk_h264_probe_frame.h) 中，原生库首次连接时用它实际硬件解码一帧，解码成功且颜色正确才启用硬件（虚拟机、驱动异常等能创建设备却无法解码的环境会改用软件解码）。重新生成时两处同步更新：
 
@@ -182,6 +184,7 @@ P-06 还检查 macOS / Linux 测试服务端与应用使用同一 OpenSSL 前缀
 | M-17 | RDP H.264 硬件解码 | 连接开启 H.264 的 Windows 服务器（组策略“远程桌面会话主机 → 远程会话环境”中开启“为远程桌面连接优先使用 H.264/AVC 444 图形模式”与“配置 H.264/AVC 硬件编码”），播放视频或拖动窗口：画面正常、无花屏与色偏；日志中连接行显示“H.264 硬件解码（videotoolbox / d3d11va / vaapi）”；活动监视器 / 任务管理器 / `intel_gpu_top` 或 `radeontop` 中可见 GPU 视频解码负载，CPU 占用低于软件解码时（在设置 → 远程桌面中关闭“RDP 硬件解码”后新建连接即为软件解码，日志显示“设置中已关闭硬件解码”，用于对比）；设置页说明显示本机可用的设备名，显卡不支持时开关禁用；Linux 无 VAAPI 驱动或 Windows 无显卡时日志显示软件解码且画面正常 |
 | M-16 | Release 安装验证 | 在干净的 Windows / Linux x64、arm64 与 Intel / Apple Silicon macOS 下载附件，验证 SHA256SUMS，安装、启动、升级、卸载并连接 SSH / RDP；macOS DMG 拖入 Applications。macOS CI 使用固定自签证书，尚未公证；Windows 未签名，CI 成功不代替实机交互验证 |
 | M-27 | Actions 存储 | 仅构建运行结束后没有 packages/logs artifacts；正式发布结束后 Release 的 16 个附件及 SHA256SUMS 可下载，Actions 中转包已删除；构建/发布失败也触发清理。确认历史已结束运行的 packages/logs 已清理，其他正在运行的构建产物、其他工作流文件和原生缓存保留 |
+| M-28 | 发布前平台专项测试 | 推送新的 test* 标签，确认仅 Platform Tests 触发，检出标签提交且六路各只执行一次 make test-platform，没有客户端全量/dsh/服务端测试及服务端依赖安装，不取消其他 runner；检查原生缓存命中及缺失摘要，缺失时不得编译原生库；无应用/服务端产品构建、签名、打包、artifact 或 Release。后续推送 v* 标签仍独立触发正式发布 |
 
 M-20：下载新 CI 的 macOS zip / DMG，核对 `codesign -dv --verbose=4` 的 Authority 是固定自签名称、不是 `Signature=adhoc`，执行 `codesign --verify --deep --strict --all-architectures /Applications/remlark.app`。分别在 Intel / Apple Silicon 干净系统检查首次 Gatekeeper 放行，再覆盖安装同证书的新版本，记录是否再次放行及辅助功能等隐私权限是否保留；不以自签或单元测试保证系统免授权。检查 Actions 日志不含证书密码，缺失 Secret 应在构建前失败，失败构建不得上传可发布附件。
 
@@ -446,3 +449,27 @@ Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过�
 - macOS 日志报告 `test_real_current_platform_process` 没有抛出预期 GuardError。原始日志未打印 ps 路径与 locale，不能据此确定 runner 内的具体路径变化；本地在 C locale 独立复现 ps 将中文输出为 `M-...` 转义形式、匹配失败。macOS 查询显式指定 UTF-8 子进程环境，测试在默认/C locale 各验证一次存活时阻止构建，且调用方环境不变。夹具采用系统 `/bin/sleep` 的临时签名副本，仅复制字节并设置执行权限，不复制系统受限文件标志；Windows/Linux 继续使用可重命名的 Python 副本。
 - macOS 本机 Flutter 3.47.6 / Dart 3.13.5：修复后 `make test-platform` 99 通过、3 条件跳过；P-22 的 12 项检查在系统 Python、Homebrew Python 及 `LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0` 环境通过；`git diff --check` 通过。三平台纯逻辑测试由同一个 P-22 执行，真实系统检查仅覆盖本机 macOS。
 - Windows/Linux 本轮没有可用执行环境，修改后的 `make test-platform` 仍需对应 runner 执行；保留 Actions 三平台构建前后测试门禁。未推送提交、改动版本标签或触发远端运行；原始失败运行尚未转绿。M-26 的真实运行应用保护检查继续按原手工清单执行。
+
+### 2026-10-25 macOS ARM64 进程夹具 SIGKILL 修复（Step 114）
+
+- [后续运行 40123708220](https://github.com/Remlark/Remlark/actions/runs/40123708220/job/120960531259) 已检出修复提交 `582e295`。P-22 此次在启动存活断言报 `AssertionError: -9 is not None : b''`：系统 sleep 副本启动后收到 SIGKILL，还未执行构建保护的路径检查。日志没有系统安全诊断，不能仅凭 -9 确定内核签名校验的具体拒绝原因；上轮 Intel 本地通过不足以证明该副本能在 ARM64 runner 运行。
+- macOS 不再复制或重签系统程序，使用现有 Xcode 工具链从 `test/platform/fixtures/build_guard_probe.c` 编译原生普通进程，由链接器处理 ARM64 签名。Windows/Linux 保留 Python 副本，但三平台统一写入就绪标记，并在父进程等待最多 10 秒；程序提前退出时继续报错，不通过跳过测试或放宽存活断言掩盖故障。
+- Intel macOS `make test-platform`：99 项通过、3 项条件跳过；P-22 内部 12 项在默认环境及 `LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0` 环境全部通过。夹具 x86_64 与 arm64 均通过 clang 严格编译，arm64 文件通过 `codesign --verify --strict`。交叉编译和签名验证不等于 ARM64 实际运行。
+- 本轮无 ARM64 macOS / Windows / Linux 执行环境，修改后的三平台 `make test-platform` 仍需对应 runner 验证；未提交推送或触发 CI。生产构建保护实现及 M-26 流程本轮未修改。
+
+### 2026-10-25 发布前全量测试工作流与本机回归（Step 115）
+
+本节保留当时的全量回归记录；现行 test* 工作流已按 Step 116 收敛为仅平台专项，不再执行本节描述的客户端全量、dsh 或服务端套件。
+
+- 新增 `.github/workflows/test.yml`：推送 `test*` 标签及手动运行；macOS / Windows / Linux 各 x64、arm64 六路。所有平台锁定 Flutter 3.47.7；每路执行客户端全套（真实 dsh 测试开启）、`make test-platform` 和服务端全套。测试套件独立保留失败结果，矩阵不提前取消。无产品构建、签名凭据、安装包、artifact 或 Release。
+- 按 runner、架构及 native 源码哈希精确恢复已有原生缓存，不使用 restore-keys。macOS ARM64 读取原有 universal 键；命中后强制加载 RDP 库，缺失时在 Summary 报告可能跳过的原生/本地 RDP 服务用例。测试进程及小型夹具仍会按需编译。远端 RDP 和截图类用例保留显式配置条件；M-28 需在推送标签后验证。
+- 本机环境为 Intel macOS、Flutter 3.47.6 / Dart 3.13.5，复用现有本机原生库和隔离 RDP 测试服务。首次完整客户端测试 462 通过、8 条件跳过；另外启用真实 dsh 下载/安装与 ACP 测试，2 项通过。新增 P-25 四项通过后，`make test-platform` 103 通过、3 条件跳过。服务端全量 43 项通过，两端静态检查及新增测试定向分析通过；YAML 解析、actionlint 和 diff 检查通过。
+- 最终统一执行 `RMK_REQUIRE_RDP_NATIVE=1 RMK_DSH_E2E=1 RMK_DSH_E2E_DIR="$PWD/build/validation/pre-release-tests/dsh-runtime" flutter test --no-pub --reporter expanded`：468 项通过、6 项按条件跳过、0 失败，耗时 2 分 36 秒。包含新增 P-25、修复后 P-22、真实 dsh、本地 SSH/SFTP/RDP 与剪贴板、原生 AES-GCM/H.264、客户端及真实服务端同步、中英文布局。剩余跳过为远端 RDP 显式配置 1、Windows 专属安装助手 2、按需截图 3；未通过全量测试访问用户保存的远程主机。
+- 日志统一位于 `build/validation/pre-release-tests/`：`client.log`、`dsh.log`、`platform.log`、`server.log`、`client-analyze.log`、`server-analyze.log`、`workflow-analyze.log`、`actionlint.log`。最终包含新增 P-25 和真实 dsh 的合并全量结果另记 `client-final.log`。
+- Windows/Linux 和 macOS ARM64 本轮没有本地运行环境；六路实际结果需提交工作流及测试修复后，推送新 test 标签验证。没有推送提交或标签，没有触发远端测试或发布。
+
+### 2026-10-25 test* 工作流仅平台专项（Step 116）
+
+- 工作流更名 Platform Tests，每个 runner 仅执行一次 `make test-platform`，保留三平台各 x64/arm64 六路。移除客户端全量、真实 dsh、服务端测试及依赖准备，不安装本地 sshd 或无关字体；每路超时上限由 60 分钟降为 20 分钟。
+- P-25 更名 `platform_test_workflow_test.dart`，校验仅一次平台专项，禁止服务端依赖与其他测试套件加入。精确原生缓存、缺失覆盖摘要及产品构建/发布禁令保持不变，M-28 改为检查专项范围。
+- 本机 `make test-platform` 103 项通过、3 条件跳过，耗时 13 秒；修改测试定向静态检查、actionlint、diff 检查通过。日志 `build/validation/pre-release-tests/platform-only.log`。本轮未运行其他测试套件或触发远端 Actions；Windows/Linux 与 macOS ARM64 仍需对应 runner 验证。

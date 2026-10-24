@@ -814,3 +814,19 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - macOS 日志为隔离进程存活但保护未抛错；本地复现 C locale 的 ps 转义中文路径导致同样漏检，查询子进程固定 UTF-8，保留调用方环境。复核三平台实现，Linux comm 显式 UTF-8，Windows 保留 UTF-8 JSON；macOS 夹具改用临时签名的系统 sleep 副本，避免依赖 CI Python 的进程路径。
   - 扩展 P-22 的查询环境透传、默认/C locale 真实进程及环境不被污染检查，更新设计及平台差异总览。
   - 验证：macOS `make test-platform` 99 项通过、3 项条件跳过；系统 Python 与 Homebrew Python 的 P-22 内部 12 项通过，关闭 Python UTF-8 模式并使用 C locale 后 12 项也通过，`git diff --check` 通过。修改后的 Windows/Linux `make test-platform` 尚需对应 runner 验证；未提交推送、未重跑远端 CI。
+
+- [已完成] Step 114：替换 macOS ARM64 被终止的构建保护进程夹具
+  - 复核运行 40123708220 / macOS job 120960531259，确认已检出 582e295；此次失败发生在启动后存活断言，复制并重签的系统 sleep 副本返回 -9（SIGKILL），尚未进入保护检查，与先前路径匹配失败不同。
+  - macOS 改为用 xcrun clang 从专用 C 夹具生成当前主机架构的普通进程；Windows/Linux 保留 Python 副本。三平台均增加就绪标记与 10 秒限时等待，移除固定 0.2 秒启动假设；保留默认/C locale、运行时拒绝、退出后放行及进程清理验证。
+  - 验证：本机 Intel macOS `make test-platform` 99 项通过、3 条件跳过；P-22 内部 12 项在默认环境与 C locale / Python UTF-8 关闭环境通过。C 夹具 x86_64/arm64 均编译成功，arm64 链接器生成的签名严格校验通过；`git diff --check` 通过。ARM64 实际执行及修改后的 Windows/Linux 平台集合仍需对应 runner 验证，未推送或触发远端 CI。
+
+- [已完成] Step 115：新增 test* 标签触发的六路全量测试工作流
+  - 新增独立 Full Platform Tests，支持 test 前缀标签与手动运行；macOS / Windows / Linux 各 x64/arm64 六路执行锁定依赖的客户端全套（含真实 dsh 安装及 ACP）、平台专项和服务端全套测试，失败后继续其他套件和平台。
+  - 不执行产品构建、签名、打包、上传或发布。只恢复与 native 源码精确匹配的原生缓存，macOS ARM64 对应 Release universal 键；缺失时在 Summary 说明原生相关跳过范围。小型 C/Swift 夹具仍按测试需求生成。
+  - 新增 P-25 四项回归、M-28 手工清单及平台差异总览，补充测试标签用法与覆盖边界；保留 v* 发布流程与构建后原生门禁。
+  - 验证：本机 Intel macOS 最终启用原生库要求及真实 dsh 后，客户端全量 468 项通过、6 项按条件跳过；平台专项 103 项通过、3 项跳过，服务端全量 43 项通过。包含 P-22/P-25、真实本地 SSH/SFTP/RDP、原生 AES-GCM 与 H.264、同步及中英文布局；两端静态检查、新增测试定向分析、YAML/actionlint 与 diff 检查通过。日志在 `build/validation/pre-release-tests/`；未推送或触发远端测试，Windows/Linux 与 macOS ARM64 由新工作流实际验证。
+
+- [已完成] Step 116：将 test* 工作流收敛为平台专项
+  - 按最新范围改名 Platform Tests，保留三平台双架构六路与 test* / 手动触发，每路仅执行一次 `make test-platform`；删除客户端全量、真实 dsh、服务端测试及服务端依赖安装，移除本地 sshd 和无关字体依赖，超时上限降为 20 分钟。
+  - 保留精确原生缓存及覆盖摘要、测试夹具工具链，不进行产品构建、上传或发布。P-25 更名为 `platform_test_workflow_test.dart`，明确禁止其他测试套件重新加入；同步更新设计、使用文档、平台差异及 M-28。
+  - 验证：本机 `make test-platform` 103 项通过、3 条件跳过；定向静态检查、actionlint 和 diff 检查通过。仅验证本次涉及的平台集合，未重跑其他测试套件，未推送或触发远端 Actions。

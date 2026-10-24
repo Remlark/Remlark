@@ -1,0 +1,84 @@
+name: Platform Tests
+run-name: Platform Tests · ${{ github.ref_name }}
+
+on:
+  push:
+    tags: ['test*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: '3.47.7'
+
+jobs:
+  test:
+    name: test-${{ matrix.platform }}-${{ matrix.arch }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: linux, arch: x64, runner: ubuntu-24.04 }
+          - { platform: linux, arch: arm64, runner: ubuntu-24.04-arm }
+          - { platform: windows, arch: x64, runner: windows-2022 }
+          - { platform: windows, arch: arm64, runner: windows-11-arm }
+          - { platform: macos, arch: x64, runner: macos-15-intel }
+          - { platform: macos, arch: arm64, runner: macos-15 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # 与 Release 固定相同 Flutter，兼容没有预打包 SDK 的 ARM64 主机。
+      - name: Install Flutter
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+      - name: Linux test dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libgtk-3-0 libsecret-1-0 libva2 libva-drm2 desktop-file-utils libglib2.0-bin zip unzip
+      - name: Windows test dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install make --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'Windows test dependency installation failed' }
+      # P-21 编译隔离 C 测试夹具；不构建应用或 FreeRDP / OpenSSL 等原生依赖。
+      - name: Initialize MSVC for test fixtures
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
+      # 只读取与 Release 相同的精确源码缓存，不回退到旧原生代码、不现场编译。
+      - name: Restore matching native test dependencies
+        id: native-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: build/native
+          # macOS Release 缓存包含双架构，键名为 universal；测试仍按原生架构分别执行。
+          key: native-v1-${{ matrix.runner }}-${{ matrix.platform == 'macos' && matrix.arch == 'arm64' && 'universal' || matrix.arch }}-${{ hashFiles('native/**') }}
+      - name: Resolve locked client dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Explain native test coverage
+        shell: bash
+        env:
+          NATIVE_CACHE_HIT: ${{ steps.native-cache.outputs.cache-hit }}
+        run: |
+          if [ "$NATIVE_CACHE_HIT" = true ]; then
+            echo 'Native cache matches this source. RDP native loading is required.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No matching native cache. Native-library and local RDP-server tests may skip; release builds retain mandatory post-build native tests.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Platform tests
+        env:
+          RMK_REQUIRE_RDP_NATIVE: ${{ steps.native-cache.outputs.cache-hit == 'true' && '1' || '0' }}
+        run: make test-platform

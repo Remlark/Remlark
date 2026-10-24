@@ -286,6 +286,23 @@ CI 同时支持 VS 2022 / VS 2026，从 VCToolsRedistDir 的目标架构目录�
 
 已验证发布：[v1.0.0](https://github.com/Remlark/Remlark/releases/tag/v1.0.0)，[构建记录](https://github.com/Remlark/Remlark/actions/runs/39593809838)。后续先修改 VERSION 的版本、提交并推送，再创建同版本 v* 标签；不要复用已发布标签。
 
+### 发布前只跑平台专项测试
+
+独立工作流 `.github/workflows/test.yml`（Platform Tests）由 `test*` 标签触发，也可通过 Run workflow 手动运行。提交待测修改后，为该提交创建一个新的测试标签并推送，例如：
+
+```bash
+git tag test-20261025-01
+git push origin test-20261025-01
+```
+
+每次修改后使用新标签；工作流检出触发标签对应的提交，标签不要求匹配 VERSION。测试标签不会触发 `v*` Release 工作流。
+
+测试矩阵覆盖 macOS / Windows / Linux 各 x64、arm64，共六路。每路使用与 Release 相同的 Flutter 3.47.7，仅按锁文件安装客户端测试依赖，每路只执行一次 `make test-platform`，不运行客户端全量、服务端或真实 dsh 安装测试，也不安装服务端依赖；某个平台失败不会取消其他平台。每路超时上限为 20 分钟。
+
+本流程不执行应用、安装包、服务端可执行文件或 RDP/SSH 原生库的产品构建，不上传 artifacts，不读取发布签名凭据或发布 Release。测试执行本身仍会生成 Dart 测试程序、SQLite 测试资产及小型 C/Swift 测试夹具，这些属于运行测试的必要步骤。
+
+原生相关测试只复用与 runner / 架构 / native 源码哈希完全匹配的 Release 原生缓存；macOS ARM64 复用包含双架构的 universal 缓存，Intel 没有对应缓存时不使用其他 runner 的缓存。命中后强制要求 RDP 原生库可加载，未命中时在 Actions Summary 明确记录，依赖原生库及本地 RDP 测试服务端的用例按已有条件跳过；不会为了测试临时编译原生依赖。需要指定真实远端凭据的 RDP 测试和按需截图默认仍跳过。正式发布仍保留构建后的原生测试门禁，测试工作流通过不代表安装包验证通过。
+
 ### 仅验证 GitHub Actions 编译
 
 在 Desktop Release 中选择 Run workflow，选择待验证分支，tag 留空并保持 `build_only=true`。工作流执行桌面五路构建、安装包生成与构建前后 `make test-platform`，以及服务端六路构建、测试与解包启动验证，不上传 Actions artifacts、不发布 Release。正式手工发布需填写与 VERSION 中版本号一致的已有版本标签，并关闭 `build_only`；推送 v* 标签仍自动发布。

@@ -176,24 +176,33 @@ class BuildGuardTests(unittest.TestCase):
             root = Path(directory)
             target = root / 'build' / platform / ('remlark.exe' if platform == 'windows' else 'remlark')
             target.parent.mkdir(parents=True)
+            ready = root / 'ready'
             env = os.environ.copy()
             if platform == 'macos':
-                # 使用系统 Mach-O，避免夹具依赖 CI Python 的进程路径；不复制系统文件的受限标志。
-                shutil.copyfile('/bin/sleep', target)
-                target.chmod(0o755)
-                subprocess.run(['codesign', '--force', '--sign', '-', str(target)], check=True, capture_output=True)
-                arguments = [str(target), '30']
+                # 在本机编译普通程序，避免 ARM64 杀死被复制并重签的 Apple 系统二进制。
+                source = ROOT / 'test/platform/fixtures/build_guard_probe.c'
+                subprocess.run(['xcrun', 'clang', '-Wall', '-Wextra', '-Werror',
+                                str(source), '-o', str(target)],
+                               check=True, capture_output=True, timeout=30)
+                arguments = [str(target), str(ready)]
             else:
                 # Linux 的 sleep 可能来自多入口 coreutils，改名后不能启动；Windows 同样复用 Python。
                 shutil.copy2(sys.executable, target)
                 env['PYTHONHOME'] = sys.base_prefix
                 if platform == 'windows':
                     env['PATH'] = str(Path(sys.executable).parent) + os.pathsep + env.get('PATH', '')
-                arguments = [str(target), '-c', 'import time; time.sleep(30)']
+                arguments = [str(target), '-c',
+                             'import pathlib,sys,time; '
+                             'pathlib.Path(sys.argv[1]).write_text("ready", encoding="utf-8"); '
+                             'time.sleep(30)', str(ready)]
             process = subprocess.Popen(arguments, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             try:
-                time.sleep(0.2)
+                # 三平台等待实际启动就绪，避免固定延迟受 runner 负载影响。
+                deadline = time.monotonic() + 10
+                while not ready.exists() and process.poll() is None and time.monotonic() < deadline:
+                    time.sleep(0.02)
                 self.assertIsNone(process.poll(), process.stderr.read() if process.poll() is not None else '')
+                self.assertTrue(ready.exists(), f'测试进程未在 10 秒内就绪：{target}')
                 # 三平台均检查默认及 C locale，确保中文路径不因调用方语言环境漏检。
                 for overrides in [{}, {'LC_ALL': 'C'}]:
                     with patch.dict(os.environ, overrides):

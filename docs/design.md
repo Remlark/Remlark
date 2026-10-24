@@ -354,7 +354,14 @@ macOS、Windows、Linux 共用的 FreeRDP 显示控制通道，必须先收到 `
 - Makefile 为三个打包入口和开发运行增加前置检查；统一版本包装工具在启动 Flutter 前再次检查；Windows 直接启动脚本在准备依赖前检查；`make clean` 在删除前检查全部桌面输出。阻止时返回 2 并显示 PID、路径及中英文退出提示，保留运行应用和连接。
 - 本保护针对已确认的开发包覆盖原因，不修改业务退出清理、ORM 或用户数据库。直接调用未包装 Flutter 命令不受保护，构建期间手动新启动同路径应用也不在构建前检查的保证范围。使用项目构建入口。
 - P-22 与 M-26 详见多平台测试文档；真实 macOS 应用验证确认被拦截的构建未改变 framework，原应用仍正常退出。
-- Step 113：进程查询接口允许平台单独指定子进程环境。macOS 查询固定 `LC_ALL=en_US.UTF-8`，防止 C locale 的 ps 转义中文路径而漏检；Windows 继续显式输出 UTF-8 JSON，Linux 直接读取 procfs 并显式按 UTF-8 读取 comm。P-22 在默认及 C locale 验证真实进程，macOS 使用临时签名的系统 `/bin/sleep` 副本，Windows/Linux 继续使用配置环境后的 Python 副本；测试读取仓库文本显式指定 UTF-8，不依赖 Windows 默认代码页。
+- Step 113/114：进程查询接口允许平台单独指定子进程环境。macOS 查询固定 `LC_ALL=en_US.UTF-8`，防止 C locale 的 ps 转义中文路径而漏检；Windows 继续显式输出 UTF-8 JSON，Linux 直接读取 procfs 并显式按 UTF-8 读取 comm。P-22 在默认及 C locale 验证真实进程，macOS 通过 Xcode clang 从 `test/platform/fixtures/build_guard_probe.c` 编译当前主机架构的普通程序，避免复制系统二进制后在 ARM64 被 SIGKILL；Windows/Linux 继续使用配置环境后的 Python 副本。三个平台均写就绪标记，父进程限时等待，确认启动后再执行存活时拒绝/退出后放行检查；测试读取仓库文本显式指定 UTF-8，不依赖 Windows 默认代码页。
+
+### 发布前平台专项测试（Step 115/116）
+
+- `.github/workflows/test.yml` 独立处理 `test*` 标签及手动执行，按触发提交检出；不校验 Release 版本标签，不运行产品构建、签名、打包或发布，不上传中转产物。`v*` 继续由原有发布工作流处理。
+- 三平台各 x64/arm64 六路原生 runner 每路仅执行一次 `make test-platform`，不运行客户端全量、服务端或真实 dsh 安装测试，不安装服务端依赖及本地 sshd。锁定客户端依赖及 Flutter 版本，Windows 使用系统默认 PowerShell、POSIX 使用默认 shell；SDK 启动和覆盖摘要明确使用 bash。矩阵不提前取消，每路超时上限为 20 分钟。
+- 原生测试只读恢复与源码完全匹配的已有缓存；macOS ARM64 使用 Release 的 universal 缓存键。缺失时摘要明确指出原生/本地 RDP 服务相关用例的条件跳过，不编译原生依赖。小型测试夹具及测试程序仍按测试运行需要生成；正式发布的构建后强制原生验证保持独立。
+- P-25 验证触发方式、六路矩阵、只执行平台专项且排除其他测试套件、精确缓存与覆盖说明、禁止产品构建/上传/发布。运行方法见 `docs/build-environment.md`，平台差异和手工验证见多平台测试文档。
 
 
 ### 单元测试是否覆盖运行应用的复核（Step 102）
