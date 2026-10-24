@@ -50,7 +50,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 打包 | [Makefile](../Makefile)、[Windows 安装器](../windows/packaging/) | `make mac` → zip | `make windows` → Inno Setup 安装 exe + 便携 zip，附带应用本地 VC++ 运行库 | `make linux` → deb + tar.gz，按 x64 / arm64 输出；发布前检查原生库和资源 | P-06、P-08、P-09 | M-12、M-14 |
 | 可选 JNI 依赖 | `linux/CMakeLists.txt`，Flutter 间接依赖 | 无 Linux JNI 插件 | 可选插件，未发现 JDK 时不构建 | 关闭 Android 间接依赖引入的可选 JNI，避免携带构建机 Java 绝对路径 | P-09 | M-12 |
 | 开发启动 | [Makefile](../Makefile)、[Windows 启动脚本](../windows/run.ps1) | `make run` | `windows/run.ps1` 无须 Make，按需构建原生库；也支持 `make run` | `make run` | P-08 | M-15 |
-| 应用图标 | `tools/branding/`、`macos/Runner/Branding/`、`linux/packaging/` | Asset Catalog / AppIcon.icns；启动后从当前包刷新 NSApplication 图标，避免 Dock 缓存旧图标 | exe 内嵌 7 帧 ICO，经窗口类 LoadIcon 关联 | PNG + .desktop，与 APPLICATION_ID 关联 | P-14 | M-12、M-19 |
+| 应用图标 | `tools/branding/`、`macos/Runner/Branding/`、`linux/packaging/` | Asset Catalog / AppIcon.icns；启动后刷新 NSApplication 图标 | exe 内嵌 7 帧 ICO，经窗口类 LoadIcon 关联 | PNG + .desktop，与 APPLICATION_ID 关联 | —（P-14 已按用户要求移除） | M-12、M-19 |
 | 同步服务端 | [server/](../server/)、[server_bundle.py](../tools/release/server_bundle.py)、Release CI | x64 / arm64 独立 runner，分别发布 tar.gz | x64 / arm64 独立 runner，分别发布 zip（含 SQLite DLL） | x64 / arm64 独立 runner，分别发布 tar.gz | P-23、P-10；`server/` 中的 `dart test`；六路 CI 解包后真实读写 SQLite | M-13 |
 | 真实 RDP 配置联调 | [rdp_live_test.dart](../test/platform/rdp_live_test.dart) | 显式传入应用数据目录，使用同一 RdpClient 与原生库；待实机执行 | 同左；Windows x64 已实际连接，数据目录通常为 `%APPDATA%\com.remlark\remlark` | 同 macOS，待实机执行 | P-12（显式启用） | M-05、M-17 |
 | 源码编码与构建失败检查 | `windows/CMakeLists.txt`、`native/*/CMakeLists.txt`、`native/utils/windows_build.ps1` | UTF-8，shell 严格错误检查 | MSVC `/utf-8`；PowerShell 带 UTF-8 BOM，外部命令失败立即停止 | UTF-8，shell 严格错误检查 | P-06 | M-12 |
@@ -88,7 +88,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-12 | [rdp_live_test.dart](../test/platform/rdp_live_test.dart) | 显式指定已授权的已保存 RDP 配置，默认跳过；通过 ORM 索引只读配置；测试硬解开关两种模式的真实认证、首帧、键盘触发更新，保存实际解码 PNG；通过 GDI TRACE 日志另行确认实际编码，不能用连接成功代替 H.264 / GPU 验证 | 真实 RDP、M-05 / M-17 部分验证 |
 
 | P-13 | [app_version_test.dart](../test/platform/app_version_test.dart) | VERSION 是唯一来源，兼容 CRLF / 中文空格路径，拒绝无效 / 缺失 / 越界版本；构建号默认 1；预发布与 Windows 四段资源 / Debian ~ 映射；发布标签去掉构建号；实际子进程验证三平台编译参数与开发 run 参数、退出码；拒绝命令行覆盖和给旧 macOS 应用换名打包 | 编译与发布版本 |
-| P-14 | [app_icon_test.dart](../test/platform/app_icon_test.dart) | 三平台品牌图标与系统关联；macOS 编译实际 Swift 实现，在隐藏进程中更新 NSApplication 图标并比较像素，缺少图标时保留原图标；不启动真实应用或访问用户配置 | 应用图标与 Dock |
+| P-14（已移除） | — | Step 118 按用户要求删除图标自动化测试及 Swift 夹具，编号保留不复用；历史测试记录仅供追溯 | 图标改用 M-12、M-19 手工检查 |
 | P-15 | [macos_signing_test.dart](../test/platform/macos_signing_test.dart)、`fixtures/macos_signing_checks.py` | 三平台检查仅两项凭据、自动识别唯一身份 / 拒绝缺失或多身份、自动生成钥匙串密码、缺失 / 损坏凭据、失败日志不泄密、嵌套签名顺序及部分失败清理；Windows / Linux 拒绝 Apple 工具；macOS 创建一次性证书，真实导入 / 重签 App / 严格验证 / 还原搜索列表并移除私钥 | macOS 发布自签 |
 | P-16 | [proxy_profiles_test.dart](../test/platform/proxy_profiles_test.dart) | 真实 ORM 存储共享代理，SSH/RDP/VNC 内置 SSH 共用引用；变更后重连解析新参数、连接快照及目标端口保持、引用计数和删除保护；三平台执行相同实现 | 共享代理配置与重连 |
 | P-17 | [proxy_connection_test.dart](../test/platform/proxy_connection_test.dart) | 三平台真实本地 Socket 夹具；HTTP 认证/407、SOCKS5 认证/非法响应、总超时与慢速响应、取消断开、禁止无代理直连、目标格式与 IPv6 authority/地址类型 | 可选代理连通性检测 |
@@ -473,3 +473,16 @@ Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过�
 - 工作流更名 Platform Tests，每个 runner 仅执行一次 `make test-platform`，保留三平台各 x64/arm64 六路。移除客户端全量、真实 dsh、服务端测试及依赖准备，不安装本地 sshd 或无关字体；每路超时上限由 60 分钟降为 20 分钟。
 - P-25 更名 `platform_test_workflow_test.dart`，校验仅一次平台专项，禁止服务端依赖与其他测试套件加入。精确原生缓存、缺失覆盖摘要及产品构建/发布禁令保持不变，M-28 改为检查专项范围。
 - 本机 `make test-platform` 103 项通过、3 条件跳过，耗时 13 秒；修改测试定向静态检查、actionlint、diff 检查通过。日志 `build/validation/pre-release-tests/platform-only.log`。本轮未运行其他测试套件或触发远端 Actions；Windows/Linux 与 macOS ARM64 仍需对应 runner 验证。
+
+### 2026-10-25 Intel macOS 图标像素舍入修复（Step 117）
+
+本节为历史记录；Step 118 已按用户要求删除整个图标自动化测试及 Swift 夹具，以下比较不再执行。
+
+- [test-1.0.3 / macOS x64](https://github.com/Remlark/Remlark/actions/runs/40126292484/job/120968327888)：98 通过、1 失败、7 跳过；失败为 P-14，`actual=[512]`，同密度图标比较 `maxDifference=2`，原阈值为 1。macOS ARM64、Windows 双架构、Linux 双架构均通过，P-22 已通过。本轮失败不再是构建保护进程问题。
+- macOS Swift 夹具按全部 RGBA 通道允许最多两个 8 位色阶的栅格化差值；显式校验差值 2 通过、3 拒绝、空数据与不同长度拒绝。刷新前的其他图标必须超出容差，缺失资源仍要求读回像素完全不变。Windows ICO 逐像素核对、Linux 品牌 PNG 字节核对及三个平台生产资源不变；M-19 继续用于实际 Dock / 快捷方式检查。
+- 本机 Intel macOS 平台集合 103 项通过、3 条件跳过，耗时 10 秒，包含真实 Swift 刷新和新增边界检查；`git diff --check` 通过。日志为 `build/validation/pre-release-tests/icon-rounding-platform.log`。未重跑客户端全量、服务端或 dsh，未推送或触发 Actions。远端 macOS 15 及其他平台的修改后结果仍需新测试标签验证；重跑旧标签不会带入本次修复。
+
+### 2026-10-25 移除图标自动化测试（Step 118）
+
+- 按用户要求删除 P-14 的 Dart 测试文件和 Swift 夹具，移除三平台资源一致性、系统入口及 macOS 原生图标读回自动化检查；图标外观按 M-12、M-19 手工确认。P-14 编号保留但不再执行，历史测试记录不代表当前覆盖范围。
+- macOS `make test-platform` 101 项通过、3 条件跳过，耗时 10 秒；无已删除夹具的代码引用，diff 检查通过。日志为 `build/validation/pre-release-tests/remove-icon-platform.log`。未运行其他套件、未提交推送或触发 Actions；其他平台待新标签验证。
