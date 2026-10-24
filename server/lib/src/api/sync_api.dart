@@ -6,6 +6,7 @@ import 'package:shelf_router/shelf_router.dart';
 
 import '../db/sync_repository.dart';
 import 'request_body.dart';
+import 'sync_protocol.dart';
 
 /// 同步 HTTP 接口（/api/v1）。
 /// 认证：`Authorization: Bearer <token>`，令牌决定数据空间，不同令牌数据互相隔离。
@@ -70,8 +71,14 @@ class SyncApi {
     final router = Router()
       ..get(
         '/api/v1/ping',
-        (Request r) =>
-            _ok({'ok': true, 'time': DateTime.now().millisecondsSinceEpoch}),
+        (Request r) => _ok({
+          'ok': true,
+          'time': DateTime.now().millisecondsSinceEpoch,
+          'protocolVersion':
+              r.headers[SyncProtocol.header.toLowerCase()] ??
+              SyncProtocol.legacyVersion,
+          'supportedProtocolVersions': SyncProtocol.supportedVersions,
+        }),
       )
       ..get(
         '/api/v1/items',
@@ -120,6 +127,7 @@ class SyncApi {
       });
     return const Pipeline()
         .addMiddleware(_auth)
+        .addMiddleware(SyncProtocol.middleware)
         .addMiddleware(_badRequest)
         .addHandler(router.call);
   }

@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'sync_protocol.dart';
+
 /// 服务器上一条记录的索引信息
 class RemoteItemInfo {
   const RemoteItemInfo(this.uuid, this.updatedAt, this.deleted);
@@ -30,9 +32,11 @@ class SyncApi {
   final String baseUrl;
   final String token;
   final http.Client? client;
+  Future<void>? _handshake;
 
   static const _timeout = Duration(seconds: 20);
 
+  /// 保留 v1 路由，传输协议通过独立版本头声明。
   Uri _uri(String path) {
     var b = baseUrl.trim();
     if (b.endsWith('/')) b = b.substring(0, b.length - 1);
@@ -42,6 +46,7 @@ class SyncApi {
   Map<String, String> get _headers => {
     'Authorization': 'Bearer $token',
     'Content-Type': 'application/json',
+    SyncProtocol.header: SyncProtocol.version,
   };
 
   /// 统一发送请求；测试可注入内存 HTTP 客户端，默认请求自行释放连接资源。
@@ -50,22 +55,58 @@ class SyncApi {
     String path, {
     Object? body,
   }) async {
+    if (path != '/ping') await ping();
     final request = http.Request(method, _uri(path))..headers.addAll(_headers);
     if (body != null) request.body = jsonEncode(body);
     final response = client?.send(request) ?? request.send();
-    return response.then(http.Response.fromStream).timeout(_timeout);
+    final result = await response
+        .then(http.Response.fromStream)
+        .timeout(_timeout);
+    if (result.statusCode == 426) {
+      throw SyncProtocolException(
+        result.headers[SyncProtocol.header.toLowerCase()],
+      );
+    }
+    // 认证和服务器故障继续保留原错误；数据响应先验协议再处理冲突或删除。
+    if (result.statusCode < 500 && ![401, 403].contains(result.statusCode)) {
+      SyncProtocol.verify(result.headers[SyncProtocol.header.toLowerCase()]);
+    }
+    return result;
   }
 
+  /// HTTP 错误不能被当作成功握手或空索引。
   void _check(http.Response r) {
     if (r.statusCode >= 300) {
       throw SyncApiException(r.statusCode, r.body);
     }
   }
 
-  /// 连通性检测
-  Future<void> ping() async {
+  /// 每个接口会话先握手再读写，共享并发握手，失败后允许重试。
+  Future<void> ping() => _handshake ??= _probe().catchError((Object e) {
+    _handshake = null;
+    throw e;
+  });
+
+  /// 检查服务器协议后才允许上传或删除，避免旧服务器忽略新版请求头后写入。
+  Future<void> _probe() async {
     final r = await _request('GET', '/ping');
     _check(r);
+    final body = jsonDecode(r.body);
+    if (body is! Map || body['ok'] != true) {
+      throw const SyncProtocolException(null);
+    }
+    // 历史 ping 没有版本字段；显式声明时必须与本次使用的协议一致。
+    if (body.containsKey('protocolVersion')) {
+      final declared = body['protocolVersion'];
+      if (declared is! String) throw const SyncProtocolException(null);
+      SyncProtocol.verify(declared);
+    }
+    if (body.containsKey('supportedProtocolVersions')) {
+      final supported = body['supportedProtocolVersions'];
+      if (supported is! List || !supported.contains(SyncProtocol.version)) {
+        throw const SyncProtocolException(null);
+      }
+    }
   }
 
   /// 获取全部条目索引（uuid、更新时间、是否删除）

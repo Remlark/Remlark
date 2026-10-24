@@ -55,6 +55,8 @@
 - 退出（Dock 退出、⌘Q、关闭最后一个窗口）经 `AppLifecycleListener.onExitRequested` 先调用 `AppServices.shutdown()`：停止自动同步 → 关闭所有会话（SSH / VNC / RDP / SFTP）→ 结束 dsh、Codex 子进程 → 关闭数据库，然后才允许退出。数据库必须在引擎关闭前关闭，否则后台 isolate 销毁时 sqlite 清理回调访问已释放的连接导致崩溃。每步限时 3 秒，失败只记日志。
 
 ## 同步协议
+
+- 同步传输协议独立编号为 **1.0**，不使用应用 `VERSION`、主机载荷格式号或密文封装号代替。客户端读写前握手，服务端对每个请求校验协议；不支持返回 426 且不读写同步数据。历史未声明的端固定按 1.0 兼容，未来 2.0 不自动降级；多版本兼容必须保留对应协议实现。详细字段、兼容矩阵与升级规则见 [sync-protocol.md](sync-protocol.md)。
 - 服务端通过 Release CI 独立构建 macOS / Windows / Linux 的 x64、arm64 共六个原生版本；macOS 服务端按架构分别发布，桌面客户端保持 universal。发布包包含完整 `bundle/bin` 与 `bundle/lib`，打包时验证主程序和 SQLite 库的系统/架构，解包后启动并读写数据库。全部桌面端与服务端任务成功且 16 个附件齐全后，统一生成 SHA256SUMS 并发布。
 - Actions 存储：仅构建验证不上传压缩包；正式发布通过 artifacts 临时中转（保留上限 1 天），流程结束后始终清理当前和同一工作流历史已完成运行的包及旧日志附件。Release 附件保留，不删除其他运行中的产物、其他工作流数据或原生编译缓存。
 - 服务端（`server/`，Dart shelf + drift）按访问令牌划分数据空间，每台主机独立存储 `(uuid, updatedAt, deleted, payload)`。客户端将单台主机 JSON 先 gzip 压缩，再用“同步口令”经 PBKDF2 派生密钥做 AES-GCM 加密；新载荷为 `v2:gzip:`，继续读取旧版未压缩的 `v1:` 密文。服务端无法解密，建议通过 `--cert/--key` 或反向代理启用 HTTPS。

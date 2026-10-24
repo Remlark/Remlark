@@ -6,6 +6,7 @@
 
 | 场景 | 验证内容 | 测试文件 |
 | --- | --- | --- |
+| 协议版本 | 独立 1.0 协议头与握手；历史未声明端兼容；未知/畸形版本在所有接口返回 426 且不修改数据；客户端握手失败阻止所有数据请求、并发握手与重试、数据响应再次验版本、协议错误显示且主机保留 | `test/sync_protocol_test.dart`、`server/test/sync_protocol_test.dart`、`test/sync_e2e_test.dart` |
 | 同步方向 | 两端为空、本地新增、远端新增、仅本地主机、本地/远端较新、重复同步、同 UUID 重新关联 | `test/sync_service_test.dart` |
 | 多协议 | SSH/VNC/RDP 七种非空组合完整恢复；全部 49 种协议组合切换；新增/移除协议、主协议切换不遗留入口或混用指纹 | `test/sync_service_test.dart`、`test/host_sync_bundle_test.dart` |
 | 整台冲突 | 不同设备分别修改不同协议时，按整台主机版本取舍；同时间戳待同步记录读取服务器已提交版本；本机保存版本严格递增 | `test/sync_service_test.dart`、`test/host_sync_bundle_test.dart` |
@@ -29,7 +30,7 @@
 仓库根目录执行同步单元测试与真实服务回归：
 
 ```sh
-flutter test --no-pub test/sync_config_state_test.dart test/sync_compression_test.dart test/host_configuration_version_test.dart test/sync_service_test.dart test/sync_api_test.dart test/host_sync_bundle_test.dart test/sync_e2e_test.dart test/host_connection_forms_test.dart test/vnc_ssh_config_test.dart test/core_test.dart
+flutter test --no-pub test/sync_protocol_test.dart test/sync_config_state_test.dart test/sync_compression_test.dart test/host_configuration_version_test.dart test/sync_service_test.dart test/sync_api_test.dart test/host_sync_bundle_test.dart test/sync_e2e_test.dart test/host_connection_forms_test.dart test/vnc_ssh_config_test.dart test/core_test.dart
 ```
 
 在 `server/` 目录执行服务端测试：

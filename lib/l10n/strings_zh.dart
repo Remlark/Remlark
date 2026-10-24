@@ -429,6 +429,7 @@ const Map<String, String> stringsZh = {
   'sync.state.synced': '已同步',
   'sync.state.pending': '待同步',
   'sync.state.local': '仅本地',
+  'sync.error.protocol': '同步协议不兼容，请使用支持相同同步协议的客户端与服务端版本',
   'sync.error.passphrase': '解密失败：加密口令与其他客户端不一致',
 
   // 远程桌面

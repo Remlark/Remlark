@@ -420,6 +420,8 @@ const Map<String, String> stringsEn = {
   'sync.state.synced': 'Synced',
   'sync.state.pending': 'Pending',
   'sync.state.local': 'Local only',
+  'sync.error.protocol':
+      'Incompatible sync protocol. Use client and server versions that support the same sync protocol.',
   'sync.error.passphrase':
       'Decryption failed: passphrase differs from other clients',
 
