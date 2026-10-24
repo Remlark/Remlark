@@ -106,13 +106,14 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
       AppLog.i('rdp', '连接结果 ${result.name}${detail == null ? '' : '：$detail'}');
       switch (result) {
         case _Attempt.connected:
-          if (remember)
+          if (remember) {
             await _hosts.updatePassword(
               host.uuid,
               password,
               true,
               protocol: host.protocol,
             );
+          }
           unawaited(_hosts.touchConnected(host.uuid));
           _startClipboardSync();
           return;
@@ -272,8 +273,9 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
     final c = _client;
     if (c == null ||
         state != SessionState.connected ||
-        host.extra['clipboard'] == false)
+        host.extra['clipboard'] == false) {
       return;
+    }
     List<String> files = const [];
     try {
       files = await Pasteboard.files();

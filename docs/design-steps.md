@@ -784,3 +784,10 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 增加始终执行的清理任务：发布成功、失败及仅构建结束后，删除当前和本工作流历史已结束运行的 packages/logs，保护其他工作流、并行运行、Release 附件和原生缓存；分页先收集再删除，API 失败明确上报。
   - 经现有 Git credential helper 认证，核实历史运行均属于 release.yml 后实际删除 10 个远端压缩包，共 485,762,798 字节；API 复核 Actions artifacts 数量为 0。凭据未输出或写入仓库。
   - 新增 P-24 / M-27，扩展 P-10。macOS `make test-platform` 97 项通过、3 项条件跳过，定向静态检查、YAML 解析及 diff 检查通过；Windows / Linux 平台测试及新版 CI 自动清理仍待对应 runner 验证，三平台测试入口继续保留。
+
+- [已完成] Step 109：Linux 全量回归与 1.0.2 Release 编译验证
+  - 补齐客户端及服务端 13 处条件分支大括号，客户端与服务端 `make analyze` 均无问题，不改变业务行为。
+  - 修复 P-22 的真实进程夹具：三平台统一复制 Python 并配置运行环境，macOS 保留临时签名；避免 Linux 多入口 coreutils 的 sleep 复制改名后无法启动。Linux 内部 12 项检查通过，平台集合 96 项通过、4 项条件跳过；macOS / Windows 修改后的夹具尚未实测。
+  - 最终客户端全量测试显式启用原生库要求与真实 dsh 测试，426 项通过、11 项条件跳过；服务端 35 项全部通过。包括本地 SSH / SFTP、RDP 连接 / 剪贴板、AES-GCM、H.264 软件解码、同步场景及中英文布局。
+  - `make native-lib rdp-test-server`、`make linux`、`make server` 成功，生成 1.0.2 Linux x64 deb、便携包及服务端归档。服务端解包启动和 SQLite 读写通过；便携包 9 个 ELF 文件依赖解析通过，Xvfb 下两次启动、窗口最小尺寸和密钥持久化 / 0600 权限通过。
+  - 证据位于 `build/validation/current-*`。本轮仅验证 Linux x64；真实远端、VAAPI GPU、干净系统安装和其他平台仍需对应环境验证，详见多平台测试记录。

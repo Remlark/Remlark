@@ -30,12 +30,13 @@ class SyncApi {
         final h = req.headers['authorization'] ?? '';
         final token = h.startsWith('Bearer ') ? h.substring(7).trim() : '';
         final space = _spaces[token];
-        if (space == null)
+        if (space == null) {
           return Response(
             401,
             body: '{"error":"unauthorized"}',
             headers: _json,
           );
+        }
         return inner(req.change(context: {'space': space}));
       };
 
@@ -78,8 +79,9 @@ class SyncApi {
       )
       ..post('/api/v1/items/batch-get', (Request r) async {
         final uuids = parseBatchGet(parseJsonObject(await r.readAsString()));
-        if (uuids.length > 1000)
+        if (uuids.length > 1000) {
           return Response(400, body: '{"error":"too many"}', headers: _json);
+        }
         final items = await _repo.fetch(_space(r), uuids);
         return _ok({
           'items': [
@@ -95,8 +97,9 @@ class SyncApi {
       })
       ..put('/api/v1/items/<uuid>', (Request r, String uuid) async {
         final body = parsePut(parseJsonObject(await r.readAsString()));
-        if (body.payload.length > 1024 * 1024)
+        if (body.payload.length > 1024 * 1024) {
           return Response(413, body: '{"error":"too large"}', headers: _json);
+        }
         final res = await _repo.put(
           _space(r),
           _uuid(uuid),
@@ -104,8 +107,9 @@ class SyncApi {
           body.payload,
           restoreDeleted: body.restoreDeleted,
         );
-        if (res == PutResult.conflict)
+        if (res == PutResult.conflict) {
           return Response(409, body: '{"error":"conflict"}', headers: _json);
+        }
         return _ok({'ok': true});
       })
       ..delete('/api/v1/items/<uuid>', (Request r, String uuid) async {

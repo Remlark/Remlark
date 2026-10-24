@@ -480,8 +480,9 @@ class _HostSshSectionState extends State<HostSshSection> {
                           ),
                       ],
                       onChanged: (v) {
-                        if (v != null)
+                        if (v != null) {
                           f.update(() => f.vncSsh = ssh.copyWith(authType: v));
+                        }
                       },
                     ),
                   ),

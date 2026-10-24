@@ -64,6 +64,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 代理连通性检测 | `modules/proxies/proxy_connection_test.dart`、`modules/ssh/proxy_socket.dart`、`utils/network_endpoint.dart` | ProxyConnectionTest 接口，Dart Socket 的 HTTP CONNECT/SOCKS5 握手、认证、超时和取消；IPv6 目标 | 同左，不访问注册表或系统代理 | 同左，不调用系统网络命令 | P-17 | M-22 |
 | RDP 显示控制协商 | `native/rdp/src/remlark_rdp.c` | 共用 FreeRDP 能力回调，协商后发送布局 | 同 macOS | 同 macOS | P-21 | M-25 |
 | 运行中构建覆盖保护 | `tools/utils/build_guard/`、`tools/utils/app_version.py`、`Makefile`、`windows/run.ps1` | ps 读取完整可执行路径 | CIM 读取 ExecutablePath，按 Windows 路径规则比较 | procfs 读取 exe，识别 deleted 文件 | P-22 | M-26 |
+| 构建保护真实进程测试夹具 | `tools/testing/build_guard_test.py` | 复制 Python 为隔离应用、设置 PYTHONHOME 并临时签名 | 复制 Python 为隔离应用、设置 PYTHONHOME / PATH | 复制 Python 为隔离应用、设置 PYTHONHOME，兼容多入口 coreutils | P-22 | — |
 | Actions 临时产物清理 | `release.yml`、`tools/release/cleanup_artifacts.py` | 仅构建不上传，正式发布临时中转，结束后统一清理 | 同左 | 同左；清理在独立 Ubuntu 任务运行 | P-24 | M-27 |
 
 ## 2. 单元测试（test/platform）
@@ -393,3 +394,13 @@ P-21 补充兼容性用例：服务端能力先于窗口调整到达仍能正常
 ### Step 101 验证记录（2026-10-24）
 
 macOS `make test-platform`：93 项通过，3 项跳过（已有真实 RDP 与 Windows 专属助手用例）；P-22 内部 12 项 Python 检查通过，包含三份平台实现的解析/错误用例和 macOS 实际进程。版本工具原有回归仍通过，新增 Dart 测试静态检查无问题。Windows/Linux 当前无可用实机环境，尚未执行本轮 `make test-platform` 和 M-26，不能将本机纯逻辑覆盖等同于三平台实测。
+
+### 2026-10-25 Linux x64 全量验证（Step 109）
+
+- 环境：本仓库 Linux x64 主机，Flutter 3.47.7 / Dart 3.13.5；保留锁定依赖，原生编译沿用 `build/validation/linux-h264-env.sh` 的用户态 NASM / libva 开发文件。
+- 修复 P-22 的真实进程夹具：本机 `/bin/sleep` 来自多入口 coreutils，复制为 remlark 后按名称分派失败；三平台统一改为隔离 Python 副本，设置 PYTHONHOME，Windows 补 PATH，macOS 保留临时签名。Linux 内部 12 项检查通过，`RMK_REQUIRE_RDP_NATIVE=1 flutter test test/platform` 96 项通过、4 项跳过（真实远端 1、macOS 1、Windows 2）；修改后的夹具仍需在 macOS / Windows 执行。
+- 最终全量命令：`RMK_REQUIRE_RDP_NATIVE=1 RMK_DSH_E2E=1 RMK_DSH_E2E_DIR="$PWD/build/validation/dsh-runtime" flutter test --reporter expanded`，426 项通过、11 项跳过；跳过为 macOS SSH 4、按需截图 3、真实 RDP 配置 1、macOS 安装助手 1、Windows 安装助手 2。dsh 复用本地安装目录并检查更新与真实 ACP 交互；本地 SSH / SFTP、RDP 连接 / 剪贴板、原生 AES-GCM、H.264 软件解码、中英文布局和同步场景通过。
+- 服务端 `dart test` 35 项通过，`make analyze` 客户端 / 服务端均无问题。仅补齐 13 处条件分支大括号，不改变业务行为。
+- `make native-lib rdp-test-server`、`make linux`、`make server` 成功。产物为 `dist/remlark-1.0.2-linux-amd64.deb`、`dist/remlark-linux-x64.tar.gz`、`dist/remlark-sync-server-1.0.2-linux-x64.tar.gz`；服务端通过 `python3 tools/release/server_bundle.py linux x64 --smoke` 的归档、解包启动及 SQLite 读写验证。
+- 便携包独立解压，9 个 ELF 文件经 ldd 检查无缺失依赖；`GDK_BACKEND=x11 xvfb-run` 下两次图形启动成功，窗口为 1280×820、最小尺寸 960×640，主密钥跨重启保持一致且权限为 0600。未执行系统安装；不代表干净系统安装、真实远端或 VAAPI GPU 验证。Windows / macOS / arm64 本轮未执行，也未触发远端 CI。
+- 日志：`build/validation/current-flutter-tests-final.log`、`current-platform-tests.log`、`current-server-tests.log`、`current-analyze.log`、`current-native.log`、`current-linux-build.log`、`current-server-build.log`、`current-server-smoke.log`、`current-gui-smoke.log`。

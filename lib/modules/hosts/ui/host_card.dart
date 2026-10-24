@@ -293,8 +293,9 @@ class _ConnectButton extends StatelessWidget {
             mouseCursor: SystemMouseCursors.click,
             // 使用图标前景色叠加，保证明暗主题的实心底色都有可见反馈。
             overlayColor: WidgetStateProperty.resolveWith((states) {
-              if (states.contains(WidgetState.pressed))
+              if (states.contains(WidgetState.pressed)) {
                 return p.onAccent.withValues(alpha: 0.20);
+              }
               if (states.contains(WidgetState.hovered) ||
                   states.contains(WidgetState.focused)) {
                 return p.onAccent.withValues(alpha: 0.12);

@@ -145,8 +145,9 @@ class SshConnector {
     final byUuid = {for (final h in hosts) h.uuid: h};
     final result = <HostEntry>[];
     for (final id in target.jumpChain) {
-      if (id == target.uuid)
+      if (id == target.uuid) {
         throw StateError('jump chain contains target itself');
+      }
       final h = byUuid[id];
       if (h == null) throw StateError('jump host not found: $id');
       result.add(h.forConnection(HostProtocol.ssh));
@@ -291,8 +292,9 @@ class SshConnector {
     }
     if (old == fp) return true;
     final ok = await ui.confirmHostKeyChanged(hop, type, old, fp);
-    if (ok)
+    if (ok) {
       await _hosts.updateFingerprint(hop.uuid, fp, protocol: hop.protocol);
+    }
     return ok;
   }
 }
