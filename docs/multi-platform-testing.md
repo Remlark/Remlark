@@ -68,7 +68,8 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 运行中构建覆盖保护 | `tools/utils/build_guard/`、`tools/utils/app_version.py`、`Makefile`、`windows/run.ps1` | ps 子进程固定 UTF-8 locale，读取未转义的中文完整路径 | CIM 显式输出 UTF-8 JSON，按 Windows 路径规则比较 | procfs 读取 exe，识别 deleted 文件，comm 显式按 UTF-8 读取 | P-22 | M-26 |
 | 构建保护真实进程测试夹具 | `tools/testing/build_guard_test.py`、`test/platform/fixtures/build_guard_probe.c` | xcrun clang 从源码编译本机架构的普通进程，避免复制系统二进制的 SIGKILL；等待就绪标记，验证默认/C locale | 复制 Python 为隔离应用，设置 PYTHONHOME / PATH；仓库文本显式 UTF-8；等待就绪标记，验证默认/C locale | 复制 Python 为隔离应用，设置 PYTHONHOME，兼容多入口 coreutils；等待就绪标记，验证默认/C locale | P-22 | — |
 | 发布前平台专项测试工作流 | `.github/workflows/test.yml` | Intel / ARM64 独立 runner；ARM64 复用精确匹配的 universal 原生缓存；Xcode 测试夹具 | x64 / ARM64 独立 runner；PowerShell、Make、MSVC 测试夹具 | x64 / ARM64 独立 runner；安装运行库及桌面入口测试依赖 | P-25 | M-28 |
-| Actions 临时产物清理 | `release.yml`、`tools/release/cleanup_artifacts.py` | 仅构建不上传，正式发布临时中转，结束后统一清理 | 同左 | 同左；清理在独立 Ubuntu 任务运行 | P-24 | M-27 |
+| Actions 临时产物清理 | `release.yml`、`tools/release/cleanup_artifacts.py` | 仅构建不上传，正式发布中转保留 7 天，publish 成功后只清理当前运行；失败保留供重跑 | 同左 | 同左；清理在独立 Ubuntu 任务运行 | P-24 | M-27 |
+| CI 网络安装重试 | `release.yml`、`test.yml`、[retry_command.py](../tools/utils/retry_command.py) | git clone Flutter、brew、flutter 初始化在 bash 中经 python3 重试 | choco、MSYS2 pacman、flutter 初始化在 pwsh 中经 python3 重试，失败仍由 `$LASTEXITCODE` 判断；`.bat`/`.cmd` 按 PATH 解析 | apt-get、flutter 初始化重试；publish 的 gh release upload/edit 同样重试 | P-28 | M-31 |
 
 ## 2. 单元测试（test/platform）
 
@@ -100,7 +101,8 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-19 | [update_installation_test.dart](../test/platform/update_installation_test.dart) | 实际隔离 Git helper；POSIX 未提交不安装、等待退出、失败回滚、特殊路径；macOS 真实签名/版本校验及 App 替换；Linux 便携解压与交换；任意宿主检查 Windows x64/arm64 BOM 和 POSIX shebang；Windows 实际解析 PowerShell 助手、执行假安装器并核对成功/失败恢复及结果文件 | 点击升级后安装、M-23 |
 | P-22 | [build_guard_test.dart](../test/platform/build_guard_test.dart) | 调用 12 项 Python 检查：三个桌面目标、路径边界/中文空格/大小写、独立副本放行、自定义输出和符号链接、三平台进程解析、查询环境透传及失败保护、默认/C locale 的真实进程存活时拒绝/退出后放行；包装入口失败时不启动 Flutter；仓库文本显式按 UTF-8 读取 | 构建覆盖保护、M-26 |
 | P-23 | [server_bundle_test.dart](../test/platform/server_bundle_test.dart)、[server_bundle_test.py](../tools/testing/server_bundle_test.py) | 六路服务端矩阵、发布依赖、macOS 双架构独立 runner；六种原生文件头与错误平台/架构、缺少/空主程序和 SQLite 库拒绝打包；压缩包布局与 POSIX 执行权限、额外资源保留；P-10 检查缺少服务端附件时禁止发布 | 同步服务端独立发布、M-13 |
-| P-24 | [artifact_cleanup_test.dart](../test/platform/artifact_cleanup_test.dart)、[artifact_cleanup_test.py](../tools/testing/artifact_cleanup_test.py) | 三平台执行相同清理逻辑；仅构建不上传、正式中转保留一天且始终清理；分页先快照再删除、历史运行复用查询、当前/已完成运行选择、保护其他工作流/并行运行/非托管文件及 API 失败上报 | Actions 存储、M-27 |
+| P-24 | [artifact_cleanup_test.dart](../test/platform/artifact_cleanup_test.dart)、[artifact_cleanup_test.py](../tools/testing/artifact_cleanup_test.py) | 三平台执行相同清理逻辑；仅构建不上传、正式中转保留 7 天且重跑覆盖、仅 publish 成功后清理（不使用 always()）；只查询当前运行的 artifacts 并分页先快照再删除，不访问仓库级列表，保护非托管文件及 API 失败上报 | Actions 存储、M-27 |
+| P-28 | [ci_retry_test.dart](../test/platform/ci_retry_test.dart)、[retry_command_test.py](../tools/testing/retry_command_test.py) | 6 项 Python 检查：指数退避、重试前清理半成品且首次不清理、最后退出码传递、命令不存在不重试、非法参数、真实子进程下 `--` 可省略且保留目标命令的 --选项/含空格参数；两个工作流所有网络安装都经过重试工具且无裸命令 | CI 网络安装、M-31 |
 | P-25 | [platform_test_workflow_test.dart](../test/platform/platform_test_workflow_test.dart) | 独立 test* 触发及手动入口、三平台双架构六路矩阵、锁文件与每路仅一次平台专项、禁止客户端全量/dsh/服务端测试及服务端依赖；精确原生缓存及缺失摘要；禁止应用/原生产品构建、上传产物、签名凭据及发布 | 发布前测试、M-28 |
 | P-26 | [source_archive_test.dart](../test/platform/source_archive_test.dart)、[source_archive_test.py](../tools/testing/source_archive_test.py) | 19 项 Python 检查：实际 gzip/tar/SHA、错误响应/截断/CRC、退避/镜像/慢速预算、本地磁盘失败不重试、有效包复用、源码原子发布/回滚、缺失关键文件、非 UTF-8 日志与 CLI；三平台下载入口及 Windows zlib 下载先于编译 | 原生源码下载、M-29 |
 | P-27 | [native_build_resilience_test.dart](../test/platform/native_build_resilience_test.dart)、`tools/testing/native_build_state_test.py`、`tools/testing/windows_build_checks.ps1` | 15 项 Python 检查：阶段完整性/摘要/旧配方/错架构/位置/工具链缓存身份、半安装不混旧产物、通用双架构及 CLI；实际 POSIX 缺工具/架构/语言前置失败；Windows 包装器、实际 Fetch 参数和无工具驱动拒绝；缓存恢复/保存路径集合一致及完整/阶段缓存区分 | 编译恢复、M-30 |
@@ -187,10 +189,11 @@ P-06 还检查 macOS / Linux 测试服务端与应用使用同一 OpenSSL 前缀
 | M-19 | 应用图标 | macOS 从 Finder / make run 启动新版，Dock 显示“连接之门”；固定到 Dock 后退出 / 重开、替换旧版后重开图标正确；Windows 任务栏 / 桌面快捷方式、Linux 应用菜单 / 任务栏使用相同品牌图标。运行中刷新不等于清理系统为旧路径保留的静态固定项 |
 | M-17 | RDP H.264 硬件解码 | 连接开启 H.264 的 Windows 服务器（组策略“远程桌面会话主机 → 远程会话环境”中开启“为远程桌面连接优先使用 H.264/AVC 444 图形模式”与“配置 H.264/AVC 硬件编码”），播放视频或拖动窗口：画面正常、无花屏与色偏；日志中连接行显示“H.264 硬件解码（videotoolbox / d3d11va / vaapi）”；活动监视器 / 任务管理器 / `intel_gpu_top` 或 `radeontop` 中可见 GPU 视频解码负载，CPU 占用低于软件解码时（在设置 → 远程桌面中关闭“RDP 硬件解码”后新建连接即为软件解码，日志显示“设置中已关闭硬件解码”，用于对比）；设置页说明显示本机可用的设备名，显卡不支持时开关禁用；Linux 无 VAAPI 驱动或 Windows 无显卡时日志显示软件解码且画面正常 |
 | M-16 | Release 安装验证 | 在干净的 Windows / Linux x64、arm64 与 Intel / Apple Silicon macOS 下载附件，验证 SHA256SUMS，安装、启动、升级、卸载并连接 SSH / RDP；macOS DMG 拖入 Applications。macOS CI 使用固定自签证书，尚未公证；Windows 未签名，CI 成功不代替实机交互验证 |
-| M-27 | Actions 存储 | 仅构建运行结束后没有 packages/logs artifacts；正式发布结束后 Release 的 16 个附件及 SHA256SUMS 可下载，Actions 中转包已删除；构建/发布失败也触发清理。确认历史已结束运行的 packages/logs 已清理，其他正在运行的构建产物、其他工作流文件和原生缓存保留 |
+| M-27 | Actions 存储 | 仅构建运行结束后没有 packages/logs artifacts，cleanup 跳过；正式发布成功后 Release 的 16 个附件及 SHA256SUMS 可下载，当前运行的中转包已删除。人为让一路构建失败：cleanup 跳过，其他平台包保留；Re-run failed jobs 后 publish 拿到完整矩阵并发布，随后清理当前运行。其他历史运行的包和原生缓存不受影响 |
 | M-28 | 发布前平台专项测试 | 推送新的 test* 标签，确认仅 Platform Tests 触发，检出标签提交且六路各只执行一次 make test-platform，没有客户端全量/dsh/服务端测试及服务端依赖安装，不取消其他 runner；检查原生缓存命中及缺失摘要，缺失时不得编译原生库；无应用/服务端产品构建、签名、打包、artifact 或 Release。后续推送 v* 标签仍独立触发正式发布 |
 | M-29 | 原生源码下载与构建 | 三平台分别执行 make test-platform；在对应系统使用无源码缓存的独立检出目录验证原生构建。Windows x64/arm64 均应在 OpenSSL 编译前完成 zlib/FFmpeg 下载校验；错误响应明确重试/回退且不解压损坏文件，通过校验后继续构建。实际 Windows tar/MSVC 集成及外网偶发响应需对应 runner 验证 |
 | M-30 | 阶段完成与缓存恢复 | 三平台执行 make test-platform；在独立环境验证普通构建失败后，仅保存已完成阶段和有效源码包，重试应复用已完成 OpenSSL 等依赖，未完成阶段重建；胶水 C 改动不作废第三方阶段缓存；MSVC/工作区/校验器变化不误命中；macOS universal 缺任一架构或 SSH 库不得保存完整缓存；强制取消/runner 故障可能无法执行保存步骤 |
+| M-31 | CI 网络安装重试 | 在三平台 runner 查看日志，apt-get/brew/choco/pacman/flutter/git clone 均出现 `==> run (attempt 1/3)`；Windows pwsh 下 choco、MSYS2 bash 及 flutter.bat 能正常启动且失败仍被 `$LASTEXITCODE` 拦截；网络偶发失败时出现重试并继续 |
 
 M-20：下载新 CI 的 macOS zip / DMG，核对 `codesign -dv --verbose=4` 的 Authority 是固定自签名称、不是 `Signature=adhoc`，执行 `codesign --verify --deep --strict --all-architectures /Applications/remlark.app`。分别在 Intel / Apple Silicon 干净系统检查首次 Gatekeeper 放行，再覆盖安装同证书的新版本，记录是否再次放行及辅助功能等隐私权限是否保留；不以自签或单元测试保证系统免授权。检查 Actions 日志不含证书密码，缺失 Secret 应在构建前失败，失败构建不得上传可发布附件。
 
@@ -508,3 +511,9 @@ Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过�
 - 本机 Intel macOS `make test-platform` 106 项通过、3 条件跳过（11 秒）；Python 3.9.6 和当前 Python 通过两套检查，ASCII 严格控制台用例通过。本地 PowerShell 7.6.8 解析脚本，默认/Legacy 模式运行包装器、错目标/缺工具拒绝、实际 Fetch 的多 URL/中文空格路径/缺失源码修复；使用本地文件 URL 和替身编译器，不构建产品。三个真实上游源码包均通过下载、完整性检查及系统 tar 暂存解压。
 - 本地 PowerShell 7 并不代表 Windows PowerShell 5.1 + MSVC 实机构建通过；Windows/Linux 的 make test-platform、完整编译和 GitHub 缓存实际保存恢复仍待有环境/额度时按 M-29/M-30 验证，当前未触发。缓存保存适用于普通失败，runner 故障或全局强制取消不能保证执行清理/保存步骤。
 - 日志：`build/validation/pre-release-tests/native-audit-platform.log`、`source-faults.log`、`native-state-faults.log`、`source-system-python.log`、`state-system-python.log`、`source-ascii-console.log`、`powershell-wrapper-checks.log`、`powershell-legacy-checks.log`、`upstream-source-checks.log`、`audit-actionlint.log`。下载的本地验证用 PowerShell 放在忽略的 `build/validation/script-audit/`，未修改系统安装。
+
+### 2026-10-25 发布失败保留中转包与网络安装重试（Step 121）
+
+- cleanup 改为仅在 publish 成功后运行，只删除当前运行的中转包；保留期 1 天改为 7 天并允许重跑覆盖同名包，失败后可直接 Re-run failed jobs。
+- 新增 `tools/utils/retry_command.py`，release.yml 与 test.yml 的网络安装和 Release 附件上传统一有限重试。
+- 本机 Intel macOS `make test-platform` 108 项通过、3 条件跳过；P-24/P-28 Python 检查通过，两个工作流 YAML 解析通过。本机未安装 actionlint。Windows/Linux 的平台测试、M-27 失败重跑和 M-31 需在测试仓库 Actions 上验证。

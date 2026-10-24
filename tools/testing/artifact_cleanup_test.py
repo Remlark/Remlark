@@ -13,26 +13,19 @@ from tools.release.cleanup_artifacts import cleanup
 class ArtifactCleanupTests(unittest.TestCase):
     """在三个系统以隔离 API 响应验证远端删除范围。"""
 
-    def test_pagination_and_protected_artifacts(self):
-        """删除当前及历史临时包，保留并行任务、其他工作流和其他用途的产物。"""
+    def test_only_current_run_is_cleaned(self):
+        """分页快照后只删除当前运行的临时包，保留非托管文件，不查询或删除历史运行。"""
         artifacts = [
-            {'id': 1, 'name': 'packages-macos-universal', 'workflow_run': {'id': 1}, 'size_in_bytes': 10},
-            {'id': 2, 'name': 'packages-server-linux-arm64', 'workflow_run': {'id': 2}, 'size_in_bytes': 20},
-            {'id': 3, 'name': 'logs-windows-x64', 'workflow_run': {'id': 2}, 'size_in_bytes': 30},
-            {'id': 4, 'name': 'packages-linux-x64', 'workflow_run': {'id': 3}, 'size_in_bytes': 40},
-            {'id': 5, 'name': 'packages-other', 'workflow_run': {'id': 4}, 'size_in_bytes': 50},
-            {'id': 6, 'name': 'unmanaged-backup', 'workflow_run': {'id': 2}, 'size_in_bytes': 60},
-            {'id': 7, 'name': 'packages-orphan', 'size_in_bytes': 70},
+            {'id': 1, 'name': 'packages-macos-universal', 'size_in_bytes': 10},
+            {'id': 2, 'name': 'packages-server-linux-arm64', 'size_in_bytes': 20},
+            {'id': 3, 'name': 'logs-windows-x64', 'size_in_bytes': 30},
+            {'id': 4, 'name': 'unmanaged-backup', 'size_in_bytes': 60},
         ]
-        artifacts.extend({'id': i, 'name': 'unmanaged', 'size_in_bytes': 1} for i in range(8, 101))
-        artifacts.append({'id': 101, 'name': 'packages-windows-arm64', 'workflow_run': {'id': 2}, 'size_in_bytes': 40})
+        artifacts.extend({'id': i, 'name': 'unmanaged', 'size_in_bytes': 1} for i in range(5, 101))
+        artifacts.append({'id': 101, 'name': 'packages-windows-arm64', 'size_in_bytes': 40})
         responses = {
-            'runs/1': {'workflow_id': 9, 'status': 'in_progress'},
-            'runs/2': {'workflow_id': 9, 'status': 'completed'},
-            'runs/3': {'workflow_id': 9, 'status': 'in_progress'},
-            'runs/4': {'workflow_id': 10, 'status': 'completed'},
-            'artifacts?per_page=100&page=1': {'artifacts': artifacts[:100]},
-            'artifacts?per_page=100&page=2': {'artifacts': artifacts[100:]},
+            'runs/7/artifacts?per_page=100&page=1': {'artifacts': artifacts[:100]},
+            'runs/7/artifacts?per_page=100&page=2': {'artifacts': artifacts[100:]},
         }
         calls = []
 
@@ -44,12 +37,14 @@ class ArtifactCleanupTests(unittest.TestCase):
                 return None
             return responses[path]
 
-        self.assertEqual(cleanup(Mock(request=request), 1), 100)
+        self.assertEqual(cleanup(Mock(request=request), 7), 100)
         self.assertEqual([path for path, method in calls if method == 'DELETE'],
                          ['artifacts/1', 'artifacts/2', 'artifacts/3', 'artifacts/101'])
-        self.assertLess(calls.index(('artifacts?per_page=100&page=2', 'GET')),
+        self.assertLess(calls.index(('runs/7/artifacts?per_page=100&page=2', 'GET')),
                         calls.index(('artifacts/1', 'DELETE')))
-        self.assertEqual(calls.count(('runs/2', 'GET')), 1)
+        # 不访问仓库级 artifacts 列表，失败待重跑的历史运行不可能被误删。
+        self.assertTrue(all(path.startswith(('runs/7/', 'artifacts/')) for path, _ in calls))
+        self.assertFalse(any(path.startswith('artifacts?') for path, _ in calls))
 
     def test_api_failure_is_not_hidden(self):
         """权限或网络失败必须上报，不把清理失败当作成功。"""

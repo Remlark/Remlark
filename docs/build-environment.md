@@ -316,7 +316,9 @@ git push origin test-20261025-01
 
 在 Desktop Release 中选择 Run workflow，选择待验证分支，tag 留空并保持 `build_only=true`。工作流执行桌面五路构建、安装包生成与构建前后 `make test-platform`，以及服务端六路构建、测试与解包启动验证，不上传 Actions artifacts、不发布 Release。正式手工发布需填写与 VERSION 中版本号一致的已有版本标签，并关闭 `build_only`；推送 v* 标签仍自动发布。
 
-正式发布所需的压缩包仅作为任务间中转上传，保留上限为 1 天；流程结束（包括构建/发布失败或仅验证）后 `cleanup` 任务立即删除本次中转包，同时分页清理同一工作流历史已结束运行的 `packages-*`、`logs-*`。其他正在运行的任务、其他工作流产物、Release 下载附件和用于加速编译的原生缓存保留。清理使用 `actions: write`，API 失败会明确报错；若工作流被强制取消导致清理未执行，本次正式发布中转包仍按 1 天上限过期。旧文件需新版工作流至少运行一次才会清理。
+正式发布所需的压缩包仅作为任务间中转上传，保留 7 天，重跑同名包时覆盖。只有 `publish` 成功（附件已全部进入 Release）后，`cleanup` 任务才删除**本次运行**的 `packages-*`、`logs-*`；任一构建或发布失败都不删除，已成功平台的包保留，可直接 Re-run failed jobs。历史运行的中转包不自动清理，由 7 天保留期过期或手动删除。Release 附件和原生缓存不受影响。清理使用 `actions: write`，API 失败会明确报错。
+
+CI 中的网络安装（Flutter 克隆和首次初始化、apt-get、brew、choco、MSYS2 pacman、pub get、gh release upload/edit）统一通过 `python3 tools/utils/retry_command.py [--clean 路径] -- 命令...` 有限重试，默认 3 次、间隔 10/20 秒，最终返回最后一次退出码。
 
 2026-10-21 已用此模式完成硬件加速版本五路验证：[Desktop Build #11](https://github.com/Remlark/Remlark/actions/runs/39615318096)，macOS universal、Windows / Linux x64 与 arm64 编译、打包、构建后平台测试全部通过。具体解码结果和实机验证范围见 [multi-platform-testing.md](multi-platform-testing.md#2026-10-21-硬件加速版本-github-actions-全矩阵验证step-84)。
 

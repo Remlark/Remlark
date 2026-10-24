@@ -57,15 +57,16 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: python3 tools/release/prepare.py validate
       # 从固定的官方源码标签启动 SDK，兼容没有预打包 Flutter SDK 的 ARM64 主机。
+      # 网络安装统一经 retry_command.py 有限重试；克隆失败先删除半成品目录。
       - name: Install Flutter
         run: |
-          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          python3 tools/utils/retry_command.py --clean "$RUNNER_TEMP/flutter" -- git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
           echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
       - name: Linux build dependencies
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev fonts-noto-cjk perl zlib1g-dev nasm libva-dev curl ca-certificates tar zip unzip xdg-utils python3 dpkg-dev desktop-file-utils
+          python3 tools/utils/retry_command.py -- sudo apt-get update
+          python3 tools/utils/retry_command.py -- sudo apt-get install -y build-essential clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev fonts-noto-cjk perl zlib1g-dev nasm libva-dev curl ca-certificates tar zip unzip xdg-utils python3 dpkg-dev desktop-file-utils
       - name: Import macOS signing certificate
         if: runner.os == 'macOS'
         env:
@@ -74,20 +75,20 @@ jobs:
         run: python3 tools/release/macos_signing.py install
       - name: macOS build dependencies
         if: runner.os == 'macOS'
-        run: brew install cmake ninja nasm
+        run: python3 tools/utils/retry_command.py -- brew install cmake ninja nasm
       - name: Windows build dependencies
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          choco install make strawberryperl nasm innosetup jom --yes --no-progress
+          python3 tools/utils/retry_command.py -- choco install make strawberryperl nasm innosetup jom --yes --no-progress
           if ($LASTEXITCODE -ne 0) { throw 'Windows dependency installation failed' }
           @('C:\Strawberry\perl\bin', 'C:\Program Files\NASM', 'C:\Program Files (x86)\Inno Setup 6') | Add-Content $env:GITHUB_PATH
           # FFmpeg 的 configure 需要 MSYS2 的 bash / make；ARM64 镜像未预装 MSYS2 时先安装
           if (-not (Test-Path 'C:\msys64\usr\bin\bash.exe')) {
-            choco install msys2 --params '/InstallDir:C:\msys64 /NoUpdate' --yes --no-progress
+            python3 tools/utils/retry_command.py -- choco install msys2 --params '/InstallDir:C:\msys64 /NoUpdate' --yes --no-progress
             if ($LASTEXITCODE -ne 0) { throw 'MSYS2 installation failed' }
           }
-          C:\msys64\usr\bin\bash.exe -lc 'pacman -S --noconfirm --needed make diffutils'
+          python3 tools/utils/retry_command.py -- C:\msys64\usr\bin\bash.exe -lc 'pacman -S --noconfirm --needed make diffutils'
           if ($LASTEXITCODE -ne 0) { throw 'MSYS2 package installation failed' }
       - name: Initialize MSVC
         if: runner.os == 'Windows'
@@ -125,8 +126,8 @@ jobs:
       - name: Flutter dependencies
         if: runner.os != 'Windows'
         run: |
-          flutter config --no-analytics --enable-linux-desktop --enable-macos-desktop --enable-windows-desktop
-          flutter --version
+          python3 tools/utils/retry_command.py -- flutter config --no-analytics --enable-linux-desktop --enable-macos-desktop --enable-windows-desktop
+          python3 tools/utils/retry_command.py -- flutter --version
           make deps
       - name: Platform tests
         if: runner.os != 'Windows'
@@ -135,9 +136,10 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          flutter config --no-analytics --enable-windows-desktop
+          python3 tools/utils/retry_command.py -- flutter config --no-analytics --enable-windows-desktop
           if ($LASTEXITCODE -ne 0) { throw 'Flutter configuration failed' }
-          flutter --version
+          python3 tools/utils/retry_command.py -- flutter --version
+          if ($LASTEXITCODE -ne 0) { throw 'Flutter bootstrap failed' }
           make deps
           if ($LASTEXITCODE -ne 0) { throw 'Flutter dependencies failed' }
       - name: Windows platform tests
@@ -215,7 +217,9 @@ jobs:
             dist/*.tar.gz
             dist/*.dmg
           if-no-files-found: error
-          retention-days: 1
+          # 失败后需要保留其他平台包以便 Re-run failed jobs；重跑同名包时覆盖。
+          overwrite: true
+          retention-days: 7
 
   server:
     name: server-${{ matrix.platform }}-${{ matrix.arch }}
@@ -264,7 +268,9 @@ jobs:
             dist/remlark-sync-server-*.zip
             dist/remlark-sync-server-*.tar.gz
           if-no-files-found: error
-          retention-days: 1
+          # 失败后需要保留其他平台包以便 Re-run failed jobs；重跑同名包时覆盖。
+          overwrite: true
+          retention-days: 7
 
   publish:
     name: Publish complete release
@@ -298,13 +304,14 @@ jobs:
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --verify-tag --draft --title "Remlark $RELEASE_TAG" --generate-notes
           fi
-          gh release upload "$RELEASE_TAG" dist/* --clobber
-          gh release edit "$RELEASE_TAG" --draft=false
+          python3 tools/utils/retry_command.py -- gh release upload "$RELEASE_TAG" dist/* --clobber
+          python3 tools/utils/retry_command.py -- gh release edit "$RELEASE_TAG" --draft=false
 
+  # 只有附件已全部发布到 Release 才删除中转包；任一失败都保留，便于 Re-run failed jobs。
   cleanup:
     name: Remove temporary Actions packages
-    needs: [build, server, publish]
-    if: always()
+    needs: [publish]
+    if: needs.publish.result == 'success'
     runs-on: ubuntu-24.04
     permissions:
       actions: write
@@ -314,8 +321,8 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref_name }}
           persist-credentials: false
-      # 无论发布成功、失败或仅验证构建，都清理当前及历史已结束运行的中转包。
-      - name: Delete temporary packages and old build logs
+      # 仅清理当前运行；历史运行（含失败待重跑的）保留，由保留期过期或手动删除。
+      - name: Delete temporary packages of this run
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 tools/release/cleanup_artifacts.py

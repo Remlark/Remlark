@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""删除本发布工作流的临时产物，不改动 Release 附件、缓存和其他工作流。"""
+"""Release 发布成功后删除本次运行的临时产物，不改动 Release 附件、缓存和其他运行。"""
 
 import json
 import os
@@ -25,14 +25,13 @@ class ActionsApi:
             return json.load(response) if method == 'GET' else None
 
 
-def cleanup(api, current_run_id):
-    """先分页快照再删除，保护并行运行、其他工作流和非本流程管理的文件。"""
-    current = api.request(f'runs/{current_run_id}')
-    runs = {int(current_run_id): current}
+def cleanup(api, run_id):
+    """只删除当前运行的中转包；历史运行（含失败待重跑的）保留，由保留期或手动删除。"""
     artifacts = []
     page = 1
+    # 先分页快照再删除，避免边删边翻页漏掉后续条目。
     while True:
-        batch = api.request(f'artifacts?per_page=100&page={page}')['artifacts']
+        batch = api.request(f'runs/{run_id}/artifacts?per_page=100&page={page}')['artifacts']
         artifacts.extend(batch)
         if len(batch) < 100:
             break
@@ -42,17 +41,6 @@ def cleanup(api, current_run_id):
     for artifact in artifacts:
         if not artifact['name'].startswith(('packages-', 'logs-')):
             continue
-        run_id = artifact.get('workflow_run', {}).get('id')
-        if run_id is None:
-            continue
-        if run_id not in runs:
-            runs[run_id] = api.request(f'runs/{run_id}')
-        run = runs[run_id]
-        if run['workflow_id'] != current['workflow_id']:
-            continue
-        # 当前运行的所有构建和发布任务已结束；历史运行必须整体完成才允许清理。
-        if run_id != int(current_run_id) and run['status'] != 'completed':
-            continue
         api.request(f'artifacts/{artifact["id"]}', method='DELETE')
         deleted_bytes += artifact['size_in_bytes']
         print(f'Deleted Actions artifact: {artifact["name"]} ({artifact["size_in_bytes"]} bytes)')
@@ -61,7 +49,7 @@ def cleanup(api, current_run_id):
 
 
 def main():
-    """仅使用工作流注入的 GitHub 上下文执行清理。"""
+    """仅使用工作流注入的 GitHub 上下文清理当前运行。"""
     api = ActionsApi(os.environ['GITHUB_REPOSITORY'], os.environ['GH_TOKEN'])
     cleanup(api, int(os.environ['GITHUB_RUN_ID']))
 

@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// 多平台测试 P-24：Actions 临时包保留策略与安全清理范围。
 void main() {
-  test('分页删除仅覆盖本工作流已结束运行及当前中转包', () async {
+  test('分页删除仅覆盖当前运行的中转包，不触碰历史运行', () async {
     final result = await Process.run('python3', [
       'tools/testing/artifact_cleanup_test.py',
       '-v',
@@ -12,7 +12,7 @@ void main() {
     expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
   });
 
-  test('仅构建不上传压缩包，正式发布中转一天且始终执行清理', () {
+  test('仅构建不上传压缩包，中转保留七天，发布成功后才清理', () {
     final workflow = File('.github/workflows/release.yml')
         .readAsLinesSync()
         .join('\n');
@@ -24,11 +24,15 @@ void main() {
         uses: actions/upload-artifact@v4'''),
       );
     }
-    expect('retention-days: 1'.allMatches(workflow).length, 2);
+    // 失败时其他平台包必须留存，才能 Re-run failed jobs；重跑同名包覆盖旧包。
+    expect('retention-days: 7'.allMatches(workflow).length, 2);
+    expect('overwrite: true'.allMatches(workflow).length, 2);
+    expect(workflow, isNot(contains('retention-days: 1')));
     expect(workflow, isNot(contains('name: Upload native build logs')));
     final cleanup = workflow.substring(workflow.indexOf('  cleanup:'));
-    expect(cleanup, contains('needs: [build, server, publish]'));
-    expect(cleanup, contains('if: always()'));
+    expect(cleanup, contains('needs: [publish]'));
+    expect(cleanup, contains("if: needs.publish.result == 'success'"));
+    expect(cleanup, isNot(contains('always()')));
     expect(cleanup, contains('actions: write'));
     expect(cleanup, contains('python3 tools/release/cleanup_artifacts.py'));
   });

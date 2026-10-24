@@ -853,3 +853,9 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 新增跨平台完成记录工具：所有必需库/头文件、摘要、配方、安装位置和目标目录都一致才可复用；安装成功后提交记录，单个非空库不能代表完成。新增阶段缓存，普通失败保留完成依赖/验证包，胶水 C 改动不作废第三方进度；完整库缓存要求所有依赖和双原生库齐全、通用包两架构完成。
   - 统一发布/专项的缓存路径集合，排除大型临时编译目录；缓存环境身份绑定工作区、校验器及 MSVC，避免不可更新的旧缓存反复命中。P-26 扩展至 19 项 Python 回归，新增 P-27 的 15 项阶段/前置检查回归和 PowerShell 包装器检查，更新 M-29/M-30。
   - 验证：本机平台集合 106 项通过、3 条件跳过；Python 3.9.6 与当前 Python、ASCII 严格控制台回归通过。本地 PowerShell 7.6.8 解析全部脚本并以默认/Legacy 参数模式执行实际包装器、真实 Fetch 和缺工具驱动分支；OpenSSL/FreeRDP/FFmpeg 三个上游源码实际下载校验与暂存解压通过。定向分析、bash 语法、actionlint 和 diff 检查通过。全程未编译产品、未运行客户端全量/服务端/dsh、未推送或触发 Actions；Windows PowerShell 5.1 + MSVC 与完整三平台构建/缓存服务恢复未实际执行，不能等同于完整 Windows 构建通过。
+
+- [已完成] Step 121：发布失败保留中转包并为 CI 网络安装加重试
+  - cleanup 改为 `needs.publish.result == 'success'` 时运行，只删除当前运行的 packages/logs；任一平台失败都不删，已成功平台的包留给 Re-run failed jobs。不再自动清理历史运行，避免误删失败待重跑的包。
+  - 中转包保留期 1 天改为 7 天，upload-artifact 开启 overwrite，重跑同名包可以覆盖。
+  - 新增三平台共用的 `tools/utils/retry_command.py`（默认 3 次、指数退避、重试前清理半成品、命令不存在不重试、返回最后退出码）。release.yml 与 test.yml 的 Flutter 克隆/初始化、apt-get、brew、choco、MSYS2 pacman、pub get 以及 gh release upload/edit 都经过它。
+  - P-24 改为验证仅当前运行和成功后清理；新增 P-28 及 M-31，M-27 增加失败重跑验收。本机 macOS `make test-platform` 108 项通过、3 条件跳过；Windows/Linux 需在测试仓库 Actions 验证。
