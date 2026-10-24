@@ -167,8 +167,10 @@ def prepare_source(destination, urls, root, required, sha256=None, tar='tar', at
     download_archive(destination, urls, root, sha256, attempts)
     with tempfile.TemporaryDirectory(dir=destination.parent, prefix='.source-') as temporary:
         staging = Path(temporary)
-        subprocess.run([tar, '-xzf', str(destination.resolve()), '-C', str(staging)],
-                       check=True, timeout=120)
+        # Windows bsdtar 把参数转成 ANSI 代码页，中文路径会变成 ??；
+        # 工作目录用 Unicode 传入，tar 只接收 ASCII 的相对文件名。
+        subprocess.run([tar, '-xzf', destination.name, '-C', staging.name],
+                       cwd=destination.parent, check=True, timeout=120)
         prepared = staging / root
         if not all((prepared / name).is_file() and (prepared / name).stat().st_size > 0
                    for name in required):

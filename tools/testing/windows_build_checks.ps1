@@ -84,7 +84,9 @@ with tarfile.open(path, 'w:gz') as archive:
   $archive = Join-Path $work 'fixture.tar.gz'
   $uri = & python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve().as_uri())' $archive
   if ($LASTEXITCODE -ne 0 -or -not $uri) { throw 'Cannot prepare local fixture URI' }
-  $hash = (Get-FileHash -Path $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+  # 不用 Get-FileHash：从 pwsh 7 启动 5.1 时继承的 PSModulePath 会使该 cmdlet 无法加载。
+  $hash = & python3 -c 'import hashlib,pathlib,sys; print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())' $archive
+  if ($LASTEXITCODE -ne 0 -or -not $hash) { throw 'Cannot hash local fixture' }
   Fetch $uri 'zlib-1.3.1' 'CMakeLists.txt' $uri $hash
   $required = Join-Path $DepsSrc 'zlib-1.3.1/CMakeLists.txt'
   if ((Get-Content -Raw $required) -ne 'code') { throw 'Fetch did not preserve source contents' }

@@ -104,7 +104,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-24 | [artifact_cleanup_test.dart](../test/platform/artifact_cleanup_test.dart)、[artifact_cleanup_test.py](../tools/testing/artifact_cleanup_test.py) | 三平台执行相同清理逻辑；仅构建不上传、正式中转保留 7 天且重跑覆盖、仅 publish 成功后清理（不使用 always()）；只查询当前运行的 artifacts 并分页先快照再删除，不访问仓库级列表，保护非托管文件及 API 失败上报 | Actions 存储、M-27 |
 | P-28 | [ci_retry_test.dart](../test/platform/ci_retry_test.dart)、[retry_command_test.py](../tools/testing/retry_command_test.py) | 6 项 Python 检查：指数退避、重试前清理半成品且首次不清理、最后退出码传递、命令不存在不重试、非法参数、真实子进程下 `--` 可省略且保留目标命令的 --选项/含空格参数；两个工作流所有网络安装都经过重试工具且无裸命令 | CI 网络安装、M-31 |
 | P-25 | [platform_test_workflow_test.dart](../test/platform/platform_test_workflow_test.dart) | 独立 test* 触发及手动入口、三平台双架构六路矩阵、锁文件与每路仅一次平台专项、禁止客户端全量/dsh/服务端测试及服务端依赖；精确原生缓存及缺失摘要；禁止应用/原生产品构建、上传产物、签名凭据及发布 | 发布前测试、M-28 |
-| P-26 | [source_archive_test.dart](../test/platform/source_archive_test.dart)、[source_archive_test.py](../tools/testing/source_archive_test.py) | 19 项 Python 检查：实际 gzip/tar/SHA、错误响应/截断/CRC、退避/镜像/慢速预算、本地磁盘失败不重试、有效包复用、源码原子发布/回滚、缺失关键文件、非 UTF-8 日志与 CLI；三平台下载入口及 Windows zlib 下载先于编译 | 原生源码下载、M-29 |
+| P-26 | [source_archive_test.dart](../test/platform/source_archive_test.dart)、[source_archive_test.py](../tools/testing/source_archive_test.py) | 20 项 Python 检查：实际 gzip/tar/SHA、tar 仅接收 ASCII 相对参数（Windows bsdtar 中文路径）、错误响应/截断/CRC、退避/镜像/慢速预算、本地磁盘失败不重试、有效包复用、源码原子发布/回滚、缺失关键文件、非 UTF-8 日志与 CLI；三平台下载入口及 Windows zlib 下载先于编译 | 原生源码下载、M-29 |
 | P-27 | [native_build_resilience_test.dart](../test/platform/native_build_resilience_test.dart)、`tools/testing/native_build_state_test.py`、`tools/testing/windows_build_checks.ps1` | 15 项 Python 检查：阶段完整性/摘要/旧配方/错架构/位置/工具链缓存身份、半安装不混旧产物、通用双架构及 CLI；实际 POSIX 缺工具/架构/语言前置失败；Windows 包装器、实际 Fetch 参数和无工具驱动拒绝；缓存恢复/保存路径集合一致及完整/阶段缓存区分 | 编译恢复、M-30 |
 
 P-11 的测试帧由 libx264 生成（BT.709 全范围，与 FreeRDP 的 YUV 转换一致），同一份字节内置在 [rmk_h264_probe_frame.h](../native/rdp/src/rmk_h264_probe_frame.h) 中，原生库首次连接时用它实际硬件解码一帧，解码成功且颜色正确才启用硬件（虚拟机、驱动异常等能创建设备却无法解码的环境会改用软件解码）。重新生成时两处同步更新：
@@ -517,3 +517,9 @@ Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过�
 - cleanup 改为仅在 publish 成功后运行，只删除当前运行的中转包；保留期 1 天改为 7 天并允许重跑覆盖同名包，失败后可直接 Re-run failed jobs。
 - 新增 `tools/utils/retry_command.py`，release.yml 与 test.yml 的网络安装和 Release 附件上传统一有限重试。
 - 本机 Intel macOS `make test-platform` 108 项通过、3 条件跳过；P-24/P-28 Python 检查通过，两个工作流 YAML 解析通过。本机未安装 actionlint。Windows/Linux 的平台测试、M-27 失败重跑和 M-31 需在测试仓库 Actions 上验证。
+
+### 2026-10-25 Windows 中文路径解压与 PowerShell 5.1 哈希修复（Step 122）
+
+- 测试仓库 Release 40136798355 中 Windows x64/arm64 都在构建前的 `make test-platform` 失败。一是 System32 bsdtar 把命令行参数转成 ANSI 代码页，含中文的临时目录变成 `??`，P-26 有 3 项解压失败，真实构建在中文工作目录下也会失败。二是 P-27 的 PowerShell 5.1 由 pwsh 7 启动，继承的 PSModulePath 导致 `Get-FileHash` 无法加载。
+- 修复：`prepare_source` 用工作目录定位压缩包，只给 tar 传 ASCII 相对文件名；测试脚本改用 python 计算 SHA-256，保留 UTF-8 BOM。P-26 新增参数断言用例（共 20 项）。
+- 本机 macOS `make test-platform` 108 项通过、3 条件跳过；Windows 需在测试仓库重新验证。

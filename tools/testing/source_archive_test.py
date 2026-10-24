@@ -198,6 +198,26 @@ class SourceArchiveTests(unittest.TestCase):
         prepare_source(self.target, ['https://unused'], directory.name, ['source.c'])
         self.assertEqual((directory / 'source.c').read_bytes(), b'code')
 
+    def test_tar_receives_ascii_relative_paths(self):
+        """Windows bsdtar 会把非 ASCII 参数变成 ??，只能传相对文件名并通过工作目录定位。"""
+        self.target.write_bytes(self.valid)
+        real_run = subprocess.run
+        calls = []
+
+        def run(command, **kwargs):
+            """记录 tar 参数后执行真实解压。"""
+            calls.append((command, kwargs))
+            return real_run(command, **kwargs)
+
+        with patch('subprocess.run', side_effect=run):
+            prepare_source(self.target, ['https://unused'], 'zlib-1.3.1', ['source.c'])
+        command, kwargs = calls[0]
+        self.assertEqual(Path(kwargs['cwd']), self.target.parent)
+        for argument in command[1:]:
+            self.assertTrue(argument.isascii(), argument)
+            self.assertFalse(Path(argument).is_absolute(), argument)
+        self.assertTrue((self.target.parent / 'zlib-1.3.1' / 'source.c').is_file())
+
     def test_extract_failure_preserves_existing_source(self):
         """解压命令失败或超时，旧目录保持原样，临时目录必须清理。"""
         self.target.write_bytes(self.valid)

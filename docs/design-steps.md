@@ -859,3 +859,8 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 中转包保留期 1 天改为 7 天，upload-artifact 开启 overwrite，重跑同名包可以覆盖。
   - 新增三平台共用的 `tools/utils/retry_command.py`（默认 3 次、指数退避、重试前清理半成品、命令不存在不重试、返回最后退出码）。release.yml 与 test.yml 的 Flutter 克隆/初始化、apt-get、brew、choco、MSYS2 pacman、pub get 以及 gh release upload/edit 都经过它。
   - P-24 改为验证仅当前运行和成功后清理；新增 P-28 及 M-31，M-27 增加失败重跑验收。本机 macOS `make test-platform` 108 项通过、3 条件跳过；Windows/Linux 需在测试仓库 Actions 验证。
+
+- [已完成] Step 122：修复 Windows 中文路径解压与 PowerShell 5.1 测试哈希
+  - 测试仓库 Release 40136798355 两路 Windows 在平台测试阶段失败：System32 bsdtar 把中文路径参数转成 `??` 后打不开压缩包；PowerShell 5.1 从 pwsh 7 启动时 `Get-FileHash` 无法加载。
+  - `source_archive.py` 解压时把工作目录设为压缩包目录，只传 ASCII 相对文件名，三平台共用；`windows_build_checks.ps1` 改用 python 计算哈希。P-26 新增 tar 参数回归。
+  - 验证：macOS `make test-platform` 108 项通过、3 条件跳过；Windows x64/arm64 待测试仓库重新运行。
