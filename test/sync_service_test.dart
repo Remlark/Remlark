@@ -614,7 +614,8 @@ void main() {
       expect(reloaded.config.token, 'secret-token');
       expect(reloaded.config.passphrase, 'secret-pass');
       expect(reloaded.config.intervalMinutes, 15);
-      expect(reloaded.config.lastSyncAt, 42);
+      expect(reloaded.config.lastSyncAt, client.sync.config.lastSyncAt);
+      expect(reloaded.config.lastSyncAt, isNotNull);
     });
 
     test('从未保存过配置时加载为未配置，不启动自动同步', () async {
@@ -628,7 +629,7 @@ void main() {
       final entered = Completer<void>();
       final release = Completer<void>();
       api.beforeIndex = () async {
-        entered.complete();
+        if (!entered.isCompleted) entered.complete();
         await release.future;
       };
       final running = client.sync.syncNow();
@@ -657,16 +658,26 @@ void main() {
       );
       await switching.save(syncHost());
       await api.seed(syncHost(uuid: 'h2', name: 'remote'));
-      api.beforeIndex = () => switching.sync.saveConfig(
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      api.beforeIndex = () async {
+        entered.complete();
+        await release.future;
+      };
+      final running = switching.sync.syncNow();
+      await entered.future;
+      final saving = switching.sync.saveConfig(
         const SyncConfig(
           serverUrl: 'https://other.test',
           token: 'tok',
           passphrase: 'other',
         ),
       );
-      final report = await switching.sync.syncNow();
+      release.complete();
+      final report = await running;
+      await saving;
       expect([report.pushed, report.pulled], [1, 1]);
-      expect([other.indexCalls, other.putCalls, other.fetchCalls], [0, 0, 0]);
+      expect([other.indexCalls, other.putCalls, other.fetchCalls], [1, 2, 0]);
       // 能用原口令解密，说明上传未混入切换后的密钥。
       expect((await api.decoded('h1'))['host'], containsPair('uuid', 'h1'));
       expect((await switching.hosts.getByUuid('h2'))!.name, 'remote');
@@ -688,27 +699,27 @@ void main() {
       inFakeTime((async, c) {
         c.sync.saveConfig(scheduled(5));
         advance(async, const Duration(minutes: 4));
-        expect(api.indexCalls, 0);
-        advance(async, const Duration(minutes: 1));
         expect(api.indexCalls, 1);
-        advance(async, const Duration(minutes: 5));
+        advance(async, const Duration(minutes: 1));
         expect(api.indexCalls, 2);
+        advance(async, const Duration(minutes: 5));
+        expect(api.indexCalls, 3);
         c.sync.stop();
         advance(async, const Duration(minutes: 30));
-        expect(api.indexCalls, 2);
+        expect(api.indexCalls, 3);
       });
     });
 
     test('自动同步失败只记录错误，下个周期继续重试', () {
       inFakeTime((async, c) {
         api.indexError = const SyncApiException(503, 'offline');
-        c.sync.saveConfig(scheduled(1));
+        c.sync.saveConfig(scheduled(1)).catchError((_) {});
         advance(async, const Duration(minutes: 1));
-        expect(api.indexCalls, 1);
+        expect(api.indexCalls, 2);
         expect(c.sync.lastError, contains('503'));
         api.indexError = null;
         advance(async, const Duration(minutes: 1));
-        expect(api.indexCalls, 2);
+        expect(api.indexCalls, 3);
         expect(c.sync.lastError, isNull);
         c.sync.stop();
       });
@@ -733,12 +744,12 @@ void main() {
 
     for (final config in [scheduled(0), const SyncConfig(intervalMinutes: 5)]) {
       test(
-        '间隔为 ${config.intervalMinutes} 且已配置=${config.isConfigured} 时不自动同步',
+        '间隔为 ${config.intervalMinutes} 且已配置=${config.isConfigured} 时不定时同步',
         () {
           inFakeTime((async, c) {
             c.sync.saveConfig(config);
             advance(async, const Duration(hours: 2));
-            expect(api.indexCalls, 0);
+            expect(api.indexCalls, config.isConfigured ? 1 : 0);
           });
         },
       );

@@ -369,6 +369,12 @@ class HostRepository {
     );
   }
 
+  /// 重新验证服务器前清除旧确认记录，保留同步选择与配置版本（走同步索引）。
+  Future<void> invalidateSyncState() async {
+    await (_db.update(_db.hosts)..where((t) => t.syncEnabled.equals(true)))
+        .write(const HostsCompanion(syncedAt: Value(null)));
+  }
+
   /// 查询引用了某个分组的主机，并清空其分组（protocol+group 复合索引不覆盖单独 group，
   /// 因此通过遍历所有协议值以使用索引前缀）
   Future<void> clearGroup(String groupUuid) async {

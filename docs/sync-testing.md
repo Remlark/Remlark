@@ -19,7 +19,8 @@
 | HTTP 与服务端 | 认证头、路径、删除状态与密文版本同时读取、1001 台分批；同版本同密文幂等、不同密文冲突；不同令牌空间隔离 | `test/sync_api_test.dart`、`server/test/sync_api_test.dart`、`server/test/sync_repository_test.dart` |
 | 压缩与加密 | JSON 先 gzip 后 AES-GCM；中文往返、压缩体积、密文篡改、错误口令、无效 gzip、旧版未压缩密文兼容 | `test/sync_compression_test.dart`、`test/sync_e2e_test.dart` |
 | 配置修改时间 | 七种协议组合下连接、系统探测和指纹均不改变配置时间；重复用户名/密码回写不产生版本；实际修改凭据才待同步；连接多次不产生额外上传 | `test/host_configuration_version_test.dart`、`test/sync_service_test.dart` |
-| 配置与自动同步 | 配置保存/重新加载、令牌与口令不以明文落盘、同步结束不覆盖途中保存的配置；按间隔触发、失败下周期重试、`stop()` 后及退出时进行中的同步结束后不再重启；途中切换服务器或口令本轮仍使用开始时的接口和密钥 | `test/sync_service_test.dart` |
+| 配置与自动同步 | 配置保存/重新加载、令牌与口令不以明文落盘、同步结束不覆盖途中保存的配置；按间隔触发、失败下周期重试、`stop()` 后及退出时进行中的同步结束后不再重启；途中切换服务器或口令先等待旧轮次，再用新配置自动同步 | `test/sync_service_test.dart` |
+| 配置变更后的状态 | 删除服务器保留同步选择与配置版本；每次保存自动同步；地址/令牌/口令变更和原配置离线均清除旧确认；同版本重新验证、缺失上传、删除标记、部分失败；整轮或单台上传中删除配置，旧结果不能恢复已同步 | `test/sync_config_state_test.dart`、`test/sync_service_test.dart` |
 | 请求校验 | 所有接口无效令牌 401；畸形 JSON、缺失/错误类型字段、空载荷返回 400 且不写入；批量读取 1000 条上限、载荷 1MB 上限 413；重复删除；含空格、斜杠等字符的 UUID 编码往返 | `server/test/sync_api_test.dart`、`test/sync_api_test.dart`、`test/sync_e2e_test.dart` |
 | 全局串行处理 | FIFO 顺序、100 个任务最大并行数为一、失败不阻断队列；多客户端同主机/跨主机/跨空间并发仍保留正确版本；真实双客户端同时同步 | `server/test/serial_executor_test.dart`、`server/test/sync_repository_test.dart`、`test/sync_e2e_test.dart` |
 
@@ -28,7 +29,7 @@
 仓库根目录执行同步单元测试与真实服务回归：
 
 ```sh
-flutter test --no-pub test/sync_compression_test.dart test/host_configuration_version_test.dart test/sync_service_test.dart test/sync_api_test.dart test/host_sync_bundle_test.dart test/sync_e2e_test.dart test/host_connection_forms_test.dart test/vnc_ssh_config_test.dart test/core_test.dart
+flutter test --no-pub test/sync_config_state_test.dart test/sync_compression_test.dart test/host_configuration_version_test.dart test/sync_service_test.dart test/sync_api_test.dart test/host_sync_bundle_test.dart test/sync_e2e_test.dart test/host_connection_forms_test.dart test/vnc_ssh_config_test.dart test/core_test.dart
 ```
 
 在 `server/` 目录执行服务端测试：

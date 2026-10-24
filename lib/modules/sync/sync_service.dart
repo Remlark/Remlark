@@ -28,10 +28,11 @@ class SyncReport {
 
 /// 单轮同步固定使用的服务器接口和加密密钥。
 class _SyncSession {
-  const _SyncSession(this.api, this.key);
+  const _SyncSession(this.api, this.key, this.generation);
 
   final SyncApi api;
   final Uint8List key;
+  final int generation;
 }
 
 /// 同步服务。规则：
@@ -65,6 +66,8 @@ class SyncService extends ChangeNotifier {
   String? _keyFor;
   Future<SyncReport>? _syncFuture;
   Future<void> _persistTail = Future.value();
+  Future<void> _configTail = Future.value();
+  int _generation = 0;
   bool _stopped = false;
 
   /// 主机同步状态变化时回调（刷新主机列表）
@@ -88,16 +91,45 @@ class SyncService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 保存配置
-  Future<void> saveConfig(SyncConfig c) async {
+  /// 串行保存配置并立即同步；失败不阻断后续保存。
+  Future<void> saveConfig(SyncConfig c) {
+    final done = _configTail.then((_) => _saveConfig(c));
+    _configTail = done.catchError((_) {});
+    return done;
+  }
+
+  /// 等待旧轮次结束再切换服务器，清除旧确认状态后验证新服务器。
+  Future<void> _saveConfig(SyncConfig c) async {
+    try {
+      await _syncFuture;
+    } catch (_) {
+      // 旧服务器失败也必须允许用户保存新配置或删除服务器。
+    }
+    final changed =
+        config.serverUrl.trim() != c.serverUrl.trim() ||
+        config.token != c.token ||
+        config.passphrase != c.passphrase;
     if (config.token != c.token || config.passphrase != c.passphrase) {
       _key = null;
       _keyFor = null;
     }
-    config = c;
+    config = SyncConfig(
+      serverUrl: c.serverUrl.trim(),
+      token: c.token,
+      passphrase: c.passphrase,
+      intervalMinutes: c.intervalMinutes,
+      lastSyncAt: changed || !c.isConfigured ? null : config.lastSyncAt,
+    );
+    // 每次保存都重新确认，服务器离线时不能继续显示上次的“已同步”。
+    _generation++;
+    await _hosts.invalidateSyncState();
+    lastError = null;
+    lastReport = null;
+    onHostsChanged?.call();
     await _persist();
     _schedule();
     notifyListeners();
+    if (config.isConfigured) await syncNow();
   }
 
   /// 串行写入当前内存配置；并发保存时最后落盘的一定是最新配置，不会被旧快照覆盖。
@@ -145,7 +177,12 @@ class SyncService extends ChangeNotifier {
   /// 固定当前配置的服务器和密钥，同步途中修改配置不会混用新旧服务器或口令。
   Future<_SyncSession> _session() async {
     final c = config;
-    return _SyncSession(_apiFactory(c.serverUrl, c.token), await _cryptoKey(c));
+    final generation = _generation;
+    return _SyncSession(
+      _apiFactory(c.serverUrl, c.token),
+      await _cryptoKey(c),
+      generation,
+    );
   }
 
   /// 测试连接
@@ -185,6 +222,7 @@ class SyncService extends ChangeNotifier {
     );
     bundle.verifyServerRecord(expectedUuid, remoteUpdatedAt);
     return _hosts.transaction(() async {
+      if (s.generation != _generation) return false;
       final local = await _hosts.getByUuid(expectedUuid);
       // 网络等待期间产生的较新本机编辑继续待同步，不被下载时的旧版本覆盖。
       if (local != null && local.updatedAt > remoteUpdatedAt) return false;
@@ -218,10 +256,11 @@ class SyncService extends ChangeNotifier {
       await _encode(s, h),
       restoreDeleted: restoreDeleted,
     );
-    if (ok) {
+    // 单台主机上传也可能与保存配置并发，旧服务器响应不能恢复新配置的标记。
+    if (ok && s.generation == _generation) {
       await _hosts.setSyncState(h.uuid, enabled: true, syncedAt: h.updatedAt);
     }
-    return ok;
+    return ok && s.generation == _generation;
   }
 
   /// 立即同步
