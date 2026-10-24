@@ -360,3 +360,10 @@ macOS、Windows、Linux 共用的 FreeRDP 显示控制通道，必须先收到 `
 - 保持独立 bundle id 的真实 Debug 应用运行，依次执行完整 `make test-platform`（93 通过、3 跳过）以及工作区、布局、数据库迁移、原生加密测试（8 通过）。对 Debug、Release 与运行副本的 286 个应用文件核对 inode、修改时间、大小和 SHA-256，变化为 0；运行副本只加载一份 SQLite，随后正常退出，退出码 0。
 - 证据：`build/validation/test-app-isolation/results.json`、`before.json`、`after.json` 及两份测试日志。这排除了本轮这些测试直接覆盖应用包的情况，不宣称覆盖所有历史测试或证明每次崩溃的写入来源。
 - 本轮代理执行记录包含完整的 `flutter build macos --debug --no-pub`，并非只有单元测试。当前证据支持保留构建覆盖保护，不应仅根据同样的崩溃签名把某一历史崩溃的具体写入命令说成已经确定。
+
+### 更新助手脚本编码（Step 109）
+
+- 更新安装仍由 `UpdatePlatform` 接口分离 Windows、macOS 与 Linux 实现。脚本写入统一经过 `lib/utils/script_utils.dart`，显式使用 UTF-8 并指定是否携带 BOM，不依赖当前系统代码页。
+- Windows 的 `worker.ps1` 与 `launch.ps1` 均带 UTF-8 BOM，确保 PowerShell 5.1 能正确解析中文注释和 LF 换行。macOS / Linux 共用的 `worker.sh` 与 `launch.sh` 保持无 BOM，使 shebang 位于首字节。
+- P-19 在任意宿主检查 Windows x64/arm64 的生成脚本和 POSIX 共用脚本编码；Windows 额外使用 PowerShell 5.1 解析生成文件，并实际执行成功/失败安装路径。回滚用例必须确认假安装器已经运行、助手写入结果、旧文件恢复，不能只凭退出码 1 判定通过。
+- Actions 保留构建前后 `make test-platform` 门禁，不跳过失败测试。三平台实际执行记录与未验证项目见多平台测试文档。

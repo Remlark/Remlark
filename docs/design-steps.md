@@ -784,3 +784,8 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 增加始终执行的清理任务：发布成功、失败及仅构建结束后，删除当前和本工作流历史已结束运行的 packages/logs，保护其他工作流、并行运行、Release 附件和原生缓存；分页先收集再删除，API 失败明确上报。
   - 经现有 Git credential helper 认证，核实历史运行均属于 release.yml 后实际删除 10 个远端压缩包，共 485,762,798 字节；API 复核 Actions artifacts 数量为 0。凭据未输出或写入仓库。
   - 新增 P-24 / M-27，扩展 P-10。macOS `make test-platform` 97 项通过、3 项条件跳过，定向静态检查、YAML 解析及 diff 检查通过；Windows / Linux 平台测试及新版 CI 自动清理仍待对应 runner 验证，三平台测试入口继续保留。
+
+- [已完成] Step 109：修复 Windows 更新助手编码导致的平台测试失败
+  - 工具层统一按显式 UTF-8 编码写入更新脚本；Windows 两个 PowerShell 助手携带 BOM，macOS/Linux 共用 shell 助手保持无 BOM 和完整 shebang。
+  - 扩展 P-19：在所有平台检查 Windows x64/arm64 及 POSIX 输出编码，Windows 实际解析脚本；成功安装和失败回滚还检查安装器已执行与结果文件，防止语法错误被误判为回滚成功。
+  - Windows x64 构建前后平台测试均为 102 项通过、6 项按条件跳过，修改文件静态检查无问题；Release 与安装器/便携包重新生成成功。macOS/Linux 本轮未实机执行，需在对应环境运行 `make test-platform`；Actions 原有三平台门禁保留，未跳过测试。

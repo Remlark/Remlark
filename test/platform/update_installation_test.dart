@@ -23,6 +23,64 @@ void main() {
     if (await root.exists()) await root.delete(recursive: true);
   });
 
+  test('P-19 Windows 两种架构生成带 BOM 的助手，PowerShell 5.1 可以解析', () async {
+    final target = await Directory(p.join(root.path, '安装目录')).create();
+    for (final abi in [Abi.windowsX64, Abi.windowsArm64]) {
+      final stage = await Directory(p.join(root.path, '$abi')).create();
+      await WindowsUpdatePlatform(abi).prepare(
+        InstallContext(
+          directory: stage,
+          archive: File(p.join(root.path, 'installer.exe')),
+          version: '1.2.0',
+          executable: p.join(target.path, 'remlark.exe'),
+          processId: 2147483647,
+        ),
+      );
+      for (final name in ['worker.ps1', 'launch.ps1']) {
+        final script = File(p.join(stage.path, name));
+        expect((await script.readAsBytes()).take(3), [0xef, 0xbb, 0xbf]);
+        if (Platform.isWindows) {
+          // 只解析真实生成文件，不启动安装或监督进程。
+          final parsed = await Process.run(
+            'powershell.exe',
+            [
+              '-NoProfile',
+              '-NonInteractive',
+              '-Command',
+              r'$tokens=$null; $errors=$null; '
+                  r'[void][System.Management.Automation.Language.Parser]::ParseFile('
+                  r'$env:RMK_TEST_SCRIPT,[ref]$tokens,[ref]$errors); '
+                  r'if ($errors.Count) { $errors | Out-String | Write-Error; exit 1 }',
+            ],
+            environment: {'RMK_TEST_SCRIPT': script.path},
+          );
+          expect(parsed.exitCode, 0, reason: '${parsed.stderr}');
+        }
+      }
+    }
+  });
+
+  test('P-19 macOS 与 Linux 共用助手保持无 BOM 的 UTF-8 和 shebang', () async {
+    final context = InstallContext(
+      directory: root,
+      archive: File('unused'),
+      version: '1.2.0',
+      executable: '/unused',
+      processId: 2147483647,
+    );
+    await InstallHelpers.posixPlan(
+      context,
+      InstallHelpers.posixWorker(context, 'printf success > result'),
+      invocation: '/bin/sh worker.sh',
+      relaunch: ':',
+    );
+    for (final name in ['worker.sh', 'launch.sh']) {
+      final script = File(p.join(root.path, name));
+      expect((await script.readAsBytes()).take(2), [0x23, 0x21]);
+      expect(await script.readAsString(), contains('退出'));
+    }
+  });
+
   test('P-19 Git 凭据只接受 GitHub HTTPS，密码不会进入持久化配置', () {
     expect(
       GitCredentials.parse(
@@ -321,7 +379,8 @@ exec /bin/mv "$@"
       await File(p.join(target.path, 'version')).writeAsString('old');
       final archive = File(p.join(root.path, 'installer.cmd'));
       await archive.writeAsString(
-        '@echo off\r\necho new>"%~dp0app\\version"\r\nexit /b ${fail ? 1 : 0}\r\n',
+        '@echo off\r\necho attempted>"%~dp0installer-ran"\r\n'
+        'echo new>"%~dp0app\\version"\r\nexit /b ${fail ? 1 : 0}\r\n',
       );
       final stage = await Directory(p.join(root.path, 'stage')).create();
       await WindowsUpdatePlatform(Abi.windowsX64).prepare(
@@ -343,6 +402,16 @@ exec /bin/mv "$@"
         p.join(stage.path, 'worker.ps1'),
       ]);
       expect(result.exitCode, fail ? 1 : 0, reason: '${result.stderr}');
+      // 验证脚本确实执行到安装结果，避免语法错误的退出码 1 被误认为回滚成功。
+      expect(
+        (await File(p.join(stage.path, 'result')).readAsString()).trim(),
+        fail ? 'failed' : 'success',
+      );
+      expect(await File(p.join(stage.path, 'ready')).exists(), isTrue);
+      expect(
+        (await File(p.join(root.path, 'installer-ran')).readAsString()).trim(),
+        'attempted',
+      );
       expect(
         (await File(p.join(target.path, 'version')).readAsString()).trim(),
         fail ? 'old' : 'new',

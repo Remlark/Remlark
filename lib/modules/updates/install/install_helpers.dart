@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../../../utils/script_utils.dart';
 import '../../../utils/shell_utils.dart';
 import '../update_release.dart';
 import 'install_plan.dart';
@@ -78,10 +79,14 @@ printf success > result
     required String invocation,
     required String relaunch,
   }) async {
-    await File(p.join(context.directory.path, 'worker.sh'))
-        .writeAsString(worker);
+    // macOS 与 Linux 保持无 BOM，确保 shebang 从第一个字节开始。
+    await ScriptUtils.write(
+      File(p.join(context.directory.path, 'worker.sh')),
+      worker,
+      withBom: false,
+    );
     final script = File(p.join(context.directory.path, 'launch.sh'));
-    await script.writeAsString('''#!/bin/sh
+    await ScriptUtils.write(script, '''#!/bin/sh
 cd ${ShellUtils.quote(context.directory.path)} || exit 1
 $invocation
 code=\$?
@@ -91,7 +96,7 @@ if ! kill -0 ${context.processId} 2>/dev/null; then
   $relaunch
 fi
 exit "\$code"
-''');
+''', withBom: false);
     return InstallPlan(
       executable: '/bin/sh',
       arguments: [script.path],

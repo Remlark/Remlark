@@ -57,7 +57,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 测试 Dart 子进程与日志关闭 | `test/helpers/platform_tools.dart`、`lib/utils/app_log.dart` | Dart 可执行文件；关闭日志释放句柄 | 定位 SDK 的 `dart.exe`；删除日志目录前关闭句柄 | 同 macOS | P-07 | M-01、M-13 |
 | 编译与发布版本 | `VERSION`、`tools/utils/app_version.py`、`lib/utils/app_version.dart`、各平台打包入口 | Flutter build 数字版本 / 构建号写入 Info.plist；DMG 打包校验系统元数据 | Flutter build 写入 exe 四段资源，安装器校验并复用；独立 run 复用 Python 工具 | deb control 从 VERSION 读取，预发布映射为 ~ | P-13、P-10 | M-18 |
 | Release CI | `.github/workflows/release.yml`、`tools/release/` | Intel / Apple Silicon 通用 zip + DMG，lipo 校验 | x64 / arm64 安装 exe + zip；匹配 CRT 与 Inno 架构 | 原生 x64 / arm64 runner，deb + tar.gz | P-10、P-08、P-09、P-11（原生库编译后重新执行 make test-platform，实际解码）；手工 build_only 验证分支且不发布，构建后 RMK_REQUIRE_RDP_NATIVE=1 禁止跳过解码 | M-16 |
-| GitHub 软件更新 | `lib/modules/updates/`、`utils/git_credentials/` | 通用 zip，签名/版本校验，App 交换、按需系统授权 | x64/arm64 Inno 静默安装到原目录，备份与失败恢复、按需 UAC | dpkg 管理的 deb 或便携 bundle 交换，按需 polkit | P-18/P-19；Git credential fill、助手握手、等待退出、非提权重启 | M-23 |
+| GitHub 软件更新 | `lib/modules/updates/`、`utils/git_credentials/`、`utils/script_utils.dart` | 通用 zip，签名/版本校验，App 交换、按需系统授权；共用 shell 助手为 UTF-8 无 BOM | x64/arm64 Inno 静默安装到原目录，备份与失败恢复、按需 UAC；两个 PowerShell 助手为 UTF-8 带 BOM | dpkg 管理的 deb 或便携 bundle 交换，按需 polkit；共用 shell 助手为 UTF-8 无 BOM | P-18/P-19；Git credential fill、助手握手、等待退出、非提权重启、脚本编码 | M-23 |
 | macOS 发布自签 | `tools/release/macos_signing.py`、Release CI | 两个 Secrets 导入临时钥匙串，重签嵌套代码 / App / DMG，重建 zip；始终清理凭据并还原钥匙串搜索列表 | 不调用 Apple 工具，保持原有打包 | 不调用 Apple 工具，保持原有打包 | P-15 | M-20 |
 | 共享代理配置与重连 | `modules/proxies/`、`host_repository.dart`、`ssh_connector.dart`、`rdp_session.dart` | 共用 drift/加密存储；SSH 与内嵌 RDP 在新连接/重连时解析共享配置 | 同左，不新增系统代理或注册表设置 | 同左，不修改系统代理环境变量 | P-16 | M-21 |
 | SSH TCP 首次连接恢复 | `utils/network/`、`modules/ssh/proxy_socket.dart` | 独立策略识别 51/65 | 独立策略识别 10051/10065 | 独立策略识别 101/113 | P-20：有限重试、预算和非瞬态错误 | M-24 |
@@ -93,7 +93,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-18 | [update_platform_test.dart](../test/platform/update_platform_test.dart) | 六种平台/架构附件映射、Linux deb/便携分流、不支持架构拒绝、current() 选择 | GitHub 升级、M-23 |
 | P-21 | [rdp_display_control_test.dart](../test/platform/rdp_display_control_test.dart) | 编译并运行生产 C 函数：能力到达前不发送、尺寸合并、重复轮询、旧通道隔离、重新协商；检查回调注册和断开重置。macOS/Linux 使用 cc，Windows 使用开发者终端 cl；无编译器时动态用例跳过，RMK_REQUIRE_RDP_NATIVE=1 时禁止跳过 | RDP 显示控制、M-25 |
 | P-20 | [connect_retry_test.dart](../test/platform/connect_retry_test.dart) | 三平台错误码分别验证；首次不可达后恢复、持续失败最多四次、总预算不重置；连接拒绝/权限/非 Socket 错误不重试；当前平台策略选择 | SSH TCP 首次连接恢复、M-24 |
-| P-19 | [update_installation_test.dart](../test/platform/update_installation_test.dart) | 实际隔离 Git helper；POSIX 未提交不安装、等待退出、失败回滚、特殊路径；macOS 真实签名/版本校验及 App 替换；Linux 便携解压与交换；Windows 实际 PowerShell 助手与假安装器成功/失败恢复 | 点击升级后安装、M-23 |
+| P-19 | [update_installation_test.dart](../test/platform/update_installation_test.dart) | 实际隔离 Git helper；POSIX 未提交不安装、等待退出、失败回滚、特殊路径；macOS 真实签名/版本校验及 App 替换；Linux 便携解压与交换；任意宿主检查 Windows x64/arm64 BOM 和 POSIX shebang；Windows 实际解析 PowerShell 助手、执行假安装器并核对成功/失败恢复及结果文件 | 点击升级后安装、M-23 |
 | P-22 | [build_guard_test.dart](../test/platform/build_guard_test.dart) | 调用 12 项 Python 检查：三个桌面目标、路径边界/中文空格/大小写、独立副本放行、自定义输出和符号链接、三平台进程解析、查询失败保护、当前平台真实进程存活时拒绝/退出后放行；包装入口失败时不启动 Flutter | 构建覆盖保护、M-26 |
 | P-23 | [server_bundle_test.dart](../test/platform/server_bundle_test.dart)、[server_bundle_test.py](../tools/testing/server_bundle_test.py) | 六路服务端矩阵、发布依赖、macOS 双架构独立 runner；六种原生文件头与错误平台/架构、缺少/空主程序和 SQLite 库拒绝打包；压缩包布局与 POSIX 执行权限、额外资源保留；P-10 检查缺少服务端附件时禁止发布 | 同步服务端独立发布、M-13 |
 | P-24 | [artifact_cleanup_test.dart](../test/platform/artifact_cleanup_test.dart)、[artifact_cleanup_test.py](../tools/testing/artifact_cleanup_test.py) | 三平台执行相同清理逻辑；仅构建不上传、正式中转保留一天且始终清理；分页先快照再删除、历史运行复用查询、当前/已完成运行选择、保护其他工作流/并行运行/非托管文件及 API 失败上报 | Actions 存储、M-27 |
@@ -341,6 +341,8 @@ Step 88（两项 Secrets 简化）：本机 `make test-platform` 52 项通过 / 
 
 ### M-23：GitHub 点击升级后自动安装（macOS / Windows / Linux）
 
+Step 109 补充：Windows 中英文系统分别使用 PowerShell 5.1 验证普通目录与需 UAC 目录的升级；检查下载后生成的 `worker.ps1`、`launch.ps1` 均带 UTF-8 BOM，中文/空格路径可解析并正确完成安装或回滚。macOS/Linux 同时确认生成的 shell 助手无 BOM，原位替换与授权交互正常。
+
 1. 私有仓库无 Git HTTPS 凭据时显示访问提示，不出现 Token 表单或交互登录；配置 Git 凭据助手后检查/下载成功。仅 SSH 密钥不能视为 API 授权。测试 Git 未安装、helper 超时、失效/无权限凭据；公开后即使 Git 缺失或凭据失效，也能匿名检查和升级。
 2. 启动应用及每 6 小时仅检查，发现新版显示侧栏入口。点击“升级并重启”才下载，无保存对话框；升级过程中展示下载及准备安装状态，切页不丢失进度，重复点击不会启动第二份安装。
 3. 断网、磁盘满、摘要/大小错误、解包/签名/内嵌版本错误均不得退出或安装。系统授权取消/超时、助手无法启动时应用继续运行；退出前关闭连接和数据库；助手等待 PID 消失并检查 commit/abort 后才开始替换。
@@ -393,3 +395,35 @@ P-21 补充兼容性用例：服务端能力先于窗口调整到达仍能正常
 ### Step 101 验证记录（2026-10-24）
 
 macOS `make test-platform`：93 项通过，3 项跳过（已有真实 RDP 与 Windows 专属助手用例）；P-22 内部 12 项 Python 检查通过，包含三份平台实现的解析/错误用例和 macOS 实际进程。版本工具原有回归仍通过，新增 Dart 测试静态检查无问题。Windows/Linux 当前无可用实机环境，尚未执行本轮 `make test-platform` 和 M-26，不能将本机纯逻辑覆盖等同于三平台实测。
+
+### 2026-10-25 Windows x64 全量本机验证
+
+验证提交：`e3c1f58f0c2dd4e70292c25a7d35f11e39e11262`，版本 `1.0.2`。环境为 Windows 11 25H2 x64、Flutter 3.47.7 / Dart 3.13.5、Visual Studio 2022 17.14.41。本机 PATH 原先只有 Python 应用商店别名；本轮在忽略的验证目录准备 Python 3.13.5，设置当前进程 `PYTHONUTF8=1` 并加载 VS x64 开发环境，不修改系统全局设置。
+
+| 验证项 | 结果 |
+| --- | --- |
+| `make deps` | 通过，保留锁文件，未升级依赖 |
+| `make test-platform` | 99 项通过、6 项跳过、1 项失败（P-19 Windows 安装成功路径） |
+| `make test` 的客户端部分 | 416 项通过、26 项跳过、1 项失败（同一 P-19）；Make 在客户端失败后停止，服务端另行执行 |
+| `server/` 下 `dart test` | 35 项全部通过 |
+| 显式启用 `RMK_DSH_E2E=1` | 2 项通过，实际下载 Node.js、安装 dsh、验证 ACP 与模拟模型驱动的终端交互 |
+| `make analyze` | 客户端 9 条 info，均为 `curly_braces_in_flow_control_structures`，命令非零退出；服务端另行 `dart analyze` 无问题 |
+| `make windows` | 通过，重新编译 RDP / SSH 原生库、Flutter Release、Inno 安装器与便携 zip |
+| 构建后 `RMK_REQUIRE_RDP_NATIVE=1 flutter test --no-pub test/platform test/native_crypto_test.dart` | 100 项通过、6 项跳过、1 项失败（同一 P-19）；实际加载新原生库，包含 H.264、生产 C 显示控制与 AES-GCM 回归 |
+| `make server` | Windows 默认命令解释器不支持 `mkdir -p dist`，在 Dart 编译前失败 |
+| `server/` 下直接执行 Makefile 中的 `dart build cli -t bin/server.dart -o ../dist/remlark-sync-server` | 通过，生成完整服务端 bundle |
+| `python3 tools/release/server_bundle.py windows x64 --smoke` | 通过，校验架构、归档、临时中文路径解压、启动服务端并真实读写 SQLite |
+
+P-19 失败已独立复现：`update_platform_windows.dart` 用 `writeAsString` 生成包含中文注释、LF 换行的 UTF-8 无 BOM `worker.ps1`，中文 Windows PowerShell 5.1 按系统编码读取后报告意外的 `}`。相同内容加 UTF-8 BOM 后语法解析通过。失败回滚用例预期退出码本身为 1，其通过结果不能证明助手已执行到安装/回滚逻辑；M-23 仍需修复后验证。本轮只测试并记录，未修改业务或测试代码。
+
+平台跳过项包括未显式授权配置的真实 RDP（P-12），以及只适用于 POSIX/macOS 的安装用例；全量中的其余跳过项还包括 Windows 不支持的本地 SSH/RDP 测试服务端及默认关闭的 dsh 两项（已另行补跑通过）。未访问用户保存的远程主机，未安装或启动桌面应用，未执行真实系统升级/卸载交互。macOS / Linux 本轮没有执行测试，不能用 Windows 结果替代。
+
+产物：`dist/remlark-1.0.2-windows-x64-setup.exe`、`dist/remlark-windows-x64.zip`、`dist/remlark-sync-server-1.0.2-windows-x64.zip`。便携包已检查包含 RDP、SSH 加密、SQLite 与 VC++ 运行库。日志、构建退出码、产物 SHA-256 和脚本解析对比位于 `build/validation/local-full-test-20261025/`。
+
+### 2026-10-25 Windows 更新助手修复验证（Step 109）
+
+修复上述 P-19 的脚本编码故障：Windows x64/arm64 生成的 PowerShell 工作脚本与监督脚本显式带 UTF-8 BOM；macOS/Linux 共用 shell 助手使用同一写入工具并显式不带 BOM。P-19 新增跨宿主编码检查、Windows PowerShell 5.1 真实解析；安装回滚测试检查假安装器运行标记、ready/result 及目标内容，避免语法错误或安装器未启动时误报通过。
+
+Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过、0 项失败；构建后设置 `RMK_REQUIRE_RDP_NATIVE=1` 再执行同一入口，仍为 102 项通过、6 项条件跳过、0 项失败。修改文件 `dart analyze`、格式检查与 `git diff --check` 通过。Windows Release 已重新编译；首次打包因当前进程未指定用户目录中的 Inno Setup 路径失败，显式设置 `ISCC` 后用官方独立打包入口成功重建安装器与便携 zip。修复后产物仍位于 `dist/remlark-1.0.2-windows-x64-setup.exe` 和 `dist/remlark-windows-x64.zip`。
+
+日志：`build/validation/local-full-test-20261025/update-fix-*.log`。本轮未重跑客户端全量测试和服务端测试；安装助手专项及完整平台测试已覆盖本次改动。macOS/Linux 和 Windows arm64 本轮没有实机执行 `make test-platform`，须由对应环境或现有 CI 矩阵验证；Windows arm64 生成内容在 x64 上通过编码与语法检查，不代表 arm64 原生运行验证。M-23 的真实 UAC/升级交互仍待手工执行。未修改 Actions 门禁、未提交推送或触发远端 Actions。

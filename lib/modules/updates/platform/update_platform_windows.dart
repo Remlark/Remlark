@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../../../utils/script_utils.dart';
 import '../install/install_helpers.dart';
 import '../install/install_plan.dart';
 import '../update_release.dart';
@@ -46,9 +47,10 @@ class WindowsUpdatePlatform implements UpdatePlatform {
       }),
     );
     final worker = File(p.join(context.directory.path, 'worker.ps1'));
-    await worker.writeAsString(workerScript);
+    // PowerShell 5.1 通过 BOM 识别 UTF-8，否则中文注释可能破坏脚本解析。
+    await ScriptUtils.write(worker, workerScript, withBom: true);
     final launcher = File(p.join(context.directory.path, 'launch.ps1'));
-    await launcher.writeAsString(launcherScript);
+    await ScriptUtils.write(launcher, launcherScript, withBom: true);
     return InstallPlan(
       executable: 'powershell.exe',
       arguments: [
