@@ -11,7 +11,7 @@ abstract class WorkspaceTab extends ChangeNotifier {
   WorkspaceTab(this.host);
 
   /// 会话对应的主机
-  final HostEntry host;
+  HostEntry host;
 
   /// 唯一 id
   final String id = 'tab${_nextId++}';

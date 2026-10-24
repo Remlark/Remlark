@@ -22,7 +22,11 @@ class HostActions {
   HostActions._();
 
   /// 执行主机操作
-  static Future<void> run(BuildContext context, HostEntry h, HostAction a) async {
+  static Future<void> run(
+    BuildContext context,
+    HostEntry h,
+    HostAction a,
+  ) async {
     final c = context.read<HostsController>();
     final sync = context.read<SyncService>();
     switch (a) {
@@ -32,6 +36,8 @@ class HostActions {
         await SessionLauncher.open(context, h, protocol: HostProtocol.ssh);
       case HostAction.connectVnc:
         await SessionLauncher.open(context, h, protocol: HostProtocol.vnc);
+      case HostAction.connectRdp:
+        await SessionLauncher.open(context, h, protocol: HostProtocol.rdp);
       case HostAction.edit:
         await HostEditorDialog.show(context, existing: h);
       case HostAction.duplicate:
@@ -48,7 +54,8 @@ class HostActions {
             if (ok) await sync.removeFromServer(h.uuid);
           } else {
             await sync.enable(h);
-            if (context.mounted && !sync.config.isConfigured) UiUtils.toast(context.tr('sync.not_configured'));
+            if (context.mounted && !sync.config.isConfigured)
+              UiUtils.toast(context.tr('sync.not_configured'));
           }
         } catch (e) {
           UiUtils.toast('$e', error: true);
@@ -59,7 +66,12 @@ class HostActions {
   }
 
   /// 删除确认：显示主机摘要；已参与同步且配置了服务器时可同时从服务器删除
-  static Future<void> _delete(BuildContext context, HostEntry h, HostsController c, SyncService sync) async {
+  static Future<void> _delete(
+    BuildContext context,
+    HostEntry h,
+    HostsController c,
+    SyncService sync,
+  ) async {
     var alsoRemote = true;
     final synced = h.syncEnabled && sync.config.isConfigured;
     final ok = await showDialog<bool>(
@@ -97,7 +109,10 @@ class HostActions {
                                     h.name,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(fontWeight: FontWeight.w600, color: p.text),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: p.text,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
@@ -109,7 +124,11 @@ class HostActions {
                               '${h.username.isEmpty ? '' : '${h.username}@'}${h.address}:${h.port}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 13, color: p.textMuted, fontFamily: 'monospace'),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: p.textMuted,
+                                fontFamily: 'monospace',
+                              ),
                             ),
                           ],
                         ),
@@ -128,8 +147,14 @@ class HostActions {
               ],
             ),
             actions: [
-              OutlinedButton(onPressed: () => Navigator.pop(ctx, false), child: Text(ctx.tr('common.cancel'))),
-              DangerButton(label: ctx.tr('host.delete'), onPressed: () => Navigator.pop(ctx, true)),
+              OutlinedButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(ctx.tr('common.cancel')),
+              ),
+              DangerButton(
+                label: ctx.tr('host.delete'),
+                onPressed: () => Navigator.pop(ctx, true),
+              ),
             ],
           );
         },

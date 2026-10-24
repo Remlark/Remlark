@@ -51,7 +51,8 @@ class SshConnector {
   /// 加密算法优先级。dartssh2 的纯 Dart 加密很慢（实测 aes-gcm 约 1MB/s、chacha20-poly1305 约 37MB/s），
   /// 且运行在 UI 线程，传输时会导致界面卡顿。原生加密库（OpenSSL，硬件 AES 指令）可用时优先 aes-gcm；
   /// 不可用时优先 chacha20-poly1305，aes-gcm 仅作兜底
-  static SSHAlgorithms get _algorithms => NativeSshCrypto.install() ? _nativeAlgorithms : _dartAlgorithms;
+  static SSHAlgorithms get _algorithms =>
+      NativeSshCrypto.install() ? _nativeAlgorithms : _dartAlgorithms;
 
   static const _nativeAlgorithms = SSHAlgorithms(
     cipher: [
@@ -93,7 +94,8 @@ class SshConnector {
         if (i == 0) {
           // 第一跳：使用自身代理配置，没有则使用目标主机的代理配置
           final proxy = hop.proxy.enabled ? hop.proxy : target.proxy;
-          socketFactory = () => ProxyConnector.connect(hop.address, hop.port, proxy);
+          socketFactory = () =>
+              ProxyConnector.connect(hop.address, hop.port, proxy);
         } else {
           final prev = clients.last;
           socketFactory = () => prev.forwardLocal(hop.address, hop.port);
@@ -108,19 +110,29 @@ class SshConnector {
       if (e is ConnectCancelled) {
         AppLog.i('ssh', '用户取消连接「${target.name}」');
       } else {
-        AppLog.e('ssh', '连接「${target.name}」失败（${sw.elapsedMilliseconds}ms）', e, st);
+        AppLog.e(
+          'ssh',
+          '连接「${target.name}」失败（${sw.elapsedMilliseconds}ms）',
+          e,
+          st,
+        );
       }
       rethrow;
     }
     AppLog.i('ssh', '已连接「${target.name}」，耗时 ${sw.elapsedMilliseconds}ms');
     unawaited(_hosts.touchConnected(target.uuid));
-    return SshConnection(target, clients.last, clients.sublist(0, clients.length - 1));
+    return SshConnection(
+      target,
+      clients.last,
+      clients.sublist(0, clients.length - 1),
+    );
   }
 
   /// 后台探测远程系统并写入数据库，返回探测结果
   Future<OsInfo?> detectOs(SshConnection conn) async {
     final info = await OsDetector.detect(conn.client);
-    if (info != null && (info.id != conn.host.osId || info.name != conn.host.osName)) {
+    if (info != null &&
+        (info.id != conn.host.osId || info.name != conn.host.osName)) {
       await _hosts.updateOs(conn.host.uuid, info.id, info.name);
     }
     return info;
@@ -133,7 +145,8 @@ class SshConnector {
     final byUuid = {for (final h in hosts) h.uuid: h};
     final result = <HostEntry>[];
     for (final id in target.jumpChain) {
-      if (id == target.uuid) throw StateError('jump chain contains target itself');
+      if (id == target.uuid)
+        throw StateError('jump chain contains target itself');
       final h = byUuid[id];
       if (h == null) throw StateError('jump host not found: $id');
       result.add(h.forConnection(HostProtocol.ssh));
@@ -146,7 +159,11 @@ class SshConnector {
   /// 2. 密码错误：重新弹框并提示错误，最多 [_maxAttempts] 次
   /// 3. 密钥认证：加载密钥（加密私钥需输入口令）；密钥被拒绝时回退为密码输入
   /// 4. keyboard-interactive：有密码时自动应答，否则逐项询问用户
-  Future<SSHClient> _authenticate(HostEntry hop, Future<SSHSocket> Function() socketFactory, SshInteraction ui) async {
+  Future<SSHClient> _authenticate(
+    HostEntry hop,
+    Future<SSHSocket> Function() socketFactory,
+    SshInteraction ui,
+  ) async {
     String? password = hop.savePassword ? hop.password : null;
     var remember = false;
     String? error;
@@ -171,7 +188,9 @@ class SshConnector {
         username: hop.username,
         identities: mode == AuthType.key ? identities : null,
         onPasswordRequest: mode == AuthType.password ? () => password : null,
-        onUserInfoRequest: mode == AuthType.key ? null : (req) => _answerKeyboard(hop, req, password, ui),
+        onUserInfoRequest: mode == AuthType.key
+            ? null
+            : (req) => _answerKeyboard(hop, req, password, ui),
         onVerifyHostKey: (type, fp) => _verifyHostKey(hop, type, fp, ui),
         keepAliveInterval: const Duration(seconds: 20),
         handshakeTimeout: const Duration(seconds: 20),
@@ -181,12 +200,20 @@ class SshConnector {
       try {
         await client.authenticated;
         if (remember && password != null) {
-          await _hosts.updatePassword(hop.uuid, password, true);
+          await _hosts.updatePassword(
+            hop.uuid,
+            password,
+            true,
+            protocol: hop.protocol,
+          );
         }
         return client;
       } on SSHAuthError catch (e) {
         client.close();
-        AppLog.w('ssh', '「${hop.name}」${mode.name} 认证被拒绝（第 ${attempt + 1} 次）：$e');
+        AppLog.w(
+          'ssh',
+          '「${hop.name}」${mode.name} 认证被拒绝（第 ${attempt + 1} 次）：$e',
+        );
         if (mode == AuthType.key) {
           // 密钥被拒绝，回退为密码登录
           mode = AuthType.password;
@@ -204,7 +231,10 @@ class SshConnector {
   }
 
   /// 加载主机配置的密钥，加密私钥会请求口令；未配置密钥返回 null
-  Future<List<SSHKeyPair>?> _loadIdentities(HostEntry hop, SshInteraction ui) async {
+  Future<List<SSHKeyPair>?> _loadIdentities(
+    HostEntry hop,
+    SshInteraction ui,
+  ) async {
     final keyId = hop.keyUuid;
     if (keyId == null) return null;
     final key = await _keys.get(keyId);
@@ -247,16 +277,22 @@ class SshConnector {
   }
 
   /// 指纹校验：首次连接自动记录（accept-new），之后不一致需用户确认
-  Future<bool> _verifyHostKey(HostEntry hop, String type, List<int> fingerprint, SshInteraction ui) async {
+  Future<bool> _verifyHostKey(
+    HostEntry hop,
+    String type,
+    List<int> fingerprint,
+    SshInteraction ui,
+  ) async {
     final fp = utf8.decode(fingerprint);
     final old = hop.hostKeyFingerprint;
     if (old == null || old.isEmpty) {
-      await _hosts.updateFingerprint(hop.uuid, fp);
+      await _hosts.updateFingerprint(hop.uuid, fp, protocol: hop.protocol);
       return true;
     }
     if (old == fp) return true;
     final ok = await ui.confirmHostKeyChanged(hop, type, old, fp);
-    if (ok) await _hosts.updateFingerprint(hop.uuid, fp);
+    if (ok)
+      await _hosts.updateFingerprint(hop.uuid, fp, protocol: hop.protocol);
     return ok;
   }
 }

@@ -9,17 +9,22 @@ import 'package:remlark/modules/ssh/os_detector.dart';
 import 'package:remlark/utils/os_registry.dart';
 
 /// 构造不依赖数据库的图标测试主机。
-HostEntry host({String? osId, HostProtocol protocol = HostProtocol.ssh}) =>
-    HostEntry(
-      uuid: 'icon-test',
-      protocol: protocol,
-      name: 'test',
-      address: 'localhost',
-      port: 22,
-      osId: osId,
-      createdAt: 0,
-      updatedAt: 0,
-    );
+HostEntry host({
+  String? osId,
+  HostProtocol protocol = HostProtocol.ssh,
+  String name = 'test',
+  Map<String, dynamic> extra = const {},
+}) => HostEntry(
+  uuid: 'icon-test',
+  protocol: protocol,
+  name: name,
+  address: 'localhost',
+  port: 22,
+  osId: osId,
+  extra: extra,
+  createdAt: 0,
+  updatedAt: 0,
+);
 
 /// 验证系统识别、资源完整性和不同协议下的图标优先级。
 void main() {
@@ -50,9 +55,13 @@ void main() {
     expect(OsDetector.normalizeId('', ''), 'linux');
     expect(OsDetector.parse('NetBSD\n')!.id, 'netbsd');
     expect(OsRegistry.assetFor('unknown'), isNull);
+    expect(OsRegistry.inferFromLabel('PVE-Ubuntu'), 'ubuntu');
+    expect(OsRegistry.inferFromLabel('Windows-Ubuntu'), isNull);
+    expect(OsRegistry.inferFromLabel('ubuntu-server'), 'ubuntu');
+    expect(OsRegistry.inferFromLabel('myubuntubox'), isNull);
   });
 
-  testWidgets('已识别系统优先于 RDP 默认图标，深浅主题均可加载', (tester) async {
+  testWidgets('RDP 使用实际系统图标，未知系统不默认显示 Windows', (tester) async {
     for (final brightness in Brightness.values) {
       await tester.pumpWidget(
         MaterialApp(
@@ -64,6 +73,16 @@ void main() {
                 size: 20,
               ),
               OsIcon(host: host(protocol: HostProtocol.rdp)),
+              OsIcon(
+                host: host(protocol: HostProtocol.rdp, name: 'PVE-Ubuntu'),
+              ),
+              OsIcon(
+                host: host(
+                  osId: 'ubuntu',
+                  protocol: HostProtocol.rdp,
+                  extra: {'osOverride': 'windows'},
+                ),
+              ),
               OsIcon(host: host(osId: 'netbsd'), size: 48),
               OsIcon(host: host()),
               OsIcon(host: host(osId: 'unknown')),
@@ -75,6 +94,7 @@ void main() {
           .widgetList<Image>(find.byType(Image))
           .map((image) => (image.image as AssetImage).assetName);
       expect(assets, [
+        'assets/os_icons/ubuntu.png',
         'assets/os_icons/ubuntu.png',
         'assets/os_icons/windows.png',
         'assets/os_icons/netbsd.png',

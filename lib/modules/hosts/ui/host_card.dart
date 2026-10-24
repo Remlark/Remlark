@@ -13,12 +13,26 @@ import 'sync_badge.dart';
 import '../../../ui_kit/app_menu.dart';
 
 /// 主机卡片操作
-enum HostAction { connect, connectSsh, connectVnc, edit, duplicate, toggleSync, delete }
+enum HostAction {
+  connect,
+  connectSsh,
+  connectVnc,
+  connectRdp,
+  edit,
+  duplicate,
+  toggleSync,
+  delete,
+}
 
 /// 主机卡片：系统图标、名称、协议、地址 / 用户名 / 上次连接、同步状态与连接按钮。
 /// 单协议卡片可双击连接，右下角协议图标打开对应会话，右键或“更多”打开操作菜单
 class HostCard extends StatefulWidget {
-  const HostCard({super.key, required this.host, required this.onAction, this.showSync = true});
+  const HostCard({
+    super.key,
+    required this.host,
+    required this.onAction,
+    this.showSync = true,
+  });
 
   final HostEntry host;
   final void Function(HostAction) onAction;
@@ -41,14 +55,21 @@ class _HostCardState extends State<HostCard> {
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
-        onDoubleTap: h.vncSsh == null ? () => widget.onAction(HostAction.connect) : null,
-        onSecondaryTapUp: (d) => showHostMenu(context, h, d.globalPosition, widget.onAction),
+        onDoubleTap: h.connectionProtocols.length == 1
+            ? () => widget.onAction(HostAction.connect)
+            : null,
+        onSecondaryTapUp: (d) =>
+            showHostMenu(context, h, d.globalPosition, widget.onAction),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           decoration: BoxDecoration(
-            color: _hover ? Color.alphaBlend(p.hover.withValues(alpha: 0.5), p.panel) : p.panel,
+            color: _hover
+                ? Color.alphaBlend(p.hover.withValues(alpha: 0.5), p.panel)
+                : p.panel,
             borderRadius: BorderRadius.circular(AppSizes.radiusLarge),
-            border: Border.all(color: _hover ? p.accent.withValues(alpha: 0.5) : p.border),
+            border: Border.all(
+              color: _hover ? p.accent.withValues(alpha: 0.5) : p.border,
+            ),
           ),
           padding: const EdgeInsets.fromLTRB(18, 14, 12, 14),
           child: Column(
@@ -66,7 +87,11 @@ class _HostCardState extends State<HostCard> {
                             h.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: p.text),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: p.text,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -80,7 +105,12 @@ class _HostCardState extends State<HostCard> {
                       tooltip: context.tr('common.more'),
                       onPressed: () {
                         final box = ctx.findRenderObject() as RenderBox;
-                        showHostMenu(context, h, box.localToGlobal(box.size.bottomLeft(Offset.zero)), widget.onAction);
+                        showHostMenu(
+                          context,
+                          h,
+                          box.localToGlobal(box.size.bottomLeft(Offset.zero)),
+                          widget.onAction,
+                        );
                       },
                     ),
                   ),
@@ -90,21 +120,31 @@ class _HostCardState extends State<HostCard> {
               _kv(
                 context,
                 context.tr('host.address'),
-                h.port == h.protocol.defaultPort ? h.address : '${h.address}:${h.port}',
+                h.port == h.protocol.defaultPort
+                    ? h.address
+                    : '${h.address}:${h.port}',
               ),
-              _kv(context, context.tr('host.username'), h.username.isEmpty ? '—' : h.username),
+              _kv(
+                context,
+                context.tr('host.username'),
+                h.username.isEmpty ? '—' : h.username,
+              ),
               _kv(
                 context,
                 context.tr('host.last_connected'),
                 h.lastConnectedAt == null
                     ? context.tr('host.never_connected')
-                    : FormatUtils.dateTime(DateTime.fromMillisecondsSinceEpoch(h.lastConnectedAt!)),
+                    : FormatUtils.dateTime(
+                        DateTime.fromMillisecondsSinceEpoch(h.lastConnectedAt!),
+                      ),
               ),
               const Spacer(),
               Row(
                 children: [
                   Expanded(
-                    child: widget.showSync ? SyncBadge(state: h.syncState, withText: true) : _connectedBefore(context),
+                    child: widget.showSync
+                        ? SyncBadge(state: h.syncState, withText: true)
+                        : _connectedBefore(context),
                   ),
                   HostConnectButtons(host: h, onAction: widget.onAction),
                 ],
@@ -159,7 +199,11 @@ class _HostCardState extends State<HostCard> {
               v,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 13, color: p.text, fontFamily: 'monospace'),
+              style: TextStyle(
+                fontSize: 13,
+                color: p.text,
+                fontFamily: 'monospace',
+              ),
             ),
           ),
         ],
@@ -170,7 +214,12 @@ class _HostCardState extends State<HostCard> {
 
 /// 按实际协议显示统一的连接入口，卡片、最近连接与列表共用。
 class HostConnectButtons extends StatelessWidget {
-  const HostConnectButtons({super.key, required this.host, required this.onAction, this.compact = false});
+  const HostConnectButtons({
+    super.key,
+    required this.host,
+    required this.onAction,
+    this.compact = false,
+  });
 
   final HostEntry host;
   final void Function(HostAction) onAction;
@@ -186,15 +235,21 @@ class HostConnectButtons extends StatelessWidget {
       children: [
         for (final protocol in protocols)
           _ConnectButton(
-            icon: protocol == HostProtocol.ssh ? Icons.terminal_rounded : Icons.desktop_windows_outlined,
+            icon: switch (protocol) {
+              HostProtocol.ssh => Icons.terminal_rounded,
+              HostProtocol.vnc => Icons.desktop_windows_outlined,
+              HostProtocol.rdp => Icons.window_rounded,
+            },
             tooltip: context.tr('host.connect.${protocol.name}'),
             compact: compact,
             onPressed: () => onAction(
               protocols.length == 1
                   ? HostAction.connect
-                  : protocol == HostProtocol.ssh
-                  ? HostAction.connectSsh
-                  : HostAction.connectVnc,
+                  : switch (protocol) {
+                      HostProtocol.ssh => HostAction.connectSsh,
+                      HostProtocol.vnc => HostAction.connectVnc,
+                      HostProtocol.rdp => HostAction.connectRdp,
+                    },
             ),
           ),
       ],
@@ -204,7 +259,12 @@ class HostConnectButtons extends StatelessWidget {
 
 /// 统一圆形连接按钮：终端与桌面共用强调色和交互状态。
 class _ConnectButton extends StatelessWidget {
-  const _ConnectButton({required this.onPressed, required this.icon, required this.tooltip, this.compact = false});
+  const _ConnectButton({
+    required this.onPressed,
+    required this.icon,
+    required this.tooltip,
+    this.compact = false,
+  });
 
   final VoidCallback onPressed;
   final IconData icon;
@@ -233,8 +293,10 @@ class _ConnectButton extends StatelessWidget {
             mouseCursor: SystemMouseCursors.click,
             // 使用图标前景色叠加，保证明暗主题的实心底色都有可见反馈。
             overlayColor: WidgetStateProperty.resolveWith((states) {
-              if (states.contains(WidgetState.pressed)) return p.onAccent.withValues(alpha: 0.20);
-              if (states.contains(WidgetState.hovered) || states.contains(WidgetState.focused)) {
+              if (states.contains(WidgetState.pressed))
+                return p.onAccent.withValues(alpha: 0.20);
+              if (states.contains(WidgetState.hovered) ||
+                  states.contains(WidgetState.focused)) {
                 return p.onAccent.withValues(alpha: 0.12);
               }
               return Colors.transparent;
@@ -252,20 +314,46 @@ class _ConnectButton extends StatelessWidget {
 }
 
 /// 主机操作菜单（卡片、列表行、最近连接共用）
-Future<void> showHostMenu(BuildContext context, HostEntry h, Offset pos, void Function(HostAction) onAction) async {
-  AppMenuItem<HostAction> item(HostAction value, IconData icon, String key, {bool danger = false}) =>
-      AppMenuItem(value: value, icon: icon, label: context.tr(key), danger: danger);
+Future<void> showHostMenu(
+  BuildContext context,
+  HostEntry h,
+  Offset pos,
+  void Function(HostAction) onAction,
+) async {
+  AppMenuItem<HostAction> item(
+    HostAction value,
+    IconData icon,
+    String key, {
+    bool danger = false,
+  }) => AppMenuItem(
+    value: value,
+    icon: icon,
+    label: context.tr(key),
+    danger: danger,
+  );
 
   final r = await AppMenu.showAt<HostAction>(context, pos, [
-    if (h.vncSsh != null) ...[
-      item(HostAction.connectSsh, Icons.terminal, 'host.connect.ssh'),
-      item(HostAction.connectVnc, Icons.desktop_windows_outlined, 'host.connect.vnc'),
+    if (h.connectionProtocols.length > 1) ...[
+      for (final protocol in h.connectionProtocols)
+        item(
+          switch (protocol) {
+            HostProtocol.ssh => HostAction.connectSsh,
+            HostProtocol.vnc => HostAction.connectVnc,
+            HostProtocol.rdp => HostAction.connectRdp,
+          },
+          switch (protocol) {
+            HostProtocol.ssh => Icons.terminal_rounded,
+            HostProtocol.vnc => Icons.desktop_windows_outlined,
+            HostProtocol.rdp => Icons.window_rounded,
+          },
+          'host.connect.${protocol.name}',
+        ),
     ] else
-      item(
-        HostAction.connect,
-        h.protocol == HostProtocol.ssh ? Icons.terminal_rounded : Icons.desktop_windows_outlined,
-        'host.connect.${h.protocol.name}',
-      ),
+      item(HostAction.connect, switch (h.protocol) {
+        HostProtocol.ssh => Icons.terminal_rounded,
+        HostProtocol.vnc => Icons.desktop_windows_outlined,
+        HostProtocol.rdp => Icons.window_rounded,
+      }, 'host.connect.${h.protocol.name}'),
     item(HostAction.edit, Icons.edit_outlined, 'common.edit'),
     item(HostAction.duplicate, Icons.copy_outlined, 'common.duplicate'),
     item(
@@ -274,7 +362,12 @@ Future<void> showHostMenu(BuildContext context, HostEntry h, Offset pos, void Fu
       h.syncEnabled ? 'sync.remove' : 'sync.add',
     ),
     const AppMenuDivider(),
-    item(HostAction.delete, Icons.delete_outline, 'common.delete', danger: true),
+    item(
+      HostAction.delete,
+      Icons.delete_outline,
+      'common.delete',
+      danger: true,
+    ),
   ]);
   if (r != null) onAction(r);
 }

@@ -44,6 +44,8 @@ const Map<String, String> stringsZh = {
   'host.address.required': '请填写地址',
   'host.port': '端口',
   'host.username': '用户名',
+  'host.operating_system': '操作系统图标',
+  'host.operating_system.auto': '自动识别',
   'host.password': '密码',
   'host.password.helper': '不保存时，每次连接会提示输入',
   'host.remember_password': '记住密码',

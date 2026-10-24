@@ -26,7 +26,11 @@ class SectionTitle extends StatelessWidget {
     padding: const EdgeInsets.only(top: 22, bottom: 12),
     child: Text(
       text,
-      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface),
+      style: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        color: Theme.of(context).colorScheme.onSurface,
+      ),
     ),
   );
 }
@@ -57,7 +61,10 @@ class _PasswordFieldsState extends State<PasswordFields> {
             obscureText: _obscure,
             decoration: InputDecoration(
               suffixIcon: IconButton(
-                icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off, size: 18),
+                icon: Icon(
+                  _obscure ? Icons.visibility : Icons.visibility_off,
+                  size: 18,
+                ),
                 onPressed: () => setState(() => _obscure = !_obscure),
               ),
             ),
@@ -128,14 +135,21 @@ class _SshAuthSectionState extends State<SshAuthSection> {
         ),
         const SizedBox(height: 14),
         if (f.authType != AuthType.key) PasswordFields(form: f),
-        if (f.authType == AuthType.key) FieldLabel(context.tr('auth.key.select')),
+        if (f.authType == AuthType.key)
+          FieldLabel(context.tr('auth.key.select')),
         if (f.authType == AuthType.key)
           Row(
             children: [
               Expanded(
                 child: AppDropdown<String>(
                   value: f.keyUuid,
-                  items: [for (final k in _keys) AppMenuItem(value: k.uuid, label: '${k.name}  (${k.keyType})')],
+                  items: [
+                    for (final k in _keys)
+                      AppMenuItem(
+                        value: k.uuid,
+                        label: '${k.name}  (${k.keyType})',
+                      ),
+                  ],
                   onChanged: (v) => f.update(() => f.keyUuid = v),
                 ),
               ),
@@ -179,13 +193,17 @@ class _SshAuthSectionState extends State<SshAuthSection> {
                         k.publicKey,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                     TextButton.icon(
                       icon: const Icon(Icons.copy, size: 14),
                       label: Text(context.tr('key.copy_public')),
-                      onPressed: () => Clipboard.setData(ClipboardData(text: k.publicKey)),
+                      onPressed: () =>
+                          Clipboard.setData(ClipboardData(text: k.publicKey)),
                     ),
                   ],
                 ),
@@ -208,12 +226,18 @@ class JumpChainSection extends StatelessWidget {
     final f = form;
     final hosts = context.read<HostsController>();
     final candidates = hosts.sshHosts
-        .where((h) => h.uuid != f.existing?.uuid && !f.jumpChain.contains(h.uuid))
+        .where(
+          (h) => h.uuid != f.existing?.uuid && !f.jumpChain.contains(h.uuid),
+        )
         .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (f.jumpChain.isEmpty) Text(context.tr('host.jump.empty'), style: Theme.of(context).textTheme.bodySmall),
+        if (f.jumpChain.isEmpty)
+          Text(
+            context.tr('host.jump.empty'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         for (var i = 0; i < f.jumpChain.length; i++)
           Builder(
             builder: (context) {
@@ -221,7 +245,10 @@ class JumpChainSection extends StatelessWidget {
               return ListTile(
                 dense: true,
                 contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(radius: 12, child: Text('${i + 1}', style: const TextStyle(fontSize: 11))),
+                leading: CircleAvatar(
+                  radius: 12,
+                  child: Text('${i + 1}', style: const TextStyle(fontSize: 11)),
+                ),
                 title: Text(h?.name ?? f.jumpChain[i]),
                 subtitle: Text(h?.endpoint ?? context.tr('host.jump.missing')),
                 trailing: Row(
@@ -314,16 +341,30 @@ class RdpSection extends StatelessWidget {
             const SizedBox(width: 16),
             Expanded(
               child: LabeledField(
-                label: '${context.tr('rdp.width')} × ${context.tr('rdp.height')}',
+                label:
+                    '${context.tr('rdp.width')} × ${context.tr('rdp.height')}',
                 helper: context.tr('rdp.resolution.helper'),
                 child: Row(
                   children: [
                     Expanded(
-                      child: TextField(controller: f.width, inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+                      child: TextField(
+                        controller: f.width,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                      ),
                     ),
-                    const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('×')),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8),
+                      child: Text('×'),
+                    ),
                     Expanded(
-                      child: TextField(controller: f.height, inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+                      child: TextField(
+                        controller: f.height,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -345,8 +386,9 @@ class RdpSection extends StatelessWidget {
 
 /// VNC 凭据及可选 SSH：开启后显示 SSH 参数并提供独立终端入口。
 class VncSection extends StatelessWidget {
-  const VncSection({super.key, required this.form});
+  const VncSection({super.key, required this.form, this.showSshConfig = true});
   final HostForm form;
+  final bool showSshConfig;
 
   /// 显示共用密码及单协议能力说明。
   @override
@@ -354,16 +396,24 @@ class VncSection extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       PasswordFields(form: form),
-      SwitchListTile(
-        key: const ValueKey('vnc-enable-ssh'),
-        contentPadding: EdgeInsets.zero,
-        title: Text(context.tr('vnc.ssh.enable')),
-        subtitle: Text(context.tr(form.vncSsh.enabled ? 'host.connections.shared' : 'vnc.only.helper')),
-        value: form.vncSsh.enabled,
-        onChanged: form.setSshEnabled,
-      ),
-      if (form.vncSsh.enabled) HostSshSection(form: form),
-      if (form.preserveLegacySsh && !form.vncSsh.enabled) FieldHelper(context.tr('vnc.ssh.legacy')),
+      if (showSshConfig)
+        SwitchListTile(
+          key: const ValueKey('vnc-enable-ssh'),
+          contentPadding: EdgeInsets.zero,
+          title: Text(context.tr('vnc.ssh.enable')),
+          subtitle: Text(
+            context.tr(
+              form.vncSsh.enabled
+                  ? 'host.connections.shared'
+                  : 'vnc.only.helper',
+            ),
+          ),
+          value: form.vncSsh.enabled,
+          onChanged: form.setSshEnabled,
+        ),
+      if (showSshConfig && form.vncSsh.enabled) HostSshSection(form: form),
+      if (showSshConfig && form.preserveLegacySsh && !form.vncSsh.enabled)
+        FieldHelper(context.tr('vnc.ssh.legacy')),
     ],
   );
 }
@@ -423,10 +473,15 @@ class _HostSshSectionState extends State<HostSshSection> {
                     child: AppDropdown<AuthType>(
                       value: ssh.authType,
                       items: [
-                        for (final type in AuthType.values) AppMenuItem(value: type, label: context.tr('auth.${type.name}')),
+                        for (final type in AuthType.values)
+                          AppMenuItem(
+                            value: type,
+                            label: context.tr('auth.${type.name}'),
+                          ),
                       ],
                       onChanged: (v) {
-                        if (v != null) f.update(() => f.vncSsh = ssh.copyWith(authType: v));
+                        if (v != null)
+                          f.update(() => f.vncSsh = ssh.copyWith(authType: v));
                       },
                     ),
                   ),
@@ -440,8 +495,15 @@ class _HostSshSectionState extends State<HostSshSection> {
               label: context.tr('auth.key.select'),
               child: AppDropdown<String>(
                 value: ssh.keyUuid,
-                items: [for (final k in _keys) AppMenuItem(value: k.uuid, label: '${k.name}  (${k.keyType})')],
-                onChanged: (v) => f.update(() => f.vncSsh = ssh.copyWith(keyUuid: () => v)),
+                items: [
+                  for (final k in _keys)
+                    AppMenuItem(
+                      value: k.uuid,
+                      label: '${k.name}  (${k.keyType})',
+                    ),
+                ],
+                onChanged: (v) =>
+                    f.update(() => f.vncSsh = ssh.copyWith(keyUuid: () => v)),
               ),
             ),
           ],

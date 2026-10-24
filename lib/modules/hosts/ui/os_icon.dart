@@ -11,14 +11,23 @@ class OsIcon extends StatelessWidget {
   final HostEntry host;
   final double size;
 
-  /// 优先显示实际探测结果，只有未识别系统的 RDP 主机才默认显示 Windows。
+  /// 手动指定优先，其次采用 SSH 探测结果或名称中的明确系统标识。
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final id =
-        host.osId ?? (host.protocol == HostProtocol.rdp ? 'windows' : null);
+    final override = host.extra['osOverride'];
+    final id = override is String && OsRegistry.ids.contains(override)
+        ? override
+        : host.osId ??
+              OsRegistry.inferFromLabel(host.osName ?? '') ??
+              OsRegistry.inferFromLabel(host.name);
     final asset = id == null ? null : OsRegistry.assetFor(id);
-    final label = host.osName ?? host.protocol.name.toUpperCase();
+    final label = override is String && OsRegistry.ids.contains(override)
+        ? OsRegistry.displayName(override)
+        : host.osName ??
+              (id == null
+                  ? host.protocol.name.toUpperCase()
+                  : OsRegistry.displayName(id));
     // 品牌图标统一使用浅色底板，黑色 Logo 在深色主题中仍然清晰。
     final background = asset == null
         ? scheme.surfaceContainerHighest

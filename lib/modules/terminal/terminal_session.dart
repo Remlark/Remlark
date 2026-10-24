@@ -86,7 +86,10 @@ class TerminalSession extends WorkspaceTab {
   Future<void> connect() async {
     setState(SessionState.connecting);
     try {
-      final conn = await _connector.connect(host, _ProgressInteraction(this, _interaction));
+      final conn = await _connector.connect(
+        host,
+        _ProgressInteraction(this, _interaction),
+      );
       _conn = conn;
       final shell = await conn.client.shell(
         pty: SSHPtyConfig(type: 'xterm-256color', width: _cols, height: _rows),
@@ -97,16 +100,24 @@ class TerminalSession extends WorkspaceTab {
       _transfers?.dispose();
       _transfers = TransferManager(_sftp!);
       _uploads?.dispose();
-      _uploads = TransferManager(_sftp!, autoRemoveDoneAfter: const Duration(seconds: 3));
-      _stdoutSub = const Utf8Decoder(allowMalformed: true).bind(_mergeOutput(shell)).listen((s) {
-        terminal.write(s);
-        _outputCtl.add(s);
-      });
+      _uploads = TransferManager(
+        _sftp!,
+        autoRemoveDoneAfter: const Duration(seconds: 3),
+      );
+      _stdoutSub = const Utf8Decoder(allowMalformed: true)
+          .bind(_mergeOutput(shell))
+          .listen((s) {
+            terminal.write(s);
+            _outputCtl.add(s);
+          });
       shell.done.then((_) => _onClosed(null));
-      conn.client.done.then((_) => _onClosed(null), onError: (Object e) => _onClosed('$e'));
+      conn.client.done.then(
+        (_) => _onClosed(null),
+        onError: (Object e) => _onClosed('$e'),
+      );
       progress = null;
       setState(SessionState.connected);
-      unawaited(_connector.detectOs(conn).catchError((_) => null));
+      unawaited(_refreshDetectedOs(conn));
     } on ConnectCancelled {
       progress = null;
       setState(SessionState.failed, error: 'cancelled');
@@ -114,6 +125,18 @@ class TerminalSession extends WorkspaceTab {
       progress = null;
       terminal.write('\r\n\x1b[31m$e\x1b[0m\r\n');
       setState(SessionState.failed, error: '$e');
+    }
+  }
+
+  /// SSH 探测完成后更新当前标签快照，让已打开的标签立即显示真实系统图标。
+  Future<void> _refreshDetectedOs(SshConnection conn) async {
+    try {
+      final info = await _connector.detectOs(conn);
+      if (info == null) return;
+      host = host.copyWith(osId: () => info.id, osName: () => info.name);
+      notifyListeners();
+    } catch (_) {
+      // 系统探测失败不影响已建立的终端连接。
     }
   }
 
@@ -133,7 +156,10 @@ class TerminalSession extends WorkspaceTab {
   void _onClosed(String? reason) {
     if (state == SessionState.disconnected) return;
     if (state != SessionState.connected) return;
-    AppLog.i('terminal', '「${host.name}」连接断开${reason == null ? '' : '：$reason'}');
+    AppLog.i(
+      'terminal',
+      '「${host.name}」连接断开${reason == null ? '' : '：$reason'}',
+    );
     terminal.write('\r\n\x1b[33m[disconnected]\x1b[0m\r\n');
     setState(SessionState.disconnected, error: reason);
   }
@@ -231,14 +257,25 @@ class _ProgressInteraction extends SshInteraction {
   }
 
   @override
-  Future<PasswordInput?> askPassword(host, {String? error}) => _inner.askPassword(host, error: error);
+  Future<PasswordInput?> askPassword(host, {String? error}) =>
+      _inner.askPassword(host, error: error);
 
   @override
-  Future<String?> askPassphrase(host, {String? error}) => _inner.askPassphrase(host, error: error);
+  Future<String?> askPassphrase(host, {String? error}) =>
+      _inner.askPassphrase(host, error: error);
 
   @override
-  Future<bool> confirmHostKeyChanged(host, String keyType, String oldFingerprint, String newFingerprint) =>
-      _inner.confirmHostKeyChanged(host, keyType, oldFingerprint, newFingerprint);
+  Future<bool> confirmHostKeyChanged(
+    host,
+    String keyType,
+    String oldFingerprint,
+    String newFingerprint,
+  ) => _inner.confirmHostKeyChanged(
+    host,
+    keyType,
+    oldFingerprint,
+    newFingerprint,
+  );
 
   @override
   Future<List<String>?> keyboardInteractive(host, SSHUserInfoRequest request) =>

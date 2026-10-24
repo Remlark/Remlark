@@ -66,7 +66,8 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
   final Set<PhysicalKeyboardKey> _downKeys = {};
 
   /// 是否跟随窗口大小自动调整分辨率（未配置固定分辨率时）
-  bool get _dynamicResolution => host.extra['width'] == null || host.extra['height'] == null;
+  bool get _dynamicResolution =>
+      host.extra['width'] == null || host.extra['height'] == null;
 
   /// 连接
   Future<void> connect() async {
@@ -82,7 +83,10 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
     var remember = false;
     String? error;
     // 等待视图尺寸确定，用作初始分辨率
-    await _viewSizeKnown.future.timeout(const Duration(milliseconds: 600), onTimeout: () {});
+    await _viewSizeKnown.future.timeout(
+      const Duration(milliseconds: 600),
+      onTimeout: () {},
+    );
 
     for (var attempt = 0; attempt < 5; attempt++) {
       if (password == null || password.isEmpty) {
@@ -94,12 +98,21 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
         password = input.password;
         remember = input.remember;
       }
-      AppLog.i('rdp', '连接「${host.name}」${host.endpoint}（第 ${attempt + 1} 次，${RdpH264Support.probe().describe(hardwareDecode: hardwareDecode)}）');
+      AppLog.i(
+        'rdp',
+        '连接「${host.name}」${host.endpoint}（第 ${attempt + 1} 次，${RdpH264Support.probe().describe(hardwareDecode: hardwareDecode)}）',
+      );
       final (result, detail) = await _attempt(password);
       AppLog.i('rdp', '连接结果 ${result.name}${detail == null ? '' : '：$detail'}');
       switch (result) {
         case _Attempt.connected:
-          if (remember) await _hosts.updatePassword(host.uuid, password, true);
+          if (remember)
+            await _hosts.updatePassword(
+              host.uuid,
+              password,
+              true,
+              protocol: host.protocol,
+            );
           unawaited(_hosts.touchConnected(host.uuid));
           _startClipboardSync();
           return;
@@ -107,13 +120,21 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
           error = 'wrong_password';
           password = null;
         case _Attempt.certChanged:
-          final ok = await _ui.confirmCertificateChanged(host, _fingerprint ?? '', detail ?? '');
+          final ok = await _ui.confirmCertificateChanged(
+            host,
+            _fingerprint ?? '',
+            detail ?? '',
+          );
           if (!ok) {
             setState(SessionState.failed, error: 'cancelled');
             return;
           }
           _fingerprint = detail;
-          await _hosts.updateFingerprint(host.uuid, detail ?? '');
+          await _hosts.updateFingerprint(
+            host.uuid,
+            detail ?? '',
+            protocol: host.protocol,
+          );
         case _Attempt.failed:
           setState(SessionState.failed, error: detail);
           return;
@@ -146,7 +167,9 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
       } else {
         // 首次连接记录指纹
         _fingerprint = fp;
-        unawaited(_hosts.updateFingerprint(host.uuid, fp));
+        unawaited(
+          _hosts.updateFingerprint(host.uuid, fp, protocol: host.protocol),
+        );
       }
     };
     c.onAuthFailed = (_) => authFailed = true;
@@ -183,7 +206,8 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
       await Pasteboard.writeFiles(paths);
       notifyListeners();
     };
-    c.onClipboardFilesSkipped = (count, mb) => onNotice?.call(RdpNotice.filesTooLarge, mb);
+    c.onClipboardFilesSkipped = (count, mb) =>
+        onNotice?.call(RdpNotice.filesTooLarge, mb);
     c.onClipboardFilesProgress = (done, total) {
       filesDoneKb = done;
       filesTotalKb = total;
@@ -237,13 +261,19 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
   void _startClipboardSync() {
     _clipTimer?.cancel();
     if (host.extra['clipboard'] == false) return;
-    _clipTimer = Timer.periodic(const Duration(milliseconds: 1200), (_) => syncClipboard());
+    _clipTimer = Timer.periodic(
+      const Duration(milliseconds: 1200),
+      (_) => syncClipboard(),
+    );
   }
 
   /// 立即检查本地剪贴板
   Future<void> syncClipboard() async {
     final c = _client;
-    if (c == null || state != SessionState.connected || host.extra['clipboard'] == false) return;
+    if (c == null ||
+        state != SessionState.connected ||
+        host.extra['clipboard'] == false)
+      return;
     List<String> files = const [];
     try {
       files = await Pasteboard.files();
@@ -289,10 +319,16 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
     var pasted = false;
     if (at != null) {
       // 服务端确认新剪贴板后再粘贴，否则可能粘贴出旧内容；超时则只提示手动粘贴
-      pasted = await ready.future.timeout(const Duration(seconds: 2), onTimeout: () => false);
+      pasted = await ready.future.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => false,
+      );
       if (pasted) await _pasteAt(at.$1, at.$2);
     }
-    AppLog.i('rdp', '拖入 ${paths.length} 项：已放入共享目录 $dir 并写入远程剪贴板${pasted ? '，已在 $at 粘贴' : ''}');
+    AppLog.i(
+      'rdp',
+      '拖入 ${paths.length} 项：已放入共享目录 $dir 并写入远程剪贴板${pasted ? '，已在 $at 粘贴' : ''}',
+    );
     return paths.length;
   }
 
@@ -344,7 +380,11 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
   }
 
   /// Ctrl+Alt+Del
-  void sendCtrlAltDel() => sendCombo([RdpScancode.ctrlLeft, RdpScancode.altLeft, RdpScancode.delete]);
+  void sendCtrlAltDel() => sendCombo([
+    RdpScancode.ctrlLeft,
+    RdpScancode.altLeft,
+    RdpScancode.delete,
+  ]);
 
   /// Windows 键
   void sendWinKey() => sendCombo([RdpScancode.winLeft]);
@@ -379,7 +419,11 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
       return;
     }
     // 按键状态变化：分别发送按下 / 抬起
-    for (final (bit, flag) in const [(1, RdpPointer.button1), (4, RdpPointer.button2), (2, RdpPointer.button3)]) {
+    for (final (bit, flag) in const [
+      (1, RdpPointer.button1),
+      (4, RdpPointer.button2),
+      (2, RdpPointer.button3),
+    ]) {
       if (changed & bit == 0) continue;
       c.sendMouse(flag | (buttons & bit != 0 ? RdpPointer.down : 0), x, y);
     }
@@ -389,7 +433,9 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
   @override
   void scrollEvent(int x, int y, int steps) {
     // 滚轮每格 120；向下为负，使用 9 位补码表示；每格发送一次
-    final flags = steps < 0 ? (RdpPointer.wheel | 0x78) : (RdpPointer.wheel | RdpPointer.wheelNegative | 0x88);
+    final flags = steps < 0
+        ? (RdpPointer.wheel | 0x78)
+        : (RdpPointer.wheel | RdpPointer.wheelNegative | 0x88);
     for (var i = 0; i < steps.abs(); i++) {
       _client?.sendMouse(flags, x, y);
     }
@@ -445,7 +491,10 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
     if (!_dynamicResolution || state != SessionState.connected) return;
     // 窗口拖动过程中合并请求
     _resizeTimer?.cancel();
-    _resizeTimer = Timer(const Duration(milliseconds: 500), () => _client?.resize(width, height));
+    _resizeTimer = Timer(
+      const Duration(milliseconds: 500),
+      () => _client?.resize(width, height),
+    );
   }
 
   // ---------- 生命周期 ----------

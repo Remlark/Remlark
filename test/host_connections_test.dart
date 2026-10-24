@@ -37,7 +37,11 @@ void main() {
     final controller = HostsController(HostRepository(db), GroupRepository(db));
     addTearDown(controller.dispose);
     controller.all.add(dualHost);
-    for (final filter in [ProtocolFilter.ssh, ProtocolFilter.vnc, ProtocolFilter.all]) {
+    for (final filter in [
+      ProtocolFilter.ssh,
+      ProtocolFilter.vnc,
+      ProtocolFilter.all,
+    ]) {
       controller.setProtocolFilter(filter);
       expect(controller.visible.single.uuid, 'dual');
     }
@@ -71,6 +75,35 @@ void main() {
     expect(find.text('VNC'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('VNC 与 RDP 同时开启时使用不同图标及连接动作', (tester) async {
+    final actions = <HostAction>[];
+    final host = dualHost.copyWith(
+      extra: {
+        ...dualHost.extra,
+        'connections': {
+          'rdp': {'port': 3389, 'username': 'rdp-user'},
+        },
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.build(Brightness.dark, AccentPreset.values.first),
+        home: Scaffold(
+          body: SizedBox(
+            width: 340,
+            height: 220,
+            child: HostCard(host: host, onAction: actions.add),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byTooltip('连接 VNC 桌面'));
+    await tester.tap(find.byTooltip('连接 RDP 桌面'));
+    expect(actions, [HostAction.connectVnc, HostAction.connectRdp]);
+    expect(find.byIcon(Icons.desktop_windows_outlined), findsWidgets);
+    expect(find.byIcon(Icons.window_rounded), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('窗口放大再缩小时，视图切换始终靠右且筛选紧邻搜索框', (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     final controller = HostsController(HostRepository(db), GroupRepository(db));
@@ -94,7 +127,11 @@ void main() {
       final toggle = tester.getRect(find.byType(IconToggleGroup<bool>));
       final search = tester.getRect(find.byType(SearchField));
       final filters = tester.getRect(find.byType(PillChoice<ProtocolFilter>));
-      expect(width - toggle.right, closeTo(24, 0.1), reason: '窗口宽度 $width 时保持右边距');
+      expect(
+        width - toggle.right,
+        closeTo(24, 0.1),
+        reason: '窗口宽度 $width 时保持右边距',
+      );
       expect(filters.left - search.right, closeTo(16, 0.1));
       expect(search.width, lessThanOrEqualTo(360));
       expect(tester.takeException(), isNull);

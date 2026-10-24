@@ -40,6 +40,8 @@ const Map<String, String> stringsEn = {
   'host.address.required': 'Address is required',
   'host.port': 'Port',
   'host.username': 'Username',
+  'host.operating_system': 'Operating system icon',
+  'host.operating_system.auto': 'Detect automatically',
   'host.password': 'Password',
   'host.password.helper': 'If not saved, you will be asked on each connection',
   'host.remember_password': 'Remember password',

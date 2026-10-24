@@ -87,4 +87,35 @@ class OsRegistry {
     final canonical = normalize(id);
     return ids.contains(canonical) ? 'assets/os_icons/$canonical.png' : null;
   }
+
+  /// 仅当主机名称中恰好出现一种完整系统标识时推断图标，避免按协议猜测系统。
+  static String? inferFromLabel(String label) {
+    final matches = <String>{};
+    for (final token in label.toLowerCase().split(RegExp(r'[^a-z0-9]+'))) {
+      if (token.length < 4) continue;
+      final id = _aliases[token] ?? token;
+      if (ids.contains(id)) matches.add(id);
+    }
+    return matches.length == 1 ? matches.single : null;
+  }
+
+  /// 系统选择器中的名称，常见缩写保持品牌写法。
+  static String displayName(String id) => switch (id) {
+    'macos' => 'macOS',
+    'rhel' => 'Red Hat Enterprise Linux',
+    'opensuse' => 'openSUSE',
+    'almalinux' => 'AlmaLinux',
+    'rocky' => 'Rocky Linux',
+    'linuxmint' => 'Linux Mint',
+    'amzn' => 'Amazon Linux',
+    'ol' => 'Oracle Linux',
+    'sles' => 'SUSE Linux Enterprise',
+    'pop' => 'Pop!_OS',
+    'uos' => 'UOS',
+    'mx' => 'MX Linux',
+    'freebsd' => 'FreeBSD',
+    'openbsd' => 'OpenBSD',
+    'netbsd' => 'NetBSD',
+    _ => '${id[0].toUpperCase()}${id.substring(1)}',
+  };
 }

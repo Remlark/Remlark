@@ -10,7 +10,8 @@ enum HostProtocol {
   final int defaultPort;
 
   /// 从字符串解析，未知值回退为 ssh
-  static HostProtocol parse(String? v) => HostProtocol.values.firstWhere((e) => e.name == v, orElse: () => ssh);
+  static HostProtocol parse(String? v) =>
+      HostProtocol.values.firstWhere((e) => e.name == v, orElse: () => ssh);
 }
 
 /// SSH 认证方式
@@ -19,7 +20,8 @@ enum AuthType {
   key,
   keyboard;
 
-  static AuthType parse(String? v) => AuthType.values.firstWhere((e) => e.name == v, orElse: () => password);
+  static AuthType parse(String? v) =>
+      AuthType.values.firstWhere((e) => e.name == v, orElse: () => password);
 }
 
 /// 出口代理类型
@@ -28,12 +30,19 @@ enum ProxyType {
   http,
   socks5;
 
-  static ProxyType parse(String? v) => ProxyType.values.firstWhere((e) => e.name == v, orElse: () => none);
+  static ProxyType parse(String? v) =>
+      ProxyType.values.firstWhere((e) => e.name == v, orElse: () => none);
 }
 
 /// 出口代理配置
 class ProxyConfig {
-  const ProxyConfig({this.type = ProxyType.none, this.host = '', this.port = 0, this.username = '', this.password});
+  const ProxyConfig({
+    this.type = ProxyType.none,
+    this.host = '',
+    this.port = 0,
+    this.username = '',
+    this.password,
+  });
 
   final ProxyType type;
   final String host;
@@ -44,8 +53,12 @@ class ProxyConfig {
   bool get enabled => type != ProxyType.none && host.isNotEmpty && port > 0;
 
   /// 比较完整连接配置，空密码和未设置密码具有相同语义。
-  bool sameConnectionAs(ProxyConfig other) => type == other.type && host == other.host &&
-      port == other.port && username == other.username && (password ?? '') == (other.password ?? '');
+  bool sameConnectionAs(ProxyConfig other) =>
+      type == other.type &&
+      host == other.host &&
+      port == other.port &&
+      username == other.username &&
+      (password ?? '') == (other.password ?? '');
 
   Map<String, dynamic> toJson() => {
     'type': type.name,
@@ -182,14 +195,18 @@ class HostEntry {
       proxyUuid: proxyUuid != null ? proxyUuid() : this.proxyUuid,
       osId: osId != null ? osId() : this.osId,
       osName: osName != null ? osName() : this.osName,
-      hostKeyFingerprint: hostKeyFingerprint != null ? hostKeyFingerprint() : this.hostKeyFingerprint,
+      hostKeyFingerprint: hostKeyFingerprint != null
+          ? hostKeyFingerprint()
+          : this.hostKeyFingerprint,
       extra: extra ?? this.extra,
       note: note ?? this.note,
       syncEnabled: syncEnabled ?? this.syncEnabled,
       syncedAt: syncedAt != null ? syncedAt() : this.syncedAt,
       updatedAt: updatedAt ?? this.updatedAt,
       createdAt: createdAt ?? this.createdAt,
-      lastConnectedAt: lastConnectedAt != null ? lastConnectedAt() : this.lastConnectedAt,
+      lastConnectedAt: lastConnectedAt != null
+          ? lastConnectedAt()
+          : this.lastConnectedAt,
     );
   }
 
@@ -206,14 +223,43 @@ class HostEntry {
     if (withSecrets && savePassword && password != null) 'password': password,
     if (keyUuid != null) 'keyUuid': keyUuid,
     'jumpChain': jumpChain,
-    'proxy': withSecrets ? proxy.toJson() : (proxy.toJson()..remove('password')),
+    'proxy': withSecrets
+        ? proxy.toJson()
+        : (proxy.toJson()..remove('password')),
     if (osId != null) 'osId': osId,
     if (osName != null) 'osName': osName,
-    'extra': extra,
+    'extra': withSecrets ? extra : _extraWithoutSecrets(),
     'note': note,
     'updatedAt': updatedAt,
     'createdAt': createdAt,
   };
+
+  /// 导出无密码文件时，同时清理附加协议的密码和代理密码。
+  Map<String, dynamic> _extraWithoutSecrets() {
+    final result = Map<String, dynamic>.from(extra);
+    final profiles = extra['connections'];
+    if (profiles is Map) {
+      result['connections'] = {
+        for (final item in profiles.entries)
+          item.key: _profileWithoutSecrets(
+            Map<String, dynamic>.from(item.value as Map),
+          ),
+      };
+    }
+    return result;
+  }
+
+  /// 清理单个附加协议的敏感字段。
+  static Map<String, dynamic> _profileWithoutSecrets(
+    Map<String, dynamic> profile,
+  ) {
+    profile.remove('password');
+    profile['savePassword'] = false;
+    final proxy = profile['proxy'];
+    if (proxy is Map)
+      profile['proxy'] = Map<String, dynamic>.from(proxy)..remove('password');
+    return profile;
+  }
 
   /// 从可移植 JSON 构造（分组由调用方另行处理）
   factory HostEntry.fromPortableJson(Map<String, dynamic> j) {
@@ -231,7 +277,9 @@ class HostEntry {
       savePassword: j['savePassword'] == true,
       keyUuid: j['keyUuid'] as String?,
       jumpChain: (j['jumpChain'] as List?)?.cast<String>() ?? const [],
-      proxy: ProxyConfig.fromJson((j['proxy'] as Map?)?.cast<String, dynamic>()),
+      proxy: ProxyConfig.fromJson(
+        (j['proxy'] as Map?)?.cast<String, dynamic>(),
+      ),
       osId: j['osId'] as String?,
       osName: j['osName'] as String?,
       extra: (j['extra'] as Map?)?.cast<String, dynamic>() ?? const {},
@@ -256,7 +304,11 @@ enum SyncState {
 
 /// 分组领域模型
 class GroupEntry {
-  const GroupEntry({required this.uuid, required this.name, this.sortOrder = 0});
+  const GroupEntry({
+    required this.uuid,
+    required this.name,
+    this.sortOrder = 0,
+  });
 
   final String uuid;
   final String name;

@@ -9,7 +9,6 @@ import '../../../ui_kit/buttons.dart';
 import '../../../ui_kit/page_header.dart';
 import '../../../ui_kit/panel.dart';
 import '../../../utils/format_utils.dart';
-import '../host_model.dart';
 import '../vnc_ssh_config.dart';
 import '../hosts_controller.dart';
 import 'group_panel.dart';
@@ -19,7 +18,6 @@ import 'host_editor_dialog.dart';
 import 'os_icon.dart';
 import 'protocol_tag.dart';
 import 'sync_badge.dart';
-import '../../../ui_kit/app_menu.dart';
 
 /// 主机页：页头（新建主机）+ 工具栏（搜索、协议筛选、视图切换）+ 分组导航 + 主机卡片 / 列表
 class HostsPage extends StatelessWidget {
@@ -44,7 +42,9 @@ class HostsPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const GroupPanel(),
-                Expanded(child: c.listView ? const _HostList() : const _HostGrid()),
+                Expanded(
+                  child: c.listView ? const _HostList() : const _HostGrid(),
+                ),
               ],
             ),
           ),
@@ -72,7 +72,10 @@ class _Toolbar extends StatelessWidget {
                 Flexible(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 360),
-                    child: SearchField(hint: context.tr('host.search'), onChanged: c.setSearch),
+                    child: SearchField(
+                      hint: context.tr('host.search'),
+                      onChanged: c.setSearch,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -104,7 +107,7 @@ class _Toolbar extends StatelessWidget {
   }
 }
 
-/// 新建主机按钮（选择协议）
+/// 新建主机按钮：协议在编辑弹窗内选择。
 class _NewHostButton extends StatelessWidget {
   const _NewHostButton({this.groupUuid});
 
@@ -112,25 +115,10 @@ class _NewHostButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppMenuAnchor<HostProtocol>(
-      builder: (ctx, open) => FilledButton.icon(
-        onPressed: open,
-        icon: const Icon(Icons.add, size: 18),
-        label: Text(context.tr('host.new')),
-      ),
-      items: (ctx) => [
-        for (final p in HostProtocol.values)
-          AppMenuItem(
-            value: p,
-            icon: switch (p) {
-              HostProtocol.ssh => Icons.terminal,
-              HostProtocol.rdp => Icons.window,
-              HostProtocol.vnc => Icons.desktop_windows_outlined,
-            },
-            label: context.tr('host.new.${p.name}'),
-          ),
-      ],
-      onSelected: (p) => HostEditorDialog.show(context, protocol: p, groupUuid: groupUuid),
+    return FilledButton.icon(
+      onPressed: () => HostEditorDialog.show(context, groupUuid: groupUuid),
+      icon: const Icon(Icons.add, size: 18),
+      label: Text(context.tr('host.new')),
     );
   }
 }
@@ -148,7 +136,10 @@ class _HostsEmpty extends StatelessWidget {
       action: c.all.isEmpty
           ? FilledButton.icon(
               icon: const Icon(Icons.add, size: 18),
-              onPressed: () => HostEditorDialog.show(context, protocol: HostProtocol.ssh),
+              onPressed: () => HostEditorDialog.show(
+                context,
+                groupUuid: c.selectedGroupUuid,
+              ),
               label: Text(context.tr('host.new')),
             )
           : null,
@@ -180,7 +171,11 @@ class _HostGrid extends StatelessWidget {
           itemCount: hosts.length,
           itemBuilder: (context, i) {
             final h = hosts[i];
-            return HostCard(key: ValueKey(h.uuid), host: h, onAction: (a) => HostActions.run(context, h, a));
+            return HostCard(
+              key: ValueKey(h.uuid),
+              host: h,
+              onAction: (a) => HostActions.run(context, h, a),
+            );
           },
         );
       },
@@ -227,8 +222,11 @@ class _HostList extends StatelessWidget {
                         key: ValueKey(h.uuid),
                         height: 52,
                         columns: cols,
-                        onDoubleTap: h.vncSsh == null ? () => act(HostAction.connect) : null,
-                        onSecondaryTapUp: (d) => showHostMenu(context, h, d.globalPosition, act),
+                        onDoubleTap: h.connectionProtocols.length == 1
+                            ? () => act(HostAction.connect)
+                            : null,
+                        onSecondaryTapUp: (d) =>
+                            showHostMenu(context, h, d.globalPosition, act),
                         cells: [
                           Row(
                             children: [
@@ -239,10 +237,17 @@ class _HostList extends StatelessWidget {
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(h.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    Text(
+                                      h.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                     FittedBox(
                                       fit: BoxFit.scaleDown,
-                                      child: HostProtocolTags(host: h, small: true),
+                                      child: HostProtocolTags(
+                                        host: h,
+                                        small: true,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -253,28 +258,56 @@ class _HostList extends StatelessWidget {
                             '${h.address}:${h.port}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 13,
+                            ),
                           ),
-                          if (wide) Text(h.username, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          if (wide)
+                            Text(
+                              h.username,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           if (wide)
                             Text(
                               h.lastConnectedAt == null
                                   ? '—'
-                                  : FormatUtils.dateTime(DateTime.fromMillisecondsSinceEpoch(h.lastConnectedAt!)),
-                              style: TextStyle(fontSize: 13, color: p.textMuted, fontFamily: 'monospace'),
+                                  : FormatUtils.dateTime(
+                                      DateTime.fromMillisecondsSinceEpoch(
+                                        h.lastConnectedAt!,
+                                      ),
+                                    ),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: p.textMuted,
+                                fontFamily: 'monospace',
+                              ),
                             ),
                           SyncBadge(state: h.syncState, withText: wide),
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              HostConnectButtons(host: h, onAction: act, compact: true),
+                              HostConnectButtons(
+                                host: h,
+                                onAction: act,
+                                compact: true,
+                              ),
                               Builder(
                                 builder: (ctx) => GhostIconButton(
                                   icon: Icons.more_horiz,
                                   tooltip: context.tr('common.more'),
                                   onPressed: () {
-                                    final b = ctx.findRenderObject() as RenderBox;
-                                    showHostMenu(context, h, b.localToGlobal(b.size.bottomLeft(Offset.zero)), act);
+                                    final b =
+                                        ctx.findRenderObject() as RenderBox;
+                                    showHostMenu(
+                                      context,
+                                      h,
+                                      b.localToGlobal(
+                                        b.size.bottomLeft(Offset.zero),
+                                      ),
+                                      act,
+                                    );
                                   },
                                 ),
                               ),

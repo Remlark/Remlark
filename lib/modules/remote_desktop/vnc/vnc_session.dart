@@ -25,7 +25,13 @@ import 'vnc_keysym.dart';
 
 /// VNC 会话：内置 RFB 客户端 + 剪贴板同步 + 通过内置 SSH（兼容旧关联）传输文件
 class VncSession extends WorkspaceTab implements RemoteDisplay {
-  VncSession(super.host, this._hosts, this._connector, this._sshUi, this._vncUi);
+  VncSession(
+    super.host,
+    this._hosts,
+    this._connector,
+    this._sshUi,
+    this._vncUi,
+  );
 
   final HostRepository _hosts;
   final SshConnector _connector;
@@ -87,7 +93,12 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
     for (var attempt = 0; attempt < 5; attempt++) {
       final c = RfbIsolateClient();
       try {
-        await c.connect(host.address, host.port, username: username, password: password);
+        await c.connect(
+          host.address,
+          host.port,
+          username: username,
+          password: password,
+        );
         client = c;
         _sessionPassword = password;
         _bind(c);
@@ -109,7 +120,11 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
         setState(SessionState.failed, error: '$e');
         return;
       }
-      final input = await _vncUi.askDesktopPassword(host, error: err, askUsername: needUsername);
+      final input = await _vncUi.askDesktopPassword(
+        host,
+        error: err,
+        askUsername: needUsername,
+      );
       if (input == null) {
         AppLog.i('vnc', '用户取消输入凭据');
         setState(SessionState.failed, error: 'cancelled');
@@ -122,7 +137,12 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
         await _hosts.updateUsername(host.uuid, newUser);
       }
       if (input.remember) {
-        await _hosts.updatePassword(host.uuid, password, true);
+        await _hosts.updatePassword(
+          host.uuid,
+          password,
+          true,
+          protocol: host.protocol,
+        );
       }
       err = 'wrong_password';
     }
@@ -139,9 +159,15 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
     _lockTimer?.cancel();
     if (hasSsh) {
       unawaited(_checkLock());
-      _lockTimer = Timer.periodic(_lockInterval, (_) => unawaited(_checkLock()));
+      _lockTimer = Timer.periodic(
+        _lockInterval,
+        (_) => unawaited(_checkLock()),
+      );
     }
-    AppLog.i('vnc', '已连接「${host.name}」${c.width}×${c.height}，安全类型 ${c.securityType}');
+    AppLog.i(
+      'vnc',
+      '已连接「${host.name}」${c.width}×${c.height}，安全类型 ${c.securityType}',
+    );
     _moves.cancel();
     c.onFrame = () {
       frame++;
@@ -163,7 +189,10 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
       }
     };
     // 定时检查本地剪贴板：文本变化时推送到远程，文件则记录等待 ⌘V
-    _clipTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) => unawaited(clipboard.pushLocal()));
+    _clipTimer = Timer.periodic(
+      const Duration(milliseconds: 1500),
+      (_) => unawaited(clipboard.pushLocal()),
+    );
   }
 
   // ---------- RemoteDisplay ----------
@@ -172,7 +201,9 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
   final Map<PhysicalKeyboardKey, int> _downKeys = {};
 
   /// 鼠标移动限流（约 60Hz），见 MoveThrottle
-  late final _moves = MoveThrottle((x, y) => client?.sendPointer(x, y, _buttons));
+  late final _moves = MoveThrottle(
+    (x, y) => client?.sendPointer(x, y, _buttons),
+  );
 
   int _buttons = 0;
   int _lastX = 0, _lastY = 0;
@@ -248,7 +279,18 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
   void displayFocused() => unawaited(clipboard.pushLocal());
 
   /// 修饰键 keysym：Shift、Control、Meta、Alt、Super（左右）
-  static const _modifiers = [0xffe1, 0xffe2, 0xffe3, 0xffe4, 0xffe7, 0xffe8, 0xffe9, 0xffea, 0xffeb, 0xffec];
+  static const _modifiers = [
+    0xffe1,
+    0xffe2,
+    0xffe3,
+    0xffe4,
+    0xffe7,
+    0xffe8,
+    0xffe9,
+    0xffea,
+    0xffeb,
+    0xffec,
+  ];
 
   @override
   void displayBlurred() {
@@ -344,7 +386,9 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
     final c = _transferConn;
     if (c != null && !c.isClosed) return Future.value(c);
     // 并发调用（剪贴板、锁屏检查、上传同时发起）共用同一次连接，避免重复建立 SSH 连接且多余连接不关闭
-    return _transferConnecting ??= _connectTransfer().whenComplete(() => _transferConnecting = null);
+    return _transferConnecting ??= _connectTransfer().whenComplete(
+      () => _transferConnecting = null,
+    );
   }
 
   Future<SshConnection>? _transferConnecting;
@@ -357,8 +401,15 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
     if (cfg != null) {
       // 内置 SSH：与 VNC 共用地址、用户名、密码；未保存密码时使用本次 VNC 连接输入的密码，避免再次询问
       final base = latest.asSshHost(cfg);
-      final pass = (_sessionPassword ?? '').isNotEmpty ? _sessionPassword : null;
-      sshHost = pass == null ? base : base.copyWith(password: () => pass, savePassword: true);
+      // 独立 SSH 凭据优先；旧版共用账户仍可沿用本次 VNC 登录密码。
+      final pass =
+          latest.connectionProfile(HostProtocol.ssh) == null &&
+              (_sessionPassword ?? '').isNotEmpty
+          ? _sessionPassword
+          : null;
+      sshHost = pass == null
+          ? base
+          : base.copyWith(password: () => pass, savePassword: true);
     } else {
       final uuid = latest.legacyTransferHost;
       if (uuid == null) throw StateError('no ssh');
@@ -373,7 +424,10 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
     final conn = await _connector.connect(sshHost, _sshUi);
     _transferConn = conn;
     transfers?.dispose();
-    transfers = TransferManager(SftpService(conn.client), autoRemoveDoneAfter: const Duration(seconds: 3));
+    transfers = TransferManager(
+      SftpService(conn.client),
+      autoRemoveDoneAfter: const Duration(seconds: 3),
+    );
     notifyListeners();
     return conn;
   }
