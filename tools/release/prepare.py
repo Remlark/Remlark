@@ -68,6 +68,9 @@ def manifest():
                          f'remlark-windows-{arch}.zip',
                          f'remlark-{version()}-linux-{deb_arch}.deb',
                          f'remlark-linux-{arch}.tar.gz'])
+        for target in ('macos', 'windows', 'linux'):
+            extension = 'zip' if target == 'windows' else 'tar.gz'
+            required.append(f'remlark-sync-server-{version()}-{target}-{arch}.{extension}')
     lines = []
     for name in sorted(required):
         path = dist / name

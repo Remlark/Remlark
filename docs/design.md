@@ -55,6 +55,8 @@
 - 退出（Dock 退出、⌘Q、关闭最后一个窗口）经 `AppLifecycleListener.onExitRequested` 先调用 `AppServices.shutdown()`：停止自动同步 → 关闭所有会话（SSH / VNC / RDP / SFTP）→ 结束 dsh、Codex 子进程 → 关闭数据库，然后才允许退出。数据库必须在引擎关闭前关闭，否则后台 isolate 销毁时 sqlite 清理回调访问已释放的连接导致崩溃。每步限时 3 秒，失败只记日志。
 
 ## 同步协议
+- 服务端通过 Release CI 独立构建 macOS / Windows / Linux 的 x64、arm64 共六个原生版本；macOS 服务端按架构分别发布，桌面客户端保持 universal。发布包包含完整 `bundle/bin` 与 `bundle/lib`，打包时验证主程序和 SQLite 库的系统/架构，解包后启动并读写数据库。全部桌面端与服务端任务成功且 16 个附件齐全后，统一生成 SHA256SUMS 并发布。
+- Actions 存储：仅构建验证不上传压缩包；正式发布通过 artifacts 临时中转（保留上限 1 天），流程结束后始终清理当前和同一工作流历史已完成运行的包及旧日志附件。Release 附件保留，不删除其他运行中的产物、其他工作流数据或原生编译缓存。
 - 服务端（`server/`，Dart shelf + drift）按访问令牌划分数据空间，每台主机独立存储 `(uuid, updatedAt, deleted, payload)`。客户端将单台主机 JSON 先 gzip 压缩，再用“同步口令”经 PBKDF2 派生密钥做 AES-GCM 加密；新载荷为 `v2:gzip:`，继续读取旧版未压缩的 `v1:` 密文。服务端无法解密，建议通过 `--cert/--key` 或反向代理启用 HTTPS。
 - 客户端主机有 `syncEnabled` 与 `syncedAt`：`syncedAt == updatedAt` 为“已同步”，否则为“待同步”，未参与同步为“仅本地”。`updatedAt` 只记录配置最后修改时间，连接时间单独保存为 `lastConnectedAt`；连接成功、系统探测和指纹记录均不更新配置版本，相同用户名或已保存密码的重复回写也不产生新版本。实际修改连接参数或记住新密码属于配置变更。
 - 同步：本地新则上传（服务器上更新时返回 409，改为拉取），服务器新则下载；服务器有而本地没有的主机自动拉取；从服务器删除后留下删除标记，其他客户端将其改为“仅本地”。
@@ -247,7 +249,7 @@
 - 手工运行默认仅验证构建（`build_only=true`），tag 留空时使用所选分支；与正式发布共用完整五路编译、安装包和构建后平台测试，跳过标签校验与发布任务。正式手工发布需指定版本标签并关闭 `build_only`。
 - 独立原生 runner 构建 Windows x64 / arm64、Linux x64 / arm64；macOS 构建包含 Intel / Apple Silicon 的通用 app、zip 与 DMG，发布前用 lipo 检查主程序与 FFI 库。
 - 每个 runner 顺序执行依赖准备、`make test-platform` 与构建，保留锁文件。Windows 安装器架构与 Flutter / MSVC 目标一致，附带对应架构 CRT。
-- 所有任务通过且 10 个安装 / 便携包完整后生成 SHA256SUMS；先上传草稿再公开 Release。默认 token 只读，仅发布任务有 contents:write。
+- 桌面五路与服务端六路任务通过且 16 个附件完整后生成 SHA256SUMS；先上传草稿再公开 Release。默认 token 只读，发布任务有 contents:write，清理任务仅额外授予 actions:write；中转包在流程结束后删除，仅构建不上传包。
 
 
 ## 统一版本来源

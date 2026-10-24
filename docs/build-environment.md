@@ -253,6 +253,10 @@ make server
 
 服务端产物位于 `dist/remlark-sync-server/bundle/`；Windows 使用 `bin/server.exe`，macOS / Linux 使用 `bin/server`。从该 bundle 运行 `--help` 查看参数。开发时可执行 `make server-run TOKEN=<本地令牌>`，数据写入 `server/data/`。
 
+Release CI 另有独立的服务端六路构建：macOS / Windows / Linux 各 x64、arm64，固定 Dart 3.13.5，仅安装 `server/pubspec.lock` 中的依赖，执行服务端静态检查和测试后用 `dart build cli` 编译。macOS x64 使用 `macos-15-intel`，arm64 使用 `macos-15`，分别输出，桌面客户端继续使用 universal。
+
+服务端附件为 `remlark-sync-server-<版本>-<系统>-<架构>.tar.gz`（macOS / Linux）或 `.zip`（Windows），压缩包内保留完整 `bundle/`。本地已有服务端构建时，可执行 `python3 tools/release/server_bundle.py macos x64 --smoke` 打包并在临时目录解压、启动、读写 SQLite；平台与架构必须匹配实际构建。六个 CI 任务均执行此验证，主程序或 SQLite 库缺失、架构不符、启动/读写失败时终止发布。
+
 截至 2026-10-21，Windows x64 验证：应用、RDP / SSH 原生库和同步服务端已编译通过；安装器编译、完整性验证与专项测试结果记录在 [multi-platform-testing.md](multi-platform-testing.md)。跨平台实机测试和安装、升级、卸载的交互检查按其中的手工清单执行。
 
 Linux x64 本轮完成默认 `make`、原生库与同步服务端编译：全量测试 139 项通过 / 6 项按条件跳过，另行启用的 dsh 2 项通过，最终平台测试 28 项、服务端测试 2 项通过；静态检查、deb 解包和便携包本机图形启动、包内原生库与 APT 模拟安装验证通过。真实远程主机及干净系统安装 / 升级 / 卸载仍按手工清单验证，结果见 [multi-platform-testing.md](multi-platform-testing.md)。
@@ -268,7 +272,7 @@ git push origin v1.0.0
 
 也可在 Actions → Desktop Release → Run workflow 中指定已有标签重试。手工运行仍按标签检出，不会将分支新代码混入旧版本。
 
-固定 Flutter 3.47.7，从官方源码标签启动 SDK，以便 ARM64 runner 下载原生 Dart SDK。Linux 使用 Ubuntu 24.04（x64 / arm64）及发行版配套 C++ 库，Windows 使用 windows-2022 / windows-11-arm、MSVC、原生 Perl、NASM 和 Inno Setup，macOS 使用 macos-15，构建双架构原生库和通用 app。每个任务运行 `make test-platform`；所有构建通过后统一上传 10 个安装 / 便携附件及 SHA256SUMS，并公开 Release。失败时保留构建日志，发布任务不会执行。
+固定 Flutter 3.47.7，从官方源码标签启动 SDK，以便 ARM64 runner 下载原生 Dart SDK。Linux 使用 Ubuntu 24.04（x64 / arm64）及发行版配套 C++ 库，Windows 使用 windows-2022 / windows-11-arm、MSVC、原生 Perl、NASM 和 Inno Setup，macOS 使用 macos-15，构建双架构原生库和通用 app。桌面各任务运行 `make test-platform`；服务端独立六路构建。所有构建通过后统一上传 10 个桌面附件、6 个服务端附件及 SHA256SUMS，并公开 Release。构建失败时发布任务不会执行，错误信息查看 Actions 执行日志，不额外上传日志压缩包。
 
 Windows ARM64 自动选择匹配架构的 CRT 和安装器；手工可执行 `make windows WINDOWS_ARCH=arm64`，必须在原生 ARM64 Windows 与对应 VS 环境运行。打包脚本支持 `-Arch arm64`。macOS DMG 包含应用与 Applications 入口，通用 zip 同时保留。macOS CI 已接入固定自签证书（未公证），Windows 安装包仍未签名；需 M-16 / M-20 实机验证。
 
@@ -284,7 +288,9 @@ CI 同时支持 VS 2022 / VS 2026，从 VCToolsRedistDir 的目标架构目录�
 
 ### 仅验证 GitHub Actions 编译
 
-在 Desktop Release 中选择 Run workflow，选择待验证分支，tag 留空并保持 `build_only=true`。工作流执行完整五路构建、安装包生成与构建前后 `make test-platform`，产物保存在 Actions artifacts，不发布 Release。正式手工发布需填写与 VERSION 中版本号一致的已有版本标签，并关闭 `build_only`；推送 v* 标签仍自动发布。
+在 Desktop Release 中选择 Run workflow，选择待验证分支，tag 留空并保持 `build_only=true`。工作流执行桌面五路构建、安装包生成与构建前后 `make test-platform`，以及服务端六路构建、测试与解包启动验证，不上传 Actions artifacts、不发布 Release。正式手工发布需填写与 VERSION 中版本号一致的已有版本标签，并关闭 `build_only`；推送 v* 标签仍自动发布。
+
+正式发布所需的压缩包仅作为任务间中转上传，保留上限为 1 天；流程结束（包括构建/发布失败或仅验证）后 `cleanup` 任务立即删除本次中转包，同时分页清理同一工作流历史已结束运行的 `packages-*`、`logs-*`。其他正在运行的任务、其他工作流产物、Release 下载附件和用于加速编译的原生缓存保留。清理使用 `actions: write`，API 失败会明确报错；若工作流被强制取消导致清理未执行，本次正式发布中转包仍按 1 天上限过期。旧文件需新版工作流至少运行一次才会清理。
 
 2026-10-21 已用此模式完成硬件加速版本五路验证：[Desktop Build #11](https://github.com/Remlark/Remlark/actions/runs/39615318096)，macOS universal、Windows / Linux x64 与 arm64 编译、打包、构建后平台测试全部通过。具体解码结果和实机验证范围见 [multi-platform-testing.md](multi-platform-testing.md#2026-10-21-硬件加速版本-github-actions-全矩阵验证step-84)。
 

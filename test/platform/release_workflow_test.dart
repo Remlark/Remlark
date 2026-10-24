@@ -20,13 +20,16 @@ void main() {
     );
     final releaseGuard =
         "if: github.event_name != 'workflow_dispatch' || !inputs.build_only";
-    expect(releaseGuard.allMatches(workflow).length, 2);
+    expect(releaseGuard.allMatches(workflow).length, 4);
     expect(
       workflow.substring(workflow.indexOf('  publish:')),
       contains(releaseGuard),
     );
     // 两个构建后入口分别覆盖 Windows 和 macOS / Linux，确保加载本轮原生库。
-    final postBuild = workflow.substring(workflow.indexOf('      # 原生库编译后'));
+    final postBuild = workflow.substring(
+      workflow.indexOf('      # 原生库编译后'),
+      workflow.indexOf('  server:'),
+    );
     expect('make test-platform'.allMatches(postBuild).length, 2);
     expect("RMK_REQUIRE_RDP_NATIVE: '1'".allMatches(postBuild).length, 2);
     for (final runner in [
@@ -82,6 +85,23 @@ void main() {
     for (final name in names) {
       File('${dist.path}/$name').writeAsStringSync('abc');
     }
+    // 桌面端齐全仍不得发布：六个服务端附件必须一起生成校验清单。
+    final incomplete = await Process.run(
+      'python3',
+      [script.path, 'manifest'],
+      environment: {'RELEASE_TAG': 'v1.2.3'},
+    );
+    expect(incomplete.exitCode, isNot(0));
+    expect(incomplete.stderr, contains('remlark-sync-server-'));
+    expect(File('${dist.path}/SHA256SUMS').existsSync(), isFalse);
+    for (final platform in ['macos', 'windows', 'linux']) {
+      for (final arch in ['x64', 'arm64']) {
+        final extension = platform == 'windows' ? 'zip' : 'tar.gz';
+        final name = 'remlark-sync-server-1.2.3-$platform-$arch.$extension';
+        names.add(name);
+        File('${dist.path}/$name').writeAsStringSync('abc');
+      }
+    }
     final result = await Process.run(
       'python3',
       [script.path, 'manifest'],
@@ -89,7 +109,7 @@ void main() {
     );
     expect(result.exitCode, 0, reason: '${result.stderr}');
     final lines = File('${dist.path}/SHA256SUMS').readAsLinesSync();
-    expect(lines.length, 10);
+    expect(lines.length, 16);
     for (final line in lines) {
       expect(
         line,

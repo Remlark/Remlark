@@ -772,3 +772,15 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 客户端对路径中的主机 UUID 编码，服务端解码路由参数，导入的非标准 UUID 也能正常同步与删除；服务端对畸形 JSON、缺失或类型错误字段、空载荷返回 400 而非 500。
   - 新增配置加载/保存与密文落盘、自动同步周期/失败重试/退出、途中切换配置、重新加入遇到更新版本、未配置时移除、缺失密钥、各接口 401/500、批量上限、载荷超限、重复删除、特殊 UUID 端到端等回归。
   - 验证：客户端同步及相关回归 188 项、服务端 35 项通过；两端静态检查无新增问题。
+
+- [已完成] Step 107：GitHub Actions 独立构建和发布同步服务端
+  - 在现有 Release 工作流增加 macOS / Windows / Linux 各 x64、arm64 六路服务端构建，固定 Dart 3.13.5，锁定依赖、静态检查、单元测试后编译完整 bundle，无需 Flutter 和桌面原生库。
+  - macOS 服务端使用 Intel / Apple Silicon 独立 runner 与独立发布文件名；桌面客户端保留 universal。主程序与 SQLite 动态库都校验原生平台/架构，完整归档 bin/lib 及资源，并在临时解压目录启动发布包验证真实数据库读写。
+  - 发布任务等待桌面端和服务端全部成功，16 个附件统一生成 SHA256SUMS，服务端附件缺失同样阻止发布；新增 P-23 并扩展 P-10、M-13 及构建文档。
+  - 验证：macOS `make test-platform` 95 项通过、3 项条件跳过，服务端 35 项通过；定向静态检查、工作流 YAML 解析及 `git diff --check` 通过。macOS x64 实际编译、归档、解包启动及 SQLite 写入/读取通过。Windows / Linux 与 macOS arm64 本轮尚未执行，需由更新后的 CI 及 M-13 实机验证；三平台 `make test-platform` 保留在桌面构建矩阵中执行。
+
+- [已完成] Step 108：停止积累 Actions 压缩产物并清理历史文件
+  - 仅构建模式不再上传桌面或服务端压缩包，取消额外的失败日志 artifact；正式发布仅临时中转，保留上限从 7 天降到 1 天。
+  - 增加始终执行的清理任务：发布成功、失败及仅构建结束后，删除当前和本工作流历史已结束运行的 packages/logs，保护其他工作流、并行运行、Release 附件和原生缓存；分页先收集再删除，API 失败明确上报。
+  - 经现有 Git credential helper 认证，核实历史运行均属于 release.yml 后实际删除 10 个远端压缩包，共 485,762,798 字节；API 复核 Actions artifacts 数量为 0。凭据未输出或写入仓库。
+  - 新增 P-24 / M-27，扩展 P-10。macOS `make test-platform` 97 项通过、3 项条件跳过，定向静态检查、YAML 解析及 diff 检查通过；Windows / Linux 平台测试及新版 CI 自动清理仍待对应 runner 验证，三平台测试入口继续保留。

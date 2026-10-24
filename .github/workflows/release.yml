@@ -11,7 +11,7 @@ on:
         required: false
         type: string
       build_only:
-        description: '仅验证五路构建、平台测试与安装包，不发布 Release；留空 tag 时构建所选分支'
+        description: '验证桌面五路及服务端六路构建与测试，不发布 Release；留空 tag 时构建所选分支'
         required: true
         default: true
         type: boolean
@@ -25,6 +25,7 @@ concurrency:
 
 env:
   FLUTTER_VERSION: '3.47.7'
+  DART_VERSION: '3.13.5'
 
 jobs:
   build:
@@ -160,6 +161,7 @@ jobs:
           path: build/native
           key: ${{ steps.native-cache.outputs.cache-primary-key }}
       - name: Upload packages
+        if: github.event_name != 'workflow_dispatch' || !inputs.build_only
         uses: actions/upload-artifact@v4
         with:
           name: packages-${{ matrix.platform }}-${{ matrix.arch }}
@@ -170,18 +172,60 @@ jobs:
             dist/*.tar.gz
             dist/*.dmg
           if-no-files-found: error
-          retention-days: 7
-      - name: Upload native build logs on failure
-        if: failure()
+          retention-days: 1
+
+  server:
+    name: server-${{ matrix.platform }}-${{ matrix.arch }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: linux, arch: x64, runner: ubuntu-24.04 }
+          - { platform: linux, arch: arm64, runner: ubuntu-24.04-arm }
+          - { platform: windows, arch: x64, runner: windows-2022 }
+          - { platform: windows, arch: arm64, runner: windows-11-arm }
+          - { platform: macos, arch: x64, runner: macos-15-intel }
+          - { platform: macos, arch: arm64, runner: macos-15 }
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          persist-credentials: false
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: ${{ env.DART_VERSION }}
+          architecture: ${{ matrix.arch }}
+      - name: Test server packaging
+        run: python3 tools/testing/server_bundle_test.py -v
+      # 仅安装服务端依赖，不需要 Flutter 或桌面端的 RDP / SSH 原生库。
+      - name: Test and build sync server
+        working-directory: server
+        run: |
+          dart pub get --enforce-lockfile
+          dart analyze
+          dart test
+          dart build cli -t bin/server.dart -o ../dist/remlark-sync-server
+      - name: Verify bundle and package sync server
+        run: python3 tools/release/server_bundle.py ${{ matrix.platform }} ${{ matrix.arch }} --smoke
+      - name: Upload server package
+        if: github.event_name != 'workflow_dispatch' || !inputs.build_only
         uses: actions/upload-artifact@v4
         with:
-          name: logs-${{ matrix.platform }}-${{ matrix.arch }}
-          path: build/native/**/*.log
-          if-no-files-found: ignore
+          name: packages-server-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            dist/remlark-sync-server-*.zip
+            dist/remlark-sync-server-*.tar.gz
+          if-no-files-found: error
+          retention-days: 1
 
   publish:
     name: Publish complete release
-    needs: build
+    needs: [build, server]
     if: github.event_name != 'workflow_dispatch' || !inputs.build_only
     runs-on: ubuntu-24.04
     permissions:
@@ -213,3 +257,22 @@ jobs:
           fi
           gh release upload "$RELEASE_TAG" dist/* --clobber
           gh release edit "$RELEASE_TAG" --draft=false
+
+  cleanup:
+    name: Remove temporary Actions packages
+    needs: [build, server, publish]
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          persist-credentials: false
+      # 无论发布成功、失败或仅验证构建，都清理当前及历史已结束运行的中转包。
+      - name: Delete temporary packages and old build logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/release/cleanup_artifacts.py
