@@ -863,4 +863,5 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
 - [已完成] Step 122：修复 Windows 中文路径解压与 PowerShell 5.1 测试哈希
   - 测试仓库 Release 40136798355 两路 Windows 在平台测试阶段失败：System32 bsdtar 把中文路径参数转成 `??` 后打不开压缩包；PowerShell 5.1 从 pwsh 7 启动时 `Get-FileHash` 无法加载。
   - `source_archive.py` 解压时把工作目录设为压缩包目录，只传 ASCII 相对文件名，三平台共用；`windows_build_checks.ps1` 改用 python 计算哈希。P-26 新增 tar 参数回归。
+  - 重跑后 P-27 在 Dart 默认 30 秒处超时，且看不到输出。启动 5.1 时把 PSModulePath 重置为 5.1 默认模块目录（根除 pwsh 7 模块干扰）；改为流式收集输出，进程限时 4 分钟、超时先杀进程再打印已有输出；脚本各阶段输出 `==>` 标记。
   - 验证：macOS `make test-platform` 108 项通过、3 条件跳过；Windows x64/arm64 待测试仓库重新运行。

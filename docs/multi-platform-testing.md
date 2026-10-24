@@ -522,4 +522,5 @@ Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过�
 
 - 测试仓库 Release 40136798355 中 Windows x64/arm64 都在构建前的 `make test-platform` 失败。一是 System32 bsdtar 把命令行参数转成 ANSI 代码页，含中文的临时目录变成 `??`，P-26 有 3 项解压失败，真实构建在中文工作目录下也会失败。二是 P-27 的 PowerShell 5.1 由 pwsh 7 启动，继承的 PSModulePath 导致 `Get-FileHash` 无法加载。
 - 修复：`prepare_source` 用工作目录定位压缩包，只给 tar 传 ASCII 相对文件名；测试脚本改用 python 计算 SHA-256，保留 UTF-8 BOM。P-26 新增参数断言用例（共 20 项）。
+- 重跑后 P-27 在 30 秒默认时限处超时。Dart 用例改为给 5.1 传默认 PSModulePath，流式收集输出、4 分钟进程时限，超时打印已到达的阶段标记。本机 pwsh 7 执行脚本通过。
 - 本机 macOS `make test-platform` 108 项通过、3 条件跳过；Windows 需在测试仓库重新验证。

@@ -84,14 +84,45 @@ void main() {
 
   test('Windows 前置检查确认真实编译器目标并拒绝缺失工具', () async {
     if (!Platform.isWindows) return;
-    final result = await Process.run('powershell', [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
-      'tools/testing/windows_build_checks.ps1',
-    ]);
-    expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
-    expect(result.stdout, contains('Windows build wrapper checks passed'));
-  });
+    final systemRoot = Platform.environment['SystemRoot'] ?? r'C:\Windows';
+    final programFiles =
+        Platform.environment['ProgramFiles'] ?? r'C:\Program Files';
+    // pwsh 7 启动 5.1 时会继承 7 的模块路径，导致内置 cmdlet 加载失败且命令查找变慢。
+    final process = await Process.start(
+      'powershell',
+      [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        'tools/testing/windows_build_checks.ps1',
+      ],
+      environment: {
+        'PSModulePath':
+            '$programFiles\\WindowsPowerShell\\Modules;'
+            '$systemRoot\\system32\\WindowsPowerShell\\v1.0\\Modules',
+      },
+    );
+    // 边运行边收集输出，超时也能看到卡在哪个阶段。
+    final stdout = StringBuffer();
+    final stderr = StringBuffer();
+    final out = process.stdout
+        .transform(systemEncoding.decoder)
+        .forEach(stdout.write);
+    final err = process.stderr
+        .transform(systemEncoding.decoder)
+        .forEach(stderr.write);
+    final exitCode = await process.exitCode.timeout(
+      const Duration(minutes: 4),
+      onTimeout: () {
+        process.kill();
+        return -1;
+      },
+    );
+    // 被杀后子进程可能仍占用管道，收尾等待也要限时。
+    await Future.wait([out, err])
+        .timeout(const Duration(seconds: 10), onTimeout: () => []);
+    expect(exitCode, 0, reason: '$stdout\n$stderr');
+    expect('$stdout', contains('Windows build wrapper checks passed'));
+  }, timeout: const Timeout(Duration(minutes: 5)));
 }

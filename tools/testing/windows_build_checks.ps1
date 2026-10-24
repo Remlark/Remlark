@@ -7,6 +7,8 @@ $originalSystemRoot = $env:SystemRoot
 $windowsHost = [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
 New-Item -ItemType Directory -Path $work | Out-Null
 try {
+  # 每个阶段输出标记，超时时能看到停在哪一步。
+  Write-Output '==> check wrapper'
   # 确认原始包装器保留参数和失败退出码，不将原生命令失败当成成功。
   Invoke-BuildCommand python3 -c 'import sys; assert sys.argv[1] == chr(45)+chr(67)' -C
   $rejected = $false
@@ -24,6 +26,7 @@ try {
   try { Assert-BuildTools @('remlark-definitely-missing-tool') } catch { $rejected = $true }
   if (-not $rejected) { throw 'Missing tool was accepted' }
 
+  Write-Output '==> check driver preflight'
   # 执行真实 Windows 驱动的缺工具分支，必须在任何下载及编译前失败。
   $probeRepo = Join-Path $work 'preflight-repo'
   $probeScripts = Join-Path $probeRepo 'native/rdp/scripts'
@@ -43,6 +46,7 @@ try {
   } finally { $env:PATH = $savedPath }
   if (-not $rejected) { throw 'Driver did not reject missing tools before building' }
 
+  Write-Output '==> check Fetch'
   # 实际解析发布脚本，仅加载 Fetch 函数，不执行下载/编译主流程。
   $tokens = $null
   $errors = $null
@@ -90,6 +94,7 @@ with tarfile.open(path, 'w:gz') as archive:
   Fetch $uri 'zlib-1.3.1' 'CMakeLists.txt' $uri $hash
   $required = Join-Path $DepsSrc 'zlib-1.3.1/CMakeLists.txt'
   if ((Get-Content -Raw $required) -ne 'code') { throw 'Fetch did not preserve source contents' }
+  Write-Output '==> check Fetch repair'
   Remove-Item $required
   Fetch $uri 'zlib-1.3.1' 'CMakeLists.txt' $uri $hash
   if ((Get-Content -Raw $required) -ne 'code') { throw 'Incomplete source was not repaired' }
