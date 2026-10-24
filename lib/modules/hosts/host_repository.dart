@@ -17,8 +17,18 @@ class HostRepository {
 
   SecretStore get _secrets => SecretStore.instance;
 
+  /// 将同一主机快照及其依赖写入放在一个数据库事务中。
+  Future<T> transaction<T>(Future<T> Function() action) =>
+      _db.transaction(action);
+
   /// 当前毫秒时间戳
   static int now() => DateTime.now().millisecondsSinceEpoch;
+
+  /// 只有配置发生变化才生成新版本，保持同毫秒修改和时钟回拨时的单调递增。
+  static int _nextConfigurationVersion(int? previous) {
+    final timestamp = now();
+    return previous != null && previous >= timestamp ? previous + 1 : timestamp;
+  }
 
   /// 数据库行转领域模型（解密敏感字段）
   Future<HostEntry> _toEntry(Host r) async {
@@ -197,11 +207,16 @@ class HostRepository {
           final proxy = await _proxies.ensureConfig(e.proxy);
           entry = e.copyWith(proxyUuid: () => proxy.uuid);
         }
-        if (touch) entry = entry.copyWith(updatedAt: now());
-        final comp = await _toCompanion(entry);
         final existing = await (_db.select(
           _db.hosts,
         )..where((t) => t.uuid.equals(entry.uuid))).getSingleOrNull();
+        if (touch) {
+          // 编辑版本严格递增，即使同毫秒保存或本机时钟回拨也能识别为修改。
+          entry = entry.copyWith(
+            updatedAt: _nextConfigurationVersion(existing?.updatedAt),
+          );
+        }
+        final comp = await _toCompanion(entry);
         if (existing == null) {
           await _db.into(_db.hosts).insert(comp);
         } else {
@@ -281,7 +296,7 @@ class HostRepository {
     );
   }
 
-  /// 保存（或清除）密码；属于配置变更，会刷新 updatedAt
+  /// 保存或清除密码；仅在实际变化时刷新配置修改时间。
   Future<void> updatePassword(
     String uuid,
     String? password,
@@ -289,8 +304,18 @@ class HostRepository {
     HostProtocol? protocol,
   }) async {
     final host = await getByUuid(uuid);
-    if (host != null &&
-        protocol != null &&
+    if (host == null) return;
+    final connection =
+        protocol != null && host.connectionProtocols.contains(protocol)
+        ? host.forConnection(protocol)
+        : host;
+    // 连接流程重复确认同一已保存密码不属于配置修改。
+    if (connection.savePassword == save &&
+        (!save || connection.password == password)) {
+      return;
+    }
+    final version = _nextConfigurationVersion(host.updatedAt);
+    if (protocol != null &&
         protocol != host.protocol &&
         host.connectionProfile(protocol) != null) {
       final extra = Map<String, dynamic>.from(host.extra);
@@ -307,7 +332,7 @@ class HostRepository {
       await (_db.update(_db.hosts)..where((t) => t.uuid.equals(uuid))).write(
         HostsCompanion(
           extraJson: Value(jsonEncode(await _encodeConnectionSecrets(extra))),
-          updatedAt: Value(now()),
+          updatedAt: Value(version),
         ),
       );
       return;
@@ -316,15 +341,20 @@ class HostRepository {
       HostsCompanion(
         savePassword: Value(save),
         passwordEnc: Value(save ? await _secrets.seal(password) : null),
-        updatedAt: Value(now()),
+        updatedAt: Value(version),
       ),
     );
   }
 
   /// 更新用户名（如连接时在对话框中填写）；属于配置变更，会刷新 updatedAt
   Future<void> updateUsername(String uuid, String username) async {
+    final host = await getByUuid(uuid);
+    if (host == null || host.username == username) return;
     await (_db.update(_db.hosts)..where((t) => t.uuid.equals(uuid))).write(
-      HostsCompanion(username: Value(username), updatedAt: Value(now())),
+      HostsCompanion(
+        username: Value(username),
+        updatedAt: Value(_nextConfigurationVersion(host.updatedAt)),
+      ),
     );
   }
 

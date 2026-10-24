@@ -60,6 +60,7 @@ class Hosts extends Table {
   /// 是否参与同步，以及最后一次与服务器一致时的服务器更新时间
   BoolColumn get syncEnabled => boolean().withDefault(const Constant(false))();
   IntColumn get syncedAt => integer().nullable()();
+  /// 仅配置变更时更新；最近连接时间使用独立的 lastConnectedAt。
   IntColumn get updatedAt => integer()();
   IntColumn get createdAt => integer()();
   IntColumn get lastConnectedAt => integer().nullable()();

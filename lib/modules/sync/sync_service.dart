@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:cryptography/cryptography.dart' show SecretBoxAuthenticationError;
+import 'package:cryptography/cryptography.dart'
+    show SecretBoxAuthenticationError;
 import 'package:flutter/foundation.dart';
 
 import '../../utils/app_log.dart';
@@ -13,6 +14,7 @@ import '../hosts/host_repository.dart';
 import '../keys/key_model.dart';
 import '../keys/key_repository.dart';
 import '../settings/settings_repository.dart';
+import 'host_sync_bundle.dart';
 import 'sync_api.dart';
 import 'sync_config.dart';
 
@@ -32,12 +34,19 @@ class SyncReport {
 /// - 载荷在客户端使用口令派生的密钥做 AES-GCM 加密，服务器只保存密文
 /// - 未配置同步服务器时不影响任何本地功能
 class SyncService extends ChangeNotifier {
-  SyncService(this._settings, this._hosts, this._groups, this._keys);
+  SyncService(
+    this._settings,
+    this._hosts,
+    this._groups,
+    this._keys, {
+    SyncApi Function(String, String)? apiFactory,
+  }) : _apiFactory = apiFactory ?? SyncApi.new;
 
   final SettingsRepository _settings;
   final HostRepository _hosts;
   final GroupRepository _groups;
   final KeyRepository _keys;
+  final SyncApi Function(String, String) _apiFactory;
 
   SyncConfig config = const SyncConfig();
   bool syncing = false;
@@ -46,6 +55,7 @@ class SyncService extends ChangeNotifier {
   Timer? _timer;
   Uint8List? _key;
   String? _keyFor;
+  Future<SyncReport>? _syncFuture;
 
   /// 主机同步状态变化时回调（刷新主机列表）
   VoidCallback? onHostsChanged;
@@ -58,7 +68,8 @@ class SyncService extends ChangeNotifier {
     config = SyncConfig(
       serverUrl: j['serverUrl'] as String? ?? '',
       token: await SecretStore.instance.open(j['token'] as String?) ?? '',
-      passphrase: await SecretStore.instance.open(j['passphrase'] as String?) ?? '',
+      passphrase:
+          await SecretStore.instance.open(j['passphrase'] as String?) ?? '',
       intervalMinutes: (j['interval'] as num?)?.toInt() ?? 0,
       lastSyncAt: (j['lastSyncAt'] as num?)?.toInt(),
     );
@@ -68,8 +79,11 @@ class SyncService extends ChangeNotifier {
 
   /// 保存配置
   Future<void> saveConfig(SyncConfig c) async {
+    if (config.token != c.token || config.passphrase != c.passphrase) {
+      _key = null;
+      _keyFor = null;
+    }
     config = c;
-    _key = null;
     await _settings.setJson(_cfgKey, {
       'serverUrl': c.serverUrl.trim(),
       'token': await SecretStore.instance.seal(c.token),
@@ -90,22 +104,25 @@ class SyncService extends ChangeNotifier {
     }
   }
 
-  SyncApi get _api => SyncApi(config.serverUrl, config.token);
+  SyncApi get _api => _apiFactory(config.serverUrl, config.token);
 
   /// 派生加密密钥（盐由令牌决定，同一数据空间内各客户端一致）
   Future<Uint8List> _cryptoKey() async {
     final id = '${config.token}\u0000${config.passphrase}';
     if (_key != null && _keyFor == id) return _key!;
-    final salt = await CryptoUtils.sha256(utf8.encode('remlark-sync:${config.token}'));
+    final salt = await CryptoUtils.sha256(
+      utf8.encode('remlark-sync:${config.token}'),
+    );
     _key = await CryptoUtils.deriveKey(config.passphrase, salt);
     _keyFor = id;
     return _key!;
   }
 
   /// 测试连接
-  Future<void> testConnection(SyncConfig c) => SyncApi(c.serverUrl, c.token).ping();
+  Future<void> testConnection(SyncConfig c) =>
+      _apiFactory(c.serverUrl, c.token).ping();
 
-  /// 构造主机的加密载荷
+  /// 单台主机快照先压缩再加密，各主机保留独立 UUID 和配置修改版本。
   Future<String> _encode(HostEntry h) async {
     String? groupName;
     if (h.groupUuid != null) {
@@ -113,47 +130,81 @@ class SyncService extends ChangeNotifier {
         if (g.uuid == h.groupUuid) groupName = g.name;
       }
     }
-    final key = h.keyUuid == null ? null : await _keys.get(h.keyUuid!);
-    final payload = jsonEncode({'host': h.toPortableJson(), 'group': ?groupName, 'key': ?key?.toJson()});
-    return CryptoUtils.encryptString(await _cryptoKey(), payload);
+    final keyIds = HostSyncBundle.referencedKeyUuids(h);
+    final keys = await Future.wait(keyIds.map(_keys.get));
+    final payload = jsonEncode(
+      HostSyncBundle(
+        host: h,
+        groupName: groupName,
+        keys: keys.whereType<KeyEntry>().toList(),
+      ).toJson(),
+    );
+    return CryptoUtils.encryptCompressedString(await _cryptoKey(), payload);
   }
 
-  /// 解密载荷并写入本地
-  Future<void> _apply(String cipher, int remoteUpdatedAt) async {
-    final plain = await CryptoUtils.decryptString(await _cryptoKey(), cipher);
-    final j = jsonDecode(plain) as Map<String, dynamic>;
-    final keyJson = j['key'] as Map<String, dynamic>?;
-    if (keyJson != null) await _keys.save(KeyEntry.fromJson(keyJson));
-    var host = HostEntry.fromPortableJson(j['host'] as Map<String, dynamic>);
-    final groupName = j['group'] as String?;
-    String? groupUuid;
-    if (groupName != null) groupUuid = (await _groups.ensureByName(groupName)).uuid;
-    final local = await _hosts.getByUuid(host.uuid);
-    host = host.copyWith(
-      groupUuid: () => groupUuid,
-      updatedAt: remoteUpdatedAt,
-      syncEnabled: true,
-      syncedAt: () => remoteUpdatedAt,
-      // 本机专属信息保留本地值
-      hostKeyFingerprint: () => local?.hostKeyFingerprint,
-      lastConnectedAt: () => local?.lastConnectedAt,
-      osId: () => host.osId ?? local?.osId,
-      osName: () => host.osName ?? local?.osName,
+  /// 解密并校验主机身份，然后以一个事务应用完整主机快照。
+  Future<bool> _apply(
+    String expectedUuid,
+    String cipher,
+    int remoteUpdatedAt,
+  ) async {
+    final plain = await CryptoUtils.decryptCompressedString(
+      await _cryptoKey(),
+      cipher,
     );
-    await _hosts.save(host, touch: false);
+    final bundle = HostSyncBundle.fromJson(
+      jsonDecode(plain) as Map<String, dynamic>,
+    );
+    bundle.verifyServerRecord(expectedUuid, remoteUpdatedAt);
+    return _hosts.transaction(() async {
+      final local = await _hosts.getByUuid(expectedUuid);
+      // 网络等待期间产生的较新本机编辑继续待同步，不被下载时的旧版本覆盖。
+      if (local != null && local.updatedAt > remoteUpdatedAt) return false;
+      for (final key in bundle.keys) {
+        await _keys.save(key);
+      }
+      final groupUuid = bundle.groupName == null
+          ? null
+          : (await _groups.ensureByName(bundle.groupName!)).uuid;
+      await _hosts.save(
+        bundle.forDevice(
+          local: local,
+          groupUuid: groupUuid,
+          updatedAt: remoteUpdatedAt,
+        ),
+        touch: false,
+      );
+      return true;
+    });
   }
 
   /// 上传一台主机
-  Future<bool> _push(HostEntry h) async {
-    final ok = await _api.put(h.uuid, h.updatedAt, await _encode(h));
-    if (ok) await _hosts.setSyncState(h.uuid, enabled: true, syncedAt: h.updatedAt);
+  Future<bool> _push(HostEntry h, {bool restoreDeleted = false}) async {
+    final ok = await _api.put(
+      h.uuid,
+      h.updatedAt,
+      await _encode(h),
+      restoreDeleted: restoreDeleted,
+    );
+    if (ok) {
+      await _hosts.setSyncState(h.uuid, enabled: true, syncedAt: h.updatedAt);
+    }
     return ok;
   }
 
   /// 立即同步
-  Future<SyncReport> syncNow() async {
-    if (!config.isConfigured) throw StateError('sync not configured');
-    if (syncing) return lastReport ?? SyncReport();
+  Future<SyncReport> syncNow() {
+    if (_syncFuture != null) return _syncFuture!;
+    if (!config.isConfigured) {
+      return Future.error(StateError('sync not configured'));
+    }
+    // 同一轮同步共享任务，手动和定时同时触发时都等待真实结果。
+    return _syncFuture = Future<SyncReport>.microtask(_runSync)
+        .whenComplete(() => _syncFuture = null);
+  }
+
+  /// 执行单轮同步；并发入口由 syncNow 合并。
+  Future<SyncReport> _runSync() async {
     syncing = true;
     lastError = null;
     notifyListeners();
@@ -164,29 +215,34 @@ class SyncService extends ChangeNotifier {
       final remote = await _api.index();
       final locals = await _hosts.listSyncEnabled();
       final localIds = <String>{};
-      final toPull = <String, int>{};
+      final toPull = <String>{};
       for (final l in locals) {
         localIds.add(l.uuid);
         final r = remote[l.uuid];
         if (r == null) {
-          await _push(l);
-          report.pushed++;
+          if (await _push(l)) {
+            report.pushed++;
+          } else {
+            toPull.add(l.uuid);
+          }
         } else if (r.deleted) {
           await _hosts.setSyncState(l.uuid, enabled: false, syncedAt: null);
           report.detached++;
         } else if (r.updatedAt == l.updatedAt) {
           if (l.syncedAt != l.updatedAt) {
-            await _hosts.setSyncState(l.uuid, enabled: true, syncedAt: l.updatedAt);
+            // 两端可能同毫秒修改；待同步记录先读取服务端已提交的版本。
+            toPull.add(l.uuid);
+          } else {
+            report.unchanged++;
           }
-          report.unchanged++;
         } else if (l.updatedAt > r.updatedAt) {
           if (await _push(l)) {
             report.pushed++;
           } else {
-            toPull[l.uuid] = r.updatedAt;
+            toPull.add(l.uuid);
           }
         } else {
-          toPull[l.uuid] = r.updatedAt;
+          toPull.add(l.uuid);
         }
       }
       // 服务器有、本地未参与同步或不存在的主机
@@ -194,17 +250,36 @@ class SyncService extends ChangeNotifier {
         if (r.deleted || localIds.contains(r.uuid)) continue;
         final local = await _hosts.getByUuid(r.uuid);
         if (local != null && local.updatedAt > r.updatedAt) {
-          await _push(local.copyWith(syncEnabled: true));
-          report.pushed++;
+          if (await _push(local.copyWith(syncEnabled: true))) {
+            report.pushed++;
+          } else {
+            toPull.add(r.uuid);
+          }
         } else {
-          toPull[r.uuid] = r.updatedAt;
+          toPull.add(r.uuid);
         }
       }
       if (toPull.isNotEmpty) {
-        final payloads = await _api.fetch(toPull.keys.toList());
-        for (final e in payloads.entries) {
-          await _apply(e.value, toPull[e.key]!);
-          report.pulled++;
+        final payloads = await _api.fetch(toPull.toList());
+        for (final uuid in toPull) {
+          final item = payloads[uuid];
+          if (item == null) {
+            throw StateError('Missing host sync payload: $uuid');
+          }
+          if (item.deleted) {
+            final local = await _hosts.getByUuid(uuid);
+            if (local?.syncEnabled ?? false) {
+              await _hosts.setSyncState(uuid, enabled: false, syncedAt: null);
+              report.detached++;
+            }
+          } else {
+            if (item.payload == null) {
+              throw FormatException('Missing host sync ciphertext: $uuid');
+            }
+            if (await _apply(uuid, item.payload!, item.updatedAt)) {
+              report.pulled++;
+            }
+          }
         }
       }
       lastReport = report;
@@ -213,9 +288,13 @@ class SyncService extends ChangeNotifier {
         '同步完成 ${sw.elapsedMilliseconds}ms：推送 ${report.pushed}，拉取 ${report.pulled}，'
             '未变 ${report.unchanged}，解除 ${report.detached}',
       );
-      await saveConfig(config.copyWith(lastSyncAt: DateTime.now().millisecondsSinceEpoch));
+      await saveConfig(
+        config.copyWith(lastSyncAt: DateTime.now().millisecondsSinceEpoch),
+      );
     } catch (e, st) {
-      lastError = e is SecretBoxAuthenticationError ? 'sync.error.passphrase' : '$e';
+      lastError = e is SecretBoxAuthenticationError
+          ? 'sync.error.passphrase'
+          : '$e';
       AppLog.e('sync', '同步失败', e, st);
       rethrow;
     } finally {
@@ -233,7 +312,7 @@ class SyncService extends ChangeNotifier {
     if (!config.isConfigured) return;
     try {
       final fresh = await _hosts.getByUuid(h.uuid);
-      if (fresh != null) await _push(fresh);
+      if (fresh != null) await _push(fresh, restoreDeleted: true);
     } catch (_) {}
     onHostsChanged?.call();
   }

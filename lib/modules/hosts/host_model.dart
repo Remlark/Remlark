@@ -134,6 +134,8 @@ class HostEntry {
   final String note;
   final bool syncEnabled;
   final int? syncedAt;
+
+  /// 配置最后修改时间；连接、最近使用时间和系统探测均不改变此值。
   final int updatedAt;
   final int createdAt;
   final int? lastConnectedAt;
@@ -228,36 +230,44 @@ class HostEntry {
         : (proxy.toJson()..remove('password')),
     if (osId != null) 'osId': osId,
     if (osName != null) 'osName': osName,
-    'extra': withSecrets ? extra : _extraWithoutSecrets(),
+    'extra': _portableExtra(withSecrets: withSecrets),
     'note': note,
     'updatedAt': updatedAt,
     'createdAt': createdAt,
   };
 
-  /// 导出无密码文件时，同时清理附加协议的密码和代理密码。
-  Map<String, dynamic> _extraWithoutSecrets() {
+  /// 序列化附加协议；主机指纹只保存在本机，无密码导出还需清理附加凭据。
+  Map<String, dynamic> _portableExtra({required bool withSecrets}) {
     final result = Map<String, dynamic>.from(extra);
     final profiles = extra['connections'];
     if (profiles is Map) {
       result['connections'] = {
         for (final item in profiles.entries)
-          item.key: _profileWithoutSecrets(
+          item.key: _portableProfile(
             Map<String, dynamic>.from(item.value as Map),
+            withSecrets: withSecrets,
           ),
       };
     }
     return result;
   }
 
-  /// 清理单个附加协议的敏感字段。
-  static Map<String, dynamic> _profileWithoutSecrets(
-    Map<String, dynamic> profile,
-  ) {
-    profile.remove('password');
-    profile['savePassword'] = false;
-    final proxy = profile['proxy'];
-    if (proxy is Map)
-      profile['proxy'] = Map<String, dynamic>.from(proxy)..remove('password');
+  /// 清理单个附加协议的本地状态，按导出模式处理密码。
+  static Map<String, dynamic> _portableProfile(
+    Map<String, dynamic> profile, {
+    required bool withSecrets,
+  }) {
+    profile.remove('hostKeyFingerprint');
+    if (!withSecrets || profile['savePassword'] != true) {
+      profile.remove('password');
+      profile['savePassword'] = false;
+    }
+    if (!withSecrets) {
+      final proxy = profile['proxy'];
+      if (proxy is Map) {
+        profile['proxy'] = Map<String, dynamic>.from(proxy)..remove('password');
+      }
+    }
     return profile;
   }
 

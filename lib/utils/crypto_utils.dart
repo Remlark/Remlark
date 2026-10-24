@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:cryptography/cryptography.dart';
 
 /// 通用加密工具：AES-256-GCM 加解密、PBKDF2 派生密钥、安全随机数。
@@ -14,6 +15,7 @@ class CryptoUtils {
 
   /// 加密数据格式前缀，便于以后升级算法时做版本区分
   static const String _prefix = 'v1:';
+  static const String _compressedPrefix = 'v2:gzip:';
 
   /// 生成 [length] 字节的安全随机数
   static Uint8List randomBytes(int length) {
@@ -56,10 +58,54 @@ class CryptoUtils {
     return utf8.decode(await decryptBytes(key, data));
   }
 
+  /// 同步载荷先使用 gzip 压缩，再进行 AES-GCM 加密；本地密钥存储仍沿用原格式。
+  static Future<String> encryptCompressedString(
+    List<int> key,
+    String plain,
+  ) async {
+    final compressed = const GZipEncoder().encodeBytes(utf8.encode(plain));
+    return '$_compressedPrefix${base64Encode(await encryptBytes(key, compressed))}';
+  }
+
+  /// 解密并解压同步载荷，同时读取旧版未压缩的 v1 密文。
+  static Future<String> decryptCompressedString(
+    List<int> key,
+    String cipher,
+  ) async {
+    if (cipher.startsWith(_prefix)) return decryptString(key, cipher);
+    if (!cipher.startsWith(_compressedPrefix)) {
+      throw const FormatException('unknown compressed cipher format');
+    }
+    final compressed = await decryptBytes(
+      key,
+      base64Decode(cipher.substring(_compressedPrefix.length)),
+    );
+    final output = OutputMemoryStream();
+    final valid = const GZipDecoder().decodeStream(
+      InputMemoryStream(compressed),
+      output,
+      verify: true,
+      maxOutputSize: 16 * 1024 * 1024,
+    );
+    if (!valid) throw const FormatException('invalid compressed sync payload');
+    return utf8.decode(output.getBytes());
+  }
+
   /// 使用 PBKDF2-HMAC-SHA256 从口令派生 32 字节密钥
-  static Future<Uint8List> deriveKey(String passphrase, List<int> salt, {int iterations = 100000}) async {
-    final pbkdf2 = Pbkdf2(macAlgorithm: Hmac.sha256(), iterations: iterations, bits: 256);
-    final key = await pbkdf2.deriveKeyFromPassword(password: passphrase, nonce: salt);
+  static Future<Uint8List> deriveKey(
+    String passphrase,
+    List<int> salt, {
+    int iterations = 100000,
+  }) async {
+    final pbkdf2 = Pbkdf2(
+      macAlgorithm: Hmac.sha256(),
+      iterations: iterations,
+      bits: 256,
+    );
+    final key = await pbkdf2.deriveKeyFromPassword(
+      password: passphrase,
+      nonce: salt,
+    );
     return Uint8List.fromList(await key.extractBytes());
   }
 

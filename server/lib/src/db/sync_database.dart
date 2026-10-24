@@ -15,7 +15,7 @@ class SyncItems extends Table {
   TextColumn get space => text()();
   TextColumn get uuid => text()();
 
-  /// 客户端提供的最后更新时间（毫秒）
+  /// 客户端提供的配置最后修改时间（毫秒），不包含连接时间。
   IntColumn get updatedAt => integer()();
 
   /// 删除标记：被删除的条目保留标记，供其他客户端停止同步
