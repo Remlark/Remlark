@@ -170,16 +170,14 @@ class BuildGuardTests(unittest.TestCase):
             target = root / 'build' / platform / ('remlark.exe' if platform == 'windows' else 'remlark')
             target.parent.mkdir(parents=True)
             env = os.environ.copy()
+            # 复用 Python 作为隔离进程，避免多调用入口 coreutils 的 sleep 改名后无法启动。
+            shutil.copy2(sys.executable, target)
+            env['PYTHONHOME'] = sys.base_prefix
             if platform == 'windows':
-                shutil.copy2(sys.executable, target)
-                env['PYTHONHOME'] = sys.base_prefix
                 env['PATH'] = str(Path(sys.executable).parent) + os.pathsep + env.get('PATH', '')
-                arguments = [str(target), '-c', 'import time; time.sleep(30)']
-            else:
-                shutil.copy('/bin/sleep', target)
-                if platform == 'macos':
-                    subprocess.run(['codesign', '--force', '--sign', '-', str(target)], check=True, capture_output=True)
-                arguments = [str(target), '30']
+            if platform == 'macos':
+                subprocess.run(['codesign', '--force', '--sign', '-', str(target)], check=True, capture_output=True)
+            arguments = [str(target), '-c', 'import time; time.sleep(30)']
             process = subprocess.Popen(arguments, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             try:
                 time.sleep(0.2)

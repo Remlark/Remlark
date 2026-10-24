@@ -127,12 +127,13 @@ class _HostEditorDialogState extends State<HostEditorDialog> {
   void _jump(String id) {
     final ctx = _keys[id]?.currentContext;
     setState(() => _current = id);
-    if (ctx != null)
+    if (ctx != null) {
       Scrollable.ensureVisible(
         ctx,
         duration: const Duration(milliseconds: 220),
         alignment: 0,
       );
+    }
   }
 
   /// 滚动时高亮视口顶部所在的分区
@@ -148,8 +149,9 @@ class _HostEditorDialogState extends State<HostEditorDialog> {
       if (dy <= 40) found = e.key;
     }
     if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 4 &&
-        _keys.isNotEmpty)
+        _keys.isNotEmpty) {
       found = 'other';
+    }
     if (found != null && found != _current) setState(() => _current = found);
   }
 

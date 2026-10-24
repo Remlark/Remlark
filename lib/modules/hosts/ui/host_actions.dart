@@ -54,8 +54,9 @@ class HostActions {
             if (ok) await sync.removeFromServer(h.uuid);
           } else {
             await sync.enable(h);
-            if (context.mounted && !sync.config.isConfigured)
+            if (context.mounted && !sync.config.isConfigured) {
               UiUtils.toast(context.tr('sync.not_configured'));
+            }
           }
         } catch (e) {
           UiUtils.toast('$e', error: true);

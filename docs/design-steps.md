@@ -789,3 +789,10 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 工具层统一按显式 UTF-8 编码写入更新脚本；Windows 两个 PowerShell 助手携带 BOM，macOS/Linux 共用 shell 助手保持无 BOM 和完整 shebang。
   - 扩展 P-19：在所有平台检查 Windows x64/arm64 及 POSIX 输出编码，Windows 实际解析脚本；成功安装和失败回滚还检查安装器已执行与结果文件，防止语法错误被误判为回滚成功。
   - Windows x64 构建前后平台测试均为 102 项通过、6 项按条件跳过，修改文件静态检查无问题；Release 与安装器/便携包重新生成成功。macOS/Linux 本轮未实机执行，需在对应环境运行 `make test-platform`；Actions 原有三平台门禁保留，未跳过测试。
+
+- [已完成] Step 110：Linux 全量回归与 1.0.2 Release 编译验证
+  - 补齐客户端及服务端 13 处条件分支大括号，客户端与服务端 `make analyze` 均无问题，不改变业务行为。
+  - 修复 P-22 的真实进程夹具：三平台统一复制 Python 并配置运行环境，macOS 保留临时签名；避免 Linux 多入口 coreutils 的 sleep 复制改名后无法启动。Linux 内部 12 项检查通过，平台集合 96 项通过、4 项条件跳过；macOS / Windows 修改后的夹具尚未实测。
+  - 最终客户端全量测试显式启用原生库要求与真实 dsh 测试，426 项通过、11 项条件跳过；服务端 35 项全部通过。包括本地 SSH / SFTP、RDP 连接 / 剪贴板、AES-GCM、H.264 软件解码、同步场景及中英文布局。
+  - `make native-lib rdp-test-server`、`make linux`、`make server` 成功，生成 1.0.2 Linux x64 deb、便携包及服务端归档。服务端解包启动和 SQLite 读写通过；便携包 9 个 ELF 文件依赖解析通过，Xvfb 下两次启动、窗口最小尺寸和密钥持久化 / 0600 权限通过。
+  - 证据位于 `build/validation/current-*`。本轮仅验证 Linux x64；真实远端、VAAPI GPU、干净系统安装和其他平台仍需对应环境验证，详见多平台测试记录。
