@@ -1,7 +1,13 @@
+// 启动外部进程，ARM runner 上进程启动慢，放宽默认 30 秒时限。
+@Timeout(Duration(minutes: 3))
+library;
+
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+
+import '../utils/windows_powershell.dart';
 
 /// 多平台测试 P-08：分平台打包入口与 Windows 安装包完整性、参数传递及失败处理。
 void main() {
@@ -55,7 +61,7 @@ void main() {
           '[System.Management.Automation.Language.Parser]::ParseFile('
           "'windows/run.ps1', [ref]\$tokens, [ref]\$errors) | Out-Null; "
           'if (\$errors.Count) { \$errors | Out-String | Write-Output; exit 1 }',
-    ]);
+    ], environment: windowsPowerShellEnvironment());
     expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
   });
 
@@ -107,7 +113,7 @@ void main() {
         '-OutputDir',
         p.join(root.path, 'output'),
         ...extra,
-      ]);
+      ], environment: windowsPowerShellEnvironment());
 
   test('暂存完整应用与 VC++ 运行库，原始 Release 保持完整', () async {
     final result = await runPackaging(['-StageOnly', '-Arch', 'arm64']);
@@ -153,10 +159,10 @@ void main() {
         '-ReleaseDir',
         release.path,
       ],
-      environment: {
+      environment: windowsPowerShellEnvironment({
         'VCToolsRedistDir': p.join(root.path, 'redist'),
         'VC_REDIST_DIR': '',
-      },
+      }),
     );
     expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
     final stage = Directory((result.stdout as String).trim());

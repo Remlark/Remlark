@@ -865,3 +865,8 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - `source_archive.py` 解压时把工作目录设为压缩包目录，只传 ASCII 相对文件名，三平台共用；`windows_build_checks.ps1` 改用 python 计算哈希。P-26 新增 tar 参数回归。
   - 重跑后 P-27 在 Dart 默认 30 秒处超时，且看不到输出。启动 5.1 时把 PSModulePath 重置为 5.1 默认模块目录（根除 pwsh 7 模块干扰）；改为流式收集输出，进程限时 4 分钟、超时先杀进程再打印已有输出；脚本各阶段输出 `==>` 标记。
   - 验证：macOS `make test-platform` 108 项通过、3 条件跳过；Windows x64/arm64 待测试仓库重新运行。
+
+- [已完成] Step 123：审查并放宽慢速 runner 上的短时限
+  - Windows ARM64 上 P-27 超出默认 30 秒，x64 通过。所有启动外部进程的平台测试统一设置 3 分钟文件级时限；新增 `test/utils/windows_powershell.dart`，测试中启动 PowerShell 5.1 时统一重置 PSModulePath。
+  - 构建保护的 Windows CIM 查询同样重置 PSModulePath，查询上限 10 秒改为 60 秒；源码解压上限 120 秒改为 600 秒；代理回环与 POSIX 更新助手测试的秒级等待放宽。
+  - 在多平台测试文档的维护规则中写明时限和 PowerShell 环境要求。本机 macOS `make test-platform` 108 项通过、3 条件跳过；Windows 待测试仓库验证。

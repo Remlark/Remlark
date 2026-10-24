@@ -176,7 +176,8 @@ void main() {
         const NetworkEndpoint('example.com', 443),
       );
       expect(result.status, ProxyTestStatus.timeout);
-      expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
+      // 只需证明 100ms 超时生效而不是一直等待；上限放宽以容忍慢 runner。
+      expect(watch.elapsed, lessThan(const Duration(seconds: 10)));
       for (final timer in timers) {
         timer.cancel();
       }
@@ -235,10 +236,10 @@ void main() {
     await accepted.future;
     test.cancel();
     expect(
-      (await pending.timeout(const Duration(seconds: 1))).status,
+      (await pending.timeout(const Duration(seconds: 10))).status,
       ProxyTestStatus.cancelled,
     );
-    await disconnected.future.timeout(const Duration(seconds: 1));
+    await disconnected.future.timeout(const Duration(seconds: 10));
   });
 
   test('未启用的代理不允许以直连伪装测试通过', () async {

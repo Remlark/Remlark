@@ -1,7 +1,17 @@
 """Windows 通过 CIM 读取可执行路径，避免 tasklist 只按名称误拦已安装应用。"""
 import json
+import os
 
 from .inspector import GuardError, ProcessInspector, run_query
+
+
+def windows_powershell_environment():
+    """从 pwsh 7 启动 5.1 时会继承 7 的模块路径，导致 CimCmdlets 等内置模块加载失败或变慢；重置为 5.1 默认目录。"""
+    system_root = os.environ.get('SystemRoot', r'C:\Windows')
+    program_files = os.environ.get('ProgramFiles', r'C:\Program Files')
+    return dict(os.environ, PSModulePath=(
+        rf'{program_files}\WindowsPowerShell\Modules;'
+        rf'{system_root}\system32\WindowsPowerShell\v1.0\Modules'))
 
 
 class WindowsInspector(ProcessInspector):
@@ -16,7 +26,8 @@ class WindowsInspector(ProcessInspector):
             "@(Get-CimInstance Win32_Process -Filter \"Name='remlark.exe'\" | "
             "Select-Object ProcessId,ExecutablePath) | ConvertTo-Json -Compress"
         )
-        output = run_query(['powershell', '-NoProfile', '-NonInteractive', '-Command', script])
+        output = run_query(['powershell', '-NoProfile', '-NonInteractive', '-Command', script],
+                           environment=windows_powershell_environment())
         try:
             decoded = json.loads(output.lstrip('\ufeff')) if output.strip() else []
             decoded = [decoded] if isinstance(decoded, dict) else decoded

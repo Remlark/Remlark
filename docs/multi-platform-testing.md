@@ -16,6 +16,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 
 ## 维护规则
 
+- 启动外部进程的平台测试文件统一在文件头声明 `@Timeout(Duration(minutes: 3))`，ARM runner 进程启动慢，不能依赖默认 30 秒；启动 Windows PowerShell 5.1 必须使用 [windows_powershell.dart](../test/utils/windows_powershell.dart) 的环境，避免继承 pwsh 7 的模块路径。
 - 新增或修改与平台有关的功能时（`Platform.isXxx`、`defaultTargetPlatform`、`Process.run`/`Process.start` 调用系统命令、FFI 原生库、MethodChannel、平台工程目录 `macos/` `windows/` `linux/` 下的原生代码、按平台区分的快捷键或路径），必须同时完成以下三件事：
   1. 在[平台差异总览](#1-平台差异总览)中加一行或更新对应行；
   2. 在 `test/platform/` 下加单元测试（或扩展已有测试），给测试分配新的 P 编号，文件头注释写上“多平台测试 P-xx”，并登记到[单元测试](#2-单元测试test-platform)表中；
@@ -65,7 +66,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | SSH TCP 首次连接恢复 | `utils/network/`、`modules/ssh/proxy_socket.dart` | 独立策略识别 51/65 | 独立策略识别 10051/10065 | 独立策略识别 101/113 | P-20：有限重试、预算和非瞬态错误 | M-24 |
 | 代理连通性检测 | `modules/proxies/proxy_connection_test.dart`、`modules/ssh/proxy_socket.dart`、`utils/network_endpoint.dart` | ProxyConnectionTest 接口，Dart Socket 的 HTTP CONNECT/SOCKS5 握手、认证、超时和取消；IPv6 目标 | 同左，不访问注册表或系统代理 | 同左，不调用系统网络命令 | P-17 | M-22 |
 | RDP 显示控制协商 | `native/rdp/src/remlark_rdp.c` | 共用 FreeRDP 能力回调，协商后发送布局 | 同 macOS | 同 macOS | P-21 | M-25 |
-| 运行中构建覆盖保护 | `tools/utils/build_guard/`、`tools/utils/app_version.py`、`Makefile`、`windows/run.ps1` | ps 子进程固定 UTF-8 locale，读取未转义的中文完整路径 | CIM 显式输出 UTF-8 JSON，按 Windows 路径规则比较 | procfs 读取 exe，识别 deleted 文件，comm 显式按 UTF-8 读取 | P-22 | M-26 |
+| 运行中构建覆盖保护 | `tools/utils/build_guard/`、`tools/utils/app_version.py`、`Makefile`、`windows/run.ps1` | ps 子进程固定 UTF-8 locale，读取未转义的中文完整路径 | CIM 显式输出 UTF-8 JSON，按 Windows 路径规则比较；PowerShell 5.1 使用自身默认 PSModulePath，查询上限 60 秒 | procfs 读取 exe，识别 deleted 文件，comm 显式按 UTF-8 读取 | P-22 | M-26 |
 | 构建保护真实进程测试夹具 | `tools/testing/build_guard_test.py`、`test/platform/fixtures/build_guard_probe.c` | xcrun clang 从源码编译本机架构的普通进程，避免复制系统二进制的 SIGKILL；等待就绪标记，验证默认/C locale | 复制 Python 为隔离应用，设置 PYTHONHOME / PATH；仓库文本显式 UTF-8；等待就绪标记，验证默认/C locale | 复制 Python 为隔离应用，设置 PYTHONHOME，兼容多入口 coreutils；等待就绪标记，验证默认/C locale | P-22 | — |
 | 发布前平台专项测试工作流 | `.github/workflows/test.yml` | Intel / ARM64 独立 runner；ARM64 复用精确匹配的 universal 原生缓存；Xcode 测试夹具 | x64 / ARM64 独立 runner；PowerShell、Make、MSVC 测试夹具 | x64 / ARM64 独立 runner；安装运行库及桌面入口测试依赖 | P-25 | M-28 |
 | Actions 临时产物清理 | `release.yml`、`tools/release/cleanup_artifacts.py` | 仅构建不上传，正式发布中转保留 7 天，publish 成功后只清理当前运行；失败保留供重跑 | 同左 | 同左；清理在独立 Ubuntu 任务运行 | P-24 | M-27 |
@@ -99,7 +100,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-21 | [rdp_display_control_test.dart](../test/platform/rdp_display_control_test.dart) | 编译并运行生产 C 函数：能力到达前不发送、尺寸合并、重复轮询、旧通道隔离、重新协商；检查回调注册和断开重置。macOS/Linux 使用 cc，Windows 使用开发者终端 cl；无编译器时动态用例跳过，RMK_REQUIRE_RDP_NATIVE=1 时禁止跳过 | RDP 显示控制、M-25 |
 | P-20 | [connect_retry_test.dart](../test/platform/connect_retry_test.dart) | 三平台错误码分别验证；首次不可达后恢复、持续失败最多四次、总预算不重置；连接拒绝/权限/非 Socket 错误不重试；当前平台策略选择 | SSH TCP 首次连接恢复、M-24 |
 | P-19 | [update_installation_test.dart](../test/platform/update_installation_test.dart) | 实际隔离 Git helper；POSIX 未提交不安装、等待退出、失败回滚、特殊路径；macOS 真实签名/版本校验及 App 替换；Linux 便携解压与交换；任意宿主检查 Windows x64/arm64 BOM 和 POSIX shebang；Windows 实际解析 PowerShell 助手、执行假安装器并核对成功/失败恢复及结果文件 | 点击升级后安装、M-23 |
-| P-22 | [build_guard_test.dart](../test/platform/build_guard_test.dart) | 调用 12 项 Python 检查：三个桌面目标、路径边界/中文空格/大小写、独立副本放行、自定义输出和符号链接、三平台进程解析、查询环境透传及失败保护、默认/C locale 的真实进程存活时拒绝/退出后放行；包装入口失败时不启动 Flutter；仓库文本显式按 UTF-8 读取 | 构建覆盖保护、M-26 |
+| P-22 | [build_guard_test.dart](../test/platform/build_guard_test.dart) | 调用 12 项 Python 检查：三个桌面目标、路径边界/中文空格/大小写、独立副本放行、自定义输出和符号链接、三平台进程解析（Windows 校验 5.1 模块路径）、查询环境透传及失败保护、默认/C locale 的真实进程存活时拒绝/退出后放行；包装入口失败时不启动 Flutter；仓库文本显式按 UTF-8 读取 | 构建覆盖保护、M-26 |
 | P-23 | [server_bundle_test.dart](../test/platform/server_bundle_test.dart)、[server_bundle_test.py](../tools/testing/server_bundle_test.py) | 六路服务端矩阵、发布依赖、macOS 双架构独立 runner；六种原生文件头与错误平台/架构、缺少/空主程序和 SQLite 库拒绝打包；压缩包布局与 POSIX 执行权限、额外资源保留；P-10 检查缺少服务端附件时禁止发布 | 同步服务端独立发布、M-13 |
 | P-24 | [artifact_cleanup_test.dart](../test/platform/artifact_cleanup_test.dart)、[artifact_cleanup_test.py](../tools/testing/artifact_cleanup_test.py) | 三平台执行相同清理逻辑；仅构建不上传、正式中转保留 7 天且重跑覆盖、仅 publish 成功后清理（不使用 always()）；只查询当前运行的 artifacts 并分页先快照再删除，不访问仓库级列表，保护非托管文件及 API 失败上报 | Actions 存储、M-27 |
 | P-28 | [ci_retry_test.dart](../test/platform/ci_retry_test.dart)、[retry_command_test.py](../tools/testing/retry_command_test.py) | 6 项 Python 检查：指数退避、重试前清理半成品且首次不清理、最后退出码传递、命令不存在不重试、非法参数、真实子进程下 `--` 可省略且保留目标命令的 --选项/含空格参数；两个工作流所有网络安装都经过重试工具且无裸命令 | CI 网络安装、M-31 |
@@ -524,3 +525,12 @@ Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过�
 - 修复：`prepare_source` 用工作目录定位压缩包，只给 tar 传 ASCII 相对文件名；测试脚本改用 python 计算 SHA-256，保留 UTF-8 BOM。P-26 新增参数断言用例（共 20 项）。
 - 重跑后 P-27 在 30 秒默认时限处超时。Dart 用例改为给 5.1 传默认 PSModulePath，流式收集输出、4 分钟进程时限，超时打印已到达的阶段标记。本机 pwsh 7 执行脚本通过。
 - 本机 macOS `make test-platform` 108 项通过、3 条件跳过；Windows 需在测试仓库重新验证。
+
+### 2026-10-25 慢速 runner 时限审查（Step 123）
+
+- Release 重跑后 P-27 只在 Windows ARM64 超出 Dart 默认 30 秒，x64 通过，判断为 ARM runner 进程启动慢而非逻辑卡死。审查全部平台测试及构建脚本中的短时限：
+  - 17 个启动外部进程的平台测试文件统一设置 3 分钟文件级时限（本机实测文件级注解可越过 30 秒）。
+  - 测试中 10 处 Windows PowerShell 5.1 启动统一使用 `windowsPowerShellEnvironment()`；构建保护的 Windows CIM 查询同样重置 PSModulePath，`run_query` 上限从 10 秒放宽到 60 秒。
+  - 源码解压上限从 120 秒放宽到 600 秒；代理回环测试的 1/2 秒上限放宽到 10 秒，POSIX 更新助手的 5 秒等待放宽到 30 秒，均为条件满足即提前结束。
+  - 未改动：H.264 单帧解码、连接重试替身计时、服务端冒烟的 30 秒启动等待。
+- 本机 Intel macOS `make test-platform` 108 项通过、3 条件跳过；构建保护、源码下载、重试、阶段状态等 Python 套件通过；本地 pwsh 7 执行 windows_build_checks.ps1 通过。Windows x64/arm64 需在测试仓库验证。

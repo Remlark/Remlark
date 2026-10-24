@@ -121,8 +121,12 @@ class BuildGuardTests(unittest.TestCase):
         """Windows 单条、多条、空列表与无法读取路径的结果都有确定行为。"""
         row = {'ProcessId': 42, 'ExecutablePath': r'C:\测试目录\remlark.exe'}
         for data in [row, [row]]:
-            with patch('tools.utils.build_guard.windows.run_query', return_value=json.dumps(data)):
+            with patch('tools.utils.build_guard.windows.run_query', return_value=json.dumps(data)) as query:
                 self.assertEqual(WindowsInspector().executables(), [(42, row['ExecutablePath'])])
+                # 5.1 不能继承 pwsh 7 的模块路径，只保留自身默认模块目录。
+                module_path = query.call_args.kwargs['environment']['PSModulePath']
+                self.assertIn(r'WindowsPowerShell\v1.0\Modules', module_path)
+                self.assertNotIn('PowerShell\\7', module_path)
         for data in ['', '[]']:
             with patch('tools.utils.build_guard.windows.run_query', return_value=data):
                 self.assertEqual(WindowsInspector().executables(), [])

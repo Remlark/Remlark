@@ -17,9 +17,10 @@ class ProcessInspector(ABC):
 
 def run_query(arguments, *, environment=None):
     """以参数列表运行只读查询，允许平台指定子进程环境，限制等待且不泄漏输出。"""
+    # ARM runner 上 PowerShell + WMI 冷启动可能超过 10 秒，上限放宽到 60 秒。
     try:
         result = subprocess.run(arguments, capture_output=True, text=True,
-                                encoding='utf-8', errors='replace', timeout=10,
+                                encoding='utf-8', errors='replace', timeout=60,
                                 env=environment)
     except (OSError, subprocess.TimeoutExpired) as error:
         raise GuardError('Cannot inspect running applications; build cancelled.') from error

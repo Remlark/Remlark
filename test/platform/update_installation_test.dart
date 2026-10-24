@@ -1,3 +1,7 @@
+// 启动外部进程，ARM runner 上进程启动慢，放宽默认 30 秒时限。
+@Timeout(Duration(minutes: 3))
+library;
+
 import 'dart:ffi';
 import 'dart:io';
 
@@ -12,6 +16,8 @@ import 'package:remlark/modules/updates/update_release.dart';
 import 'package:remlark/utils/git_credentials/git_credentials.dart';
 import 'package:remlark/utils/platform_utils.dart';
 import 'package:remlark/utils/shell_utils.dart';
+
+import '../utils/windows_powershell.dart';
 
 /// 在隔离目录运行真正的安装工作脚本，不接触已安装应用、真实凭据或系统授权。
 void main() {
@@ -52,7 +58,9 @@ void main() {
                   r'$env:RMK_TEST_SCRIPT,[ref]$tokens,[ref]$errors); '
                   r'if ($errors.Count) { $errors | Out-String | Write-Error; exit 1 }',
             ],
-            environment: {'RMK_TEST_SCRIPT': script.path},
+            environment: windowsPowerShellEnvironment({
+              'RMK_TEST_SCRIPT': script.path,
+            }),
           );
           expect(parsed.exitCode, 0, reason: '${parsed.stderr}');
         }
@@ -258,7 +266,8 @@ exec /bin/mv "$@"
     });
     final stdout = worker.stdout.drain<void>();
     final stderr = worker.stderr.drain<void>();
-    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    // 条件满足即提前结束，上限只为慢 runner 留余量。
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
     while (!await File(p.join(root.path, 'ready')).exists() &&
         DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -266,7 +275,7 @@ exec /bin/mv "$@"
     expect(await File(p.join(target.path, 'version')).readAsString(), 'old');
     parent.kill();
     await parent.exitCode;
-    expect(await worker.exitCode.timeout(const Duration(seconds: 5)), 0);
+    expect(await worker.exitCode.timeout(const Duration(seconds: 30)), 0);
     await stdout;
     await stderr;
     expect(await File(p.join(target.path, 'version')).readAsString(), 'new');
@@ -400,7 +409,7 @@ exec /bin/mv "$@"
         'Bypass',
         '-File',
         p.join(stage.path, 'worker.ps1'),
-      ]);
+      ], environment: windowsPowerShellEnvironment());
       expect(result.exitCode, fail ? 1 : 0, reason: '${result.stderr}');
       // 验证脚本确实执行到安装结果，避免语法错误的退出码 1 被误认为回滚成功。
       expect(

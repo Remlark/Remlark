@@ -1,3 +1,7 @@
+// 启动外部进程，ARM runner 上进程启动慢，放宽默认 30 秒时限。
+@Timeout(Duration(minutes: 3))
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

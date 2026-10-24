@@ -169,8 +169,9 @@ def prepare_source(destination, urls, root, required, sha256=None, tar='tar', at
         staging = Path(temporary)
         # Windows bsdtar 把参数转成 ANSI 代码页，中文路径会变成 ??；
         # 工作目录用 Unicode 传入，tar 只接收 ASCII 的相对文件名。
+        # FFmpeg/FreeRDP 源码文件多，ARM runner 加上杀毒扫描时解压可能超过 2 分钟，上限 10 分钟。
         subprocess.run([tar, '-xzf', destination.name, '-C', staging.name],
-                       cwd=destination.parent, check=True, timeout=120)
+                       cwd=destination.parent, check=True, timeout=600)
         prepared = staging / root
         if not all((prepared / name).is_file() and (prepared / name).stat().st_size > 0
                    for name in required):

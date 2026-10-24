@@ -1,7 +1,13 @@
+// 启动外部进程，ARM runner 上进程启动慢，放宽默认 30 秒时限。
+@Timeout(Duration(minutes: 3))
+library;
+
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:remlark/app/window_config.dart';
+
+import '../utils/windows_powershell.dart';
 
 /// 多平台测试 P-06：三个平台原生窗口代码与 lib/app/window_config.dart 的窗口尺寸一致，
 /// 原生库构建钩子覆盖三个平台（见 docs/multi-platform-testing.md）。
@@ -130,7 +136,7 @@ void main() {
             '[System.Management.Automation.Language.Parser]::ParseFile('
             "'$script', [ref]\$tokens, [ref]\$errors) | Out-Null; "
             'if (\$errors.Count) { \$errors | Out-String | Write-Output; exit 1 }',
-      ]);
+      ], environment: windowsPowerShellEnvironment());
       expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
     }
   });
@@ -143,21 +149,17 @@ void main() {
       ..writeAsStringSync(
         '@echo off\r\necho MAKEFLAGS=[%MAKEFLAGS%]\r\nexit /b 0\r\n',
       );
-    final result = await Process.run(
-      'powershell',
-      [
-        '-NoProfile',
-        // 只放行当前测试进程中的项目脚本，保持系统全局执行策略不变。
-        '-ExecutionPolicy',
-        'Bypass',
-        '-Command',
-        ". './native/utils/windows_build.ps1'; "
-            r"$env:MAKEFLAGS = '-- bad=value'; "
-            'Invoke-BuildCommand \$env:RMK_NMAKE; '
-            r"if ($env:MAKEFLAGS -ne '-- bad=value') { exit 2 }",
-      ],
-      environment: {'RMK_NMAKE': fake.path},
-    );
+    final result = await Process.run('powershell', [
+      '-NoProfile',
+      // 只放行当前测试进程中的项目脚本，保持系统全局执行策略不变。
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      ". './native/utils/windows_build.ps1'; "
+          r"$env:MAKEFLAGS = '-- bad=value'; "
+          'Invoke-BuildCommand \$env:RMK_NMAKE; '
+          r"if ($env:MAKEFLAGS -ne '-- bad=value') { exit 2 }",
+    ], environment: windowsPowerShellEnvironment({'RMK_NMAKE': fake.path}));
     expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
     expect(result.stdout, contains('MAKEFLAGS=[]'));
   });
@@ -170,7 +172,7 @@ void main() {
         'Bypass',
         '-Command',
         ". './native/utils/windows_build.ps1'; Invoke-BuildCommand cmd /c echo -C preserved",
-      ]);
+      ], environment: windowsPowerShellEnvironment());
       expect(forwarded.exitCode, 0, reason: '${forwarded.stderr}');
       expect(forwarded.stdout, contains('-C preserved'));
       final result = await Process.run('powershell', [
@@ -179,7 +181,7 @@ void main() {
         'Bypass',
         '-Command',
         ". './native/utils/windows_build.ps1'; Invoke-BuildCommand cmd /c exit 7; exit 0",
-      ]);
+      ], environment: windowsPowerShellEnvironment());
       expect(result.exitCode, isNot(0));
       expect(
         '${result.stdout}${result.stderr}',

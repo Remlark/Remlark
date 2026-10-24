@@ -1,3 +1,7 @@
+// 启动外部进程，ARM runner 上进程启动慢，放宽默认 30 秒时限。
+@Timeout(Duration(minutes: 3))
+library;
+
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +11,7 @@ import 'package:remlark/utils/archive/archive_extractor_posix.dart';
 import 'package:remlark/utils/archive/archive_extractor_windows.dart';
 
 import '../helpers/platform_tools.dart';
+import '../utils/windows_powershell.dart';
 
 /// 多平台测试 P-03：用当前系统的解压工具解压 .tar.gz / .zip（见 docs/multi-platform-testing.md）
 void main() {
@@ -94,7 +99,10 @@ void main() {
           '-Command',
           'Compress-Archive -Path (Join-Path \$env:RMK_SRC "*") -DestinationPath \$env:RMK_DEST',
         ],
-        environment: {'RMK_SRC': src.path, 'RMK_DEST': archive},
+        environment: windowsPowerShellEnvironment({
+          'RMK_SRC': src.path,
+          'RMK_DEST': archive,
+        }),
       );
     } else {
       try {

@@ -1,6 +1,12 @@
+// 启动外部进程，ARM runner 上进程启动慢，放宽默认 30 秒时限。
+@Timeout(Duration(minutes: 3))
+library;
+
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+
+import '../utils/windows_powershell.dart';
 
 /// 提取缓存路径集合，确保 restore/save 使用同一缓存版本而非只匹配同名键。
 String cachePaths(String workflow, String step) {
@@ -84,25 +90,13 @@ void main() {
 
   test('Windows 前置检查确认真实编译器目标并拒绝缺失工具', () async {
     if (!Platform.isWindows) return;
-    final systemRoot = Platform.environment['SystemRoot'] ?? r'C:\Windows';
-    final programFiles =
-        Platform.environment['ProgramFiles'] ?? r'C:\Program Files';
-    // pwsh 7 启动 5.1 时会继承 7 的模块路径，导致内置 cmdlet 加载失败且命令查找变慢。
-    final process = await Process.start(
-      'powershell',
-      [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        'tools/testing/windows_build_checks.ps1',
-      ],
-      environment: {
-        'PSModulePath':
-            '$programFiles\\WindowsPowerShell\\Modules;'
-            '$systemRoot\\system32\\WindowsPowerShell\\v1.0\\Modules',
-      },
-    );
+    final process = await Process.start('powershell', [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      'tools/testing/windows_build_checks.ps1',
+    ], environment: windowsPowerShellEnvironment());
     // 边运行边收集输出，超时也能看到卡在哪个阶段。
     final stdout = StringBuffer();
     final stderr = StringBuffer();
