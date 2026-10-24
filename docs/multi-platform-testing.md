@@ -46,6 +46,8 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 剪贴板文件读取、拖放 | `pasteboard`、`desktop_drop`、`file_selector` 插件 | 插件实现 | 插件实现 | 插件实现 | [file_drop_target_test.dart](../test/file_drop_target_test.dart)（只测分发逻辑） | M-03、M-04、M-06 |
 | 窗口默认尺寸 / 最小尺寸 | [window_config.dart](../lib/app/window_config.dart) + 三个平台的 runner | `MainFlutterWindow.swift` | `main.cpp`、`flutter_window.cpp`（按 DPI 换算） | `my_application.cc` | P-06 | M-02 |
 | 原生库（RDP、SSH AES-GCM） | [hook/build.dart](../hook/build.dart)、`native/*/scripts/` | `build.sh`，x86_64 + arm64，系统 zlib | `build.ps1 [-Arch x86_64\|arm64]`，按 VS 目标架构；显式 MSVC、静态 OpenSSL / zlib，关闭自动 ccache | `build.sh`（`aarch64` 命名），系统 zlib | P-06、[native_crypto_test.dart](../test/native_crypto_test.dart) | M-12 |
+| 原生依赖源码下载 | `tools/utils/source_archive.py`、`native/rdp/scripts/` | 校验/退避重试、复用有效包，在临时目录调用系统 tar 后原子发布 | 同一下载/原子发布接口，使用 System32 tar；zlib 双来源及 SHA-256；非 UTF-8 日志兼容 | 与 macOS 共用 POSIX 入口 | P-26 | M-29 |
+| 原生构建阶段与失败恢复 | `tools/utils/native_build_state.py`、`native/utils/`、原生脚本与 Release CI | 提前检查 Xcode/工具；universal 必须两架构阶段均完整 | 提前检查 cl 实际目标、MSYS2 和英文资源；状态绑定 MSVC | 提前检查开发包；arm64 统一 aarch64 目录 | P-27 | M-30 |
 | RDP H.264 硬件解码 | [native/rdp/src/hwdec/](../native/rdp/src/hwdec/)、[rmk_h264.c](../native/rdp/src/rmk_h264.c)、`native/rdp/scripts/` 中的 FFmpeg 编译 | VideoToolbox；FFmpeg 由 `build.sh` 编译 | D3D11VA（FreeRDP 默认 DXVA2，改为显式指定）；FFmpeg 用 MSVC 编译，configure 经 MSYS2 bash 运行（`build_ffmpeg_msvc.sh`），ARM64 关闭汇编；需要 VS 英文语言包，脚本预设工具 PATH、保护 CL 编译选项并固定英文输出 | VAAPI，自动选择第一个可读写的 `/dev/dri/renderD*`；运行时依赖 libva2 / libva-drm2 | P-11 | M-17 |
 | 打包 | [Makefile](../Makefile)、[Windows 安装器](../windows/packaging/) | `make mac` → zip | `make windows` → Inno Setup 安装 exe + 便携 zip，附带应用本地 VC++ 运行库 | `make linux` → deb + tar.gz，按 x64 / arm64 输出；发布前检查原生库和资源 | P-06、P-08、P-09 | M-12、M-14 |
 | 可选 JNI 依赖 | `linux/CMakeLists.txt`，Flutter 间接依赖 | 无 Linux JNI 插件 | 可选插件，未发现 JDK 时不构建 | 关闭 Android 间接依赖引入的可选 JNI，避免携带构建机 Java 绝对路径 | P-09 | M-12 |
@@ -100,6 +102,8 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-23 | [server_bundle_test.dart](../test/platform/server_bundle_test.dart)、[server_bundle_test.py](../tools/testing/server_bundle_test.py) | 六路服务端矩阵、发布依赖、macOS 双架构独立 runner；六种原生文件头与错误平台/架构、缺少/空主程序和 SQLite 库拒绝打包；压缩包布局与 POSIX 执行权限、额外资源保留；P-10 检查缺少服务端附件时禁止发布 | 同步服务端独立发布、M-13 |
 | P-24 | [artifact_cleanup_test.dart](../test/platform/artifact_cleanup_test.dart)、[artifact_cleanup_test.py](../tools/testing/artifact_cleanup_test.py) | 三平台执行相同清理逻辑；仅构建不上传、正式中转保留一天且始终清理；分页先快照再删除、历史运行复用查询、当前/已完成运行选择、保护其他工作流/并行运行/非托管文件及 API 失败上报 | Actions 存储、M-27 |
 | P-25 | [platform_test_workflow_test.dart](../test/platform/platform_test_workflow_test.dart) | 独立 test* 触发及手动入口、三平台双架构六路矩阵、锁文件与每路仅一次平台专项、禁止客户端全量/dsh/服务端测试及服务端依赖；精确原生缓存及缺失摘要；禁止应用/原生产品构建、上传产物、签名凭据及发布 | 发布前测试、M-28 |
+| P-26 | [source_archive_test.dart](../test/platform/source_archive_test.dart)、[source_archive_test.py](../tools/testing/source_archive_test.py) | 19 项 Python 检查：实际 gzip/tar/SHA、错误响应/截断/CRC、退避/镜像/慢速预算、本地磁盘失败不重试、有效包复用、源码原子发布/回滚、缺失关键文件、非 UTF-8 日志与 CLI；三平台下载入口及 Windows zlib 下载先于编译 | 原生源码下载、M-29 |
+| P-27 | [native_build_resilience_test.dart](../test/platform/native_build_resilience_test.dart)、`tools/testing/native_build_state_test.py`、`tools/testing/windows_build_checks.ps1` | 15 项 Python 检查：阶段完整性/摘要/旧配方/错架构/位置/工具链缓存身份、半安装不混旧产物、通用双架构及 CLI；实际 POSIX 缺工具/架构/语言前置失败；Windows 包装器、实际 Fetch 参数和无工具驱动拒绝；缓存恢复/保存路径集合一致及完整/阶段缓存区分 | 编译恢复、M-30 |
 
 P-11 的测试帧由 libx264 生成（BT.709 全范围，与 FreeRDP 的 YUV 转换一致），同一份字节内置在 [rmk_h264_probe_frame.h](../native/rdp/src/rmk_h264_probe_frame.h) 中，原生库首次连接时用它实际硬件解码一帧，解码成功且颜色正确才启用硬件（虚拟机、驱动异常等能创建设备却无法解码的环境会改用软件解码）。重新生成时两处同步更新：
 
@@ -185,6 +189,8 @@ P-06 还检查 macOS / Linux 测试服务端与应用使用同一 OpenSSL 前缀
 | M-16 | Release 安装验证 | 在干净的 Windows / Linux x64、arm64 与 Intel / Apple Silicon macOS 下载附件，验证 SHA256SUMS，安装、启动、升级、卸载并连接 SSH / RDP；macOS DMG 拖入 Applications。macOS CI 使用固定自签证书，尚未公证；Windows 未签名，CI 成功不代替实机交互验证 |
 | M-27 | Actions 存储 | 仅构建运行结束后没有 packages/logs artifacts；正式发布结束后 Release 的 16 个附件及 SHA256SUMS 可下载，Actions 中转包已删除；构建/发布失败也触发清理。确认历史已结束运行的 packages/logs 已清理，其他正在运行的构建产物、其他工作流文件和原生缓存保留 |
 | M-28 | 发布前平台专项测试 | 推送新的 test* 标签，确认仅 Platform Tests 触发，检出标签提交且六路各只执行一次 make test-platform，没有客户端全量/dsh/服务端测试及服务端依赖安装，不取消其他 runner；检查原生缓存命中及缺失摘要，缺失时不得编译原生库；无应用/服务端产品构建、签名、打包、artifact 或 Release。后续推送 v* 标签仍独立触发正式发布 |
+| M-29 | 原生源码下载与构建 | 三平台分别执行 make test-platform；在对应系统使用无源码缓存的独立检出目录验证原生构建。Windows x64/arm64 均应在 OpenSSL 编译前完成 zlib/FFmpeg 下载校验；错误响应明确重试/回退且不解压损坏文件，通过校验后继续构建。实际 Windows tar/MSVC 集成及外网偶发响应需对应 runner 验证 |
+| M-30 | 阶段完成与缓存恢复 | 三平台执行 make test-platform；在独立环境验证普通构建失败后，仅保存已完成阶段和有效源码包，重试应复用已完成 OpenSSL 等依赖，未完成阶段重建；胶水 C 改动不作废第三方阶段缓存；MSVC/工作区/校验器变化不误命中；macOS universal 缺任一架构或 SSH 库不得保存完整缓存；强制取消/runner 故障可能无法执行保存步骤 |
 
 M-20：下载新 CI 的 macOS zip / DMG，核对 `codesign -dv --verbose=4` 的 Authority 是固定自签名称、不是 `Signature=adhoc`，执行 `codesign --verify --deep --strict --all-architectures /Applications/remlark.app`。分别在 Intel / Apple Silicon 干净系统检查首次 Gatekeeper 放行，再覆盖安装同证书的新版本，记录是否再次放行及辅助功能等隐私权限是否保留；不以自签或单元测试保证系统免授权。检查 Actions 日志不含证书密码，缺失 Secret 应在构建前失败，失败构建不得上传可发布附件。
 
@@ -486,3 +492,19 @@ Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过�
 
 - 按用户要求删除 P-14 的 Dart 测试文件和 Swift 夹具，移除三平台资源一致性、系统入口及 macOS 原生图标读回自动化检查；图标外观按 M-12、M-19 手工确认。P-14 编号保留但不再执行，历史测试记录不代表当前覆盖范围。
 - macOS `make test-platform` 101 项通过、3 条件跳过，耗时 10 秒；无已删除夹具的代码引用，diff 检查通过。日志为 `build/validation/pre-release-tests/remove-icon-platform.log`。未运行其他套件、未提交推送或触发 Actions；其他平台待新标签验证。
+
+### 2026-10-25 Windows ARM64 zlib 下载校验修复（Step 119）
+
+- [Release 40127434522 / windows-arm64](https://github.com/Remlark/Remlark/actions/runs/40127434522/job/120971764135) 的平台专项通过，服务端 ARM64 作业成功；桌面原生构建在 OpenSSL 编译安装后下载 zlib，System32 tar 报 `Unrecognized archive format`。原始下载文件没有保留，日志只能确定解压输入不可识别，不能直接归因于 ARM64 编译器或某个 HTTP 错误页面。
+- 三平台源码下载共用 Python 实现，发送 identity 编码请求、60 秒网络超时、每来源三次尝试；完整 gzip CRC、tar 根目录及可选 SHA-256 均通过才原子替换下载文件，再由对应平台 tar 解压。Windows zlib 1.3.1 用官方 GitHub 和官网双来源，固定 SHA-256；需要的 zlib/FFmpeg 源码在 OpenSSL 编译前准备完成。
+- P-26 内部九项检查通过，模拟网络但使用真实 gzip/tar/SHA/临时文件和 CLI；macOS 平台集合 103 项通过、3 条件跳过，耗时 11 秒。定向静态检查、bash 语法及 diff 检查通过。实际获取两个官方来源，均为 SHA-256 `9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23`，新下载工具的真实下载与验证通过。日志 `build/validation/pre-release-tests/source-archive-platform.log`。
+- 本轮仅 macOS 执行 `make test-platform`，Windows x64/arm64 和 Linux 的执行及 M-29 构建集成仍需对应 runner。未编译产品、未运行其他套件、未提交推送或触发远端 Actions；重跑旧 Release 标签不会使用新下载脚本。
+
+### 2026-10-25 原生脚本容错与阶段缓存审查（Step 120）
+
+- 查出并修复：源码目录存在即跳过、阶段只看单一库文件、MSYS2/英文编译器资源检查过晚、失败丢失已完成 OpenSSL、仅一份 RDP 库就保存“完整缓存”、旧输出混入新安装、无退避/不复用有效包，以及缓存路径集合不一致可能导致的版本不命中。全部修复在本地验证，没有通过反复触发 Actions 试错。
+- P-26 的 19 项检查涵盖下载/解压/发布的失败恢复、慢速响应、错误参数、本地权限、CRC/SHA/目录、缓存复用和非 UTF-8 日志。P-27 的 15 项 Python 检查涵盖阶段产物/配方/目标/位置/缓存身份、混合旧产物拒绝、macOS 双架构、部分进度与 CLI、实际 POSIX 前置失败；另外核对缓存恢复/保存路径集合完全一致。
+- 新缓存只保存安装前缀、完成记录和成品库，进度缓存另带已验证压缩包；不复制大型绝对路径编译目录。第三方进度键绑定第三方脚本配方而非全部胶水源文件，完整缓存仍绑定全部 native 源码。两类键均绑定 runner、架构、工作区、校验器和 MSVC；不把未完成依赖当作完整成功。
+- 本机 Intel macOS `make test-platform` 106 项通过、3 条件跳过（11 秒）；Python 3.9.6 和当前 Python 通过两套检查，ASCII 严格控制台用例通过。本地 PowerShell 7.6.8 解析脚本，默认/Legacy 模式运行包装器、错目标/缺工具拒绝、实际 Fetch 的多 URL/中文空格路径/缺失源码修复；使用本地文件 URL 和替身编译器，不构建产品。三个真实上游源码包均通过下载、完整性检查及系统 tar 暂存解压。
+- 本地 PowerShell 7 并不代表 Windows PowerShell 5.1 + MSVC 实机构建通过；Windows/Linux 的 make test-platform、完整编译和 GitHub 缓存实际保存恢复仍待有环境/额度时按 M-29/M-30 验证，当前未触发。缓存保存适用于普通失败，runner 故障或全局强制取消不能保证执行清理/保存步骤。
+- 日志：`build/validation/pre-release-tests/native-audit-platform.log`、`source-faults.log`、`native-state-faults.log`、`source-system-python.log`、`state-system-python.log`、`source-ascii-console.log`、`powershell-wrapper-checks.log`、`powershell-legacy-checks.log`、`upstream-source-checks.log`、`audit-actionlint.log`。下载的本地验证用 PowerShell 放在忽略的 `build/validation/script-audit/`，未修改系统安装。

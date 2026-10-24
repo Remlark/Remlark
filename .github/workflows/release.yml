@@ -94,12 +94,34 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: ${{ matrix.arch }}
+      - name: Identify native cache environment
+        id: native-identity
+        run: python3 tools/utils/native_build_state.py cache-identity build/native ${{ matrix.platform }} --github-output "$GITHUB_OUTPUT"
       - name: Restore native dependencies
         id: native-cache
         uses: actions/cache/restore@v4
         with:
-          path: build/native
-          key: native-v1-${{ matrix.runner }}-${{ matrix.arch }}-${{ hashFiles('native/**') }}
+          path: |
+            build/native/*/prefix
+            build/native/*/.completed
+            build/native/*/freerdp-features
+            build/native/*/remlark_*.dll
+            build/native/*/libremlark_*.*
+          key: native-v2-${{ matrix.runner }}-${{ matrix.arch }}-${{ steps.native-identity.outputs.identity }}-${{ hashFiles('native/**') }}
+      # 第三方配方单独作为键；修改胶水 C 代码不应丢弃已完成的 OpenSSL 等依赖。
+      - name: Restore completed native stages
+        id: native-progress
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            build/native/*/prefix
+            build/native/*/.completed
+            build/native/*/freerdp-features
+            native/rdp/.deps/*.tar.gz
+          key: native-progress-v1-${{ matrix.runner }}-${{ matrix.arch }}-${{ steps.native-identity.outputs.identity }}-${{ hashFiles('native/rdp/scripts/build.sh', 'native/rdp/scripts/build.ps1', 'native/rdp/scripts/build_ffmpeg_msvc.sh', 'native/utils/windows_build.ps1') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            native-progress-v1-${{ matrix.runner }}-${{ matrix.arch }}-${{ steps.native-identity.outputs.identity }}-${{ hashFiles('native/rdp/scripts/build.sh', 'native/rdp/scripts/build.ps1', 'native/rdp/scripts/build_ffmpeg_msvc.sh', 'native/utils/windows_build.ps1') }}-
       - name: Flutter dependencies
         if: runner.os != 'Windows'
         run: |
@@ -153,12 +175,33 @@ jobs:
         run: |
           make test-platform
           if ($LASTEXITCODE -ne 0) { throw 'Post-build platform tests failed' }
-      # 打包失败时仍保存已经编译完成的原生库，重试无需重复编译 OpenSSL。
-      - name: Save complete native dependencies
-        if: always() && steps.native-cache.outputs.cache-hit != 'true' && hashFiles('build/native/**/remlark_rdp.dll', 'build/native/**/libremlark_rdp.so', 'build/native/**/libremlark_rdp.dylib') != ''
+      # 根据完成记录和全部产物摘要判断，不能仅看到一份 RDP DLL 就认定缓存完整。
+      - name: Inspect native cache completeness
+        id: native-state
+        if: always() && steps.native-cache.outcome == 'success'
+        run: python3 tools/utils/native_build_state.py cache-status build/native ${{ matrix.platform }} --arch ${{ matrix.arch }} --github-output "$GITHUB_OUTPUT"
+      # 后续阶段失败时保存已完成依赖；未完成阶段没有有效记录，下次必须重新构建。
+      - name: Save completed native stages
+        if: always() && steps.native-cache.outputs.cache-hit != 'true' && steps.native-progress.outputs.cache-primary-key != '' && (steps.native-state.outputs.dependencies == 'true' || hashFiles('native/rdp/.deps/*.tar.gz') != '') && steps.native-state.outputs.complete != 'true'
         uses: actions/cache/save@v4
         with:
-          path: build/native
+          path: |
+            build/native/*/prefix
+            build/native/*/.completed
+            build/native/*/freerdp-features
+            native/rdp/.deps/*.tar.gz
+          key: ${{ steps.native-progress.outputs.cache-primary-key }}
+      # 打包失败也保存完整原生库；RDP、SSH 及其依赖必须全部完成。
+      - name: Save complete native dependencies
+        if: always() && steps.native-cache.outputs.cache-hit != 'true' && steps.native-state.outputs.complete == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            build/native/*/prefix
+            build/native/*/.completed
+            build/native/*/freerdp-features
+            build/native/*/remlark_*.dll
+            build/native/*/libremlark_*.*
           key: ${{ steps.native-cache.outputs.cache-primary-key }}
       - name: Upload packages
         if: github.event_name != 'workflow_dispatch' || !inputs.build_only

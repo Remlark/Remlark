@@ -27,12 +27,18 @@ $Root = (Resolve-Path "$PSScriptRoot\..\..\..").Path
 $Native = "$Root\native\ssh_crypto"
 $Out = "$Root\build\native\windows-$Arch"
 $Prefix = "$Out\prefix"
-if (-not (Test-Path "$Prefix\lib\libcrypto.lib")) {
+$State = "$Root\tools\utils\native_build_state.py"
+Assert-BuildTools @('python3', 'cl', 'link', 'lib', 'cmake', 'ninja')
+Assert-ClTarget $Arch
+Invoke-BuildCommand python3 $State invalidate $Out windows crypto
+if (-not (Test-NativeStage $State $Out 'openssl')) {
   throw "缺少 $Prefix\lib\libcrypto.lib，请先编译 RDP 原生库（make rdp-lib）"
 }
 
+Invoke-BuildCommand python3 $State begin $Out windows crypto
 Invoke-BuildCommand cmake -G Ninja -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -S $Native -B "$Out\crypto-build" -DCMAKE_BUILD_TYPE=Release "-DREMLARK_DEPS_PREFIX=$Prefix" `
   -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
 Invoke-BuildCommand cmake --build "$Out\crypto-build"
 Copy-Item "$Out\crypto-build\remlark_crypto.dll" "$Out\remlark_crypto.dll" -Force
+Invoke-BuildCommand python3 $State mark $Out windows crypto
 Write-Host "==> $Out\remlark_crypto.dll"

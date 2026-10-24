@@ -16,18 +16,26 @@ case "$OS" in
   Linux) PLATFORM=linux; LIBNAME=libremlark_crypto.so ;;
   *) echo "unsupported OS: $OS (Windows 请使用 build.ps1)"; exit 1 ;;
 esac
+if [[ "$PLATFORM" == linux && "$ARCH" == arm64 ]]; then ARCH=aarch64; fi
 
 OUT="$ROOT/build/native/$PLATFORM-$ARCH"
 PREFIX="$OUT/prefix"
-if [[ ! -f "$PREFIX/lib/libcrypto.a" ]]; then
+STATE="$ROOT/tools/utils/native_build_state.py"
+for tool in python3 cmake ninja cc; do
+  command -v "$tool" >/dev/null || { echo "Missing native build tool: $tool" >&2; exit 1; }
+done
+python3 "$STATE" invalidate "$OUT" "$PLATFORM" crypto
+if ! python3 "$STATE" ready "$OUT" "$PLATFORM" openssl; then
   echo "缺少 $PREFIX/lib/libcrypto.a，请先编译 RDP 原生库（make rdp-lib）"
   exit 1
 fi
 
+python3 "$STATE" begin "$OUT" "$PLATFORM" crypto
 CMAKE_ARCH=()
 [[ "$PLATFORM" == macos ]] && CMAKE_ARCH=(-DCMAKE_OSX_ARCHITECTURES="$ARCH")
 cmake -G Ninja -S "$NATIVE" -B "$OUT/crypto-build" "${CMAKE_ARCH[@]}" \
   -DCMAKE_BUILD_TYPE=Release -DREMLARK_DEPS_PREFIX="$PREFIX" >/dev/null
 cmake --build "$OUT/crypto-build" -j"$JOBS"
 cp "$OUT/crypto-build/$LIBNAME" "$OUT/$LIBNAME"
+python3 "$STATE" mark "$OUT" "$PLATFORM" crypto
 echo "==> $OUT/$LIBNAME"

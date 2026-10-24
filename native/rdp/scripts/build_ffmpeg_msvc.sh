@@ -12,10 +12,10 @@ export MSYS2_ENV_CONV_EXCL="${MSYS2_ENV_CONV_EXCL:+$MSYS2_ENV_CONV_EXCL;}CL"
 # FFmpeg 通过英文版本输出识别 MSVC；中文 VS 输出会使其误用通用编译器参数。
 export VSLANG=1033
 
-SRC="$(cygpath -u "$1")"
-BUILD="$(cygpath -u "$2")"
-PREFIX="$(cygpath -m "$3")"
-ARCH="$4"
+# 同一份预检查既可在 OpenSSL 编译前单独调用，也在实际 FFmpeg 编译时执行。
+for tool in cygpath make diff grep sed awk cl.exe; do
+  command -v "$tool" >/dev/null || { echo "Missing FFmpeg build tool: $tool" >&2; exit 1; }
+done
 
 # MSVC 的 link.exe 必须排在 MSYS2 自带的 /usr/bin/link 之前
 CL_DIR="$(dirname "$(command -v cl.exe)")"
@@ -27,6 +27,14 @@ if ! grep -q '^Microsoft' <<<"$CL_BANNER"; then
   echo "FFmpeg requires the Visual Studio English language pack (en-US); install it with Visual Studio Installer." >&2
   exit 1
 fi
+if [[ "${1:-}" == --check-toolchain ]]; then
+  exit 0
+fi
+
+SRC="$(cygpath -u "$1")"
+BUILD="$(cygpath -u "$2")"
+PREFIX="$(cygpath -m "$3")"
+ARCH="$4"
 
 FF_ARCH=()
 case "$ARCH" in

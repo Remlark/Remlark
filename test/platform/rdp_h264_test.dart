@@ -77,7 +77,8 @@ void main() {
     expect(msvc, contains('--extra-cflags=-MT'));
     expect(msvc, contains(r'export PATH="$CL_DIR:/usr/bin:$PATH"'));
     // Windows 下 FreeRDP 按 MSVC 库名查找 FFmpeg
-    expect(ps, contains('avcodec.lib'));
+    // 依赖复用检查完整阶段，不能只看到一份 avcodec.lib 就跳过安装。
+    expect(ps, contains("Test-NativeStage \$State \$Out 'ffmpeg'"));
     expect(ps, contains('FFmpeg MSVC static library missing:'));
     expect(ps, isNot(contains(r'Move-Item -Force "$Prefix\lib\lib$lib.a"')));
     // FreeRDP 的硬解错误标签位于块末尾，MSVC C11 需要空语句。

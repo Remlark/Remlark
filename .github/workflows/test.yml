@@ -58,14 +58,23 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: ${{ matrix.arch }}
+      - name: Identify native cache environment
+        id: native-identity
+        shell: bash
+        run: python3 tools/utils/native_build_state.py cache-identity build/native ${{ matrix.platform }} --github-output "$GITHUB_OUTPUT"
       # 只读取与 Release 相同的精确源码缓存，不回退到旧原生代码、不现场编译。
       - name: Restore matching native test dependencies
         id: native-cache
         uses: actions/cache/restore@v4
         with:
-          path: build/native
+          path: |
+            build/native/*/prefix
+            build/native/*/.completed
+            build/native/*/freerdp-features
+            build/native/*/remlark_*.dll
+            build/native/*/libremlark_*.*
           # macOS Release 缓存包含双架构，键名为 universal；测试仍按原生架构分别执行。
-          key: native-v1-${{ matrix.runner }}-${{ matrix.platform == 'macos' && matrix.arch == 'arm64' && 'universal' || matrix.arch }}-${{ hashFiles('native/**') }}
+          key: native-v2-${{ matrix.runner }}-${{ matrix.platform == 'macos' && matrix.arch == 'arm64' && 'universal' || matrix.arch }}-${{ steps.native-identity.outputs.identity }}-${{ hashFiles('native/**') }}
       - name: Resolve locked client dependencies
         run: flutter pub get --enforce-lockfile
       - name: Explain native test coverage

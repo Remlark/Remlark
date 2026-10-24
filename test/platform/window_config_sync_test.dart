@@ -118,13 +118,17 @@ void main() {
 
   test('Windows PowerShell 可以解析两个原生库构建脚本', () async {
     if (!Platform.isWindows) return; // 其他平台的原生构建使用 build.sh。
-    for (final lib in ['rdp', 'ssh_crypto']) {
+    for (final script in [
+      'native/rdp/scripts/build.ps1',
+      'native/ssh_crypto/scripts/build.ps1',
+      'native/utils/windows_build.ps1',
+    ]) {
       final result = await Process.run('powershell', [
         '-NoProfile',
         '-Command',
         '\$tokens = \$null; \$errors = \$null; '
             '[System.Management.Automation.Language.Parser]::ParseFile('
-            "'native/$lib/scripts/build.ps1', [ref]\$tokens, [ref]\$errors) | Out-Null; "
+            "'$script', [ref]\$tokens, [ref]\$errors) | Out-Null; "
             'if (\$errors.Count) { \$errors | Out-String | Write-Output; exit 1 }',
       ]);
       expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');

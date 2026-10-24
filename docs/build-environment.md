@@ -6,6 +6,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux。桌面应用
 
 - Flutter stable，包含 Dart SDK。当前项目 `pubspec.yaml` 要求 Dart `^3.13.5`；本轮验证使用 Flutter **3.47.7 / Dart 3.13.5**。
 - Git；使用 Makefile 时还需要 GNU Make，本轮 Windows 使用 **4.4.1**，仅通过 Windows PowerShell 入口开发运行时不需要 Make。原生库还需要 CMake、Ninja、Perl；Windows x64 的 OpenSSL 汇编需要 NASM。
+- Python 3.9+（命令 `python3`）：版本工具及三平台原生源码下载校验使用标准库，不需要额外 Python 包。
 - 网络需能访问 Flutter / pub 依赖、GitHub、zlib.net、ffmpeg.org。只有验证 dsh 真实安装时还需要 nodejs.org、registry.npmjs.org。
 - 保留仓库中的 `pubspec.lock` 与 `server/pubspec.lock`，日常构建使用 `pub get`，不要为解决构建问题直接升级依赖。
 
@@ -21,6 +22,12 @@ make analyze
 ```
 
 `make test` 包含客户端与服务端测试；真实服务端、原生库或网络依赖未准备好时，部分端到端测试会跳过。具体条件与手工测试见 [multi-platform-testing.md](multi-platform-testing.md)。同一工作区的 Flutter 测试和构建应顺序执行，Windows 下并行运行可能占用共享的 native assets DLL。
+
+原生源码下载通过 `tools/utils/source_archive.py` 统一处理：每个来源最多尝试 3 次，60 秒网络超时，完整校验 gzip CRC、tar 目录和预期版本根目录，通过后原子替换压缩包，再调用各平台 tar 解压。无效响应不会直接进入编译。Windows zlib 1.3.1 优先使用[官方 GitHub 发布](https://github.com/madler/zlib/releases/tag/v1.3.1)，备用 zlib.net fossils，两个来源均验证固定 SHA-256 `9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23`。Windows 先下载并校验尚需编译的 zlib / FFmpeg，再编译 OpenSSL，避免网络异常在耗时编译之后才暴露。
+
+源码包验证通过后可直接复用；瞬时错误在同一任务中退避重试，永久 HTTP 错误尝试镜像，本地磁盘/权限错误立即失败。每次响应另有 180 秒流传输预算（阻塞读取仍受 60 秒 socket 超时约束）。源码解压到同目录临时位置，关键文件齐全后写 `.remlark-source.json` 并替换正式目录；只存在目录但没有完成记录不算准备成功，解压/发布失败不会留下可复用的半目录。
+
+原生依赖每个阶段安装成功后在 `build/native/<平台-架构>/.completed/` 记录必需产物摘要及构建配方。复用时检查所有必需库和头文件，重建时先移除本阶段旧输出；不要手工补写完成记录。Windows 在下载前检查工具和实际 cl 目标架构，FFmpeg 的 MSYS2 / 英文资源检查也提前；POSIX 检查系统开发依赖。工具缺失应在耗时 OpenSSL 编译前报错。
 
 ## Windows x64
 
@@ -282,7 +289,9 @@ Windows 测试还需要 Python 3（GitHub runner 已提供），用于生成包�
 
 Windows 应用解压使用 archive 4.5.2 的流式接口，在独立 isolate 处理大包，规避 ARM64 系统 tar 的 Unicode 缺陷；这是新增依赖，原有锁定版本未升级。CRT 按架构校验：x64 要求 FH4 的 vcruntime140_1.dll，ARM64 不要求；附带目标架构完整 CRT 目录。
 
-CI 同时支持 VS 2022 / VS 2026，从 VCToolsRedistDir 的目标架构目录匹配 Microsoft.VC*.CRT。Windows 安装 JOM 并行编译 OpenSSL（MSVC 显式 `/FS` 同步 PDB 写入），安装阶段固定串行 NMake，避免依赖 Makefile 并发改写；本地没有 JOM 时编译也回退 NMake。原生库按 runner、CPU 与 native 源码哈希缓存；原生编译完成后即使后续打包失败也保存，工具链重大升级时递增工作流缓存前缀。
+CI 同时支持 VS 2022 / VS 2026，从 VCToolsRedistDir 的目标架构目录匹配 Microsoft.VC*.CRT。Windows 安装 JOM 并行编译 OpenSSL（MSVC 显式 `/FS` 同步 PDB 写入），安装阶段固定串行 NMake，避免依赖 Makefile 并发改写；本地没有 JOM 时编译也回退 NMake。
+
+原生缓存分两层：完整库缓存 `native-v2` 绑定 runner、CPU、native 源码哈希，以及工作区/校验器/MSVC 环境身份；阶段缓存 `native-progress-v1` 绑定同环境下的第三方构建配方，以 run_id/run_attempt 后缀保存新进度，并只从同配方前缀恢复。后续阶段普通失败时，已经完成的 OpenSSL、zlib、FFmpeg 等依赖和已验证压缩包仍保存；修改胶水 C 源码不作废第三方阶段缓存，修改依赖构建脚本或工具链则需要重新验证/构建。完整缓存要求 RDP、SSH 和全部依赖均有有效完成记录，macOS 通用包要验证两个架构。缓存只保留安装前缀、记录和成品库，不保存大型临时构建目录；测试与发布恢复完整缓存使用相同路径集合。全局强制取消或 runner 故障可能使保存步骤无法执行。
 
 已验证发布：[v1.0.0](https://github.com/Remlark/Remlark/releases/tag/v1.0.0)，[构建记录](https://github.com/Remlark/Remlark/actions/runs/39593809838)。后续先修改 VERSION 的版本、提交并推送，再创建同版本 v* 标签；不要复用已发布标签。
 

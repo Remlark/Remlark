@@ -51,8 +51,9 @@ void main() {
     expect(
       workflow,
       contains(
-        "key: native-v1-\u0024{{ matrix.runner }}-"
+        "key: native-v2-\u0024{{ matrix.runner }}-"
         "\u0024{{ matrix.platform == 'macos' && matrix.arch == 'arm64' && 'universal' || matrix.arch }}-"
+        "\u0024{{ steps.native-identity.outputs.identity }}-"
         "\u0024{{ hashFiles('native/**') }}",
       ),
     );
