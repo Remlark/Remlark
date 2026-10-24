@@ -2,14 +2,17 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:remlark/modules/hosts/host_model.dart';
 import 'package:remlark/modules/hosts/host_repository.dart';
 import 'package:remlark/modules/hosts/vnc_ssh_config.dart';
 import 'package:remlark/modules/keys/key_model.dart';
+import 'package:remlark/modules/settings/settings_repository.dart';
 import 'package:remlark/modules/sync/host_sync_bundle.dart';
 import 'package:remlark/modules/sync/sync_api.dart';
 import 'package:remlark/modules/sync/sync_config.dart';
+import 'package:remlark/modules/sync/sync_service.dart';
 import 'package:remlark/utils/secret_store.dart';
 
 import 'helpers/sync_test_harness.dart';
@@ -571,6 +574,248 @@ void main() {
       expect(reports[1].pushed, 1);
       expect(api.indexCalls, 1);
       expect(api.putCalls, 1);
+    });
+  });
+  group('配置与自动同步', () {
+    /// 带自动同步间隔的已配置参数。
+    SyncConfig scheduled(int minutes) => SyncConfig(
+      serverUrl: 'https://unit.test',
+      token: 'tok',
+      passphrase: 'pass',
+      intervalMinutes: minutes,
+    );
+
+    test('保存后重新加载：地址去除空白，令牌和口令不以明文落盘', () async {
+      await client.sync.saveConfig(
+        const SyncConfig(
+          serverUrl: '  https://sync.example:8443  ',
+          token: 'secret-token',
+          passphrase: 'secret-pass',
+          intervalMinutes: 15,
+          lastSyncAt: 42,
+        ),
+      );
+      client.sync.stop();
+      final raw = await SettingsRepository(client.db).getJson('sync.config');
+      expect(raw['serverUrl'], 'https://sync.example:8443');
+      expect(jsonEncode(raw), isNot(contains('secret-token')));
+      expect(jsonEncode(raw), isNot(contains('secret-pass')));
+      final reloaded = SyncService(
+        SettingsRepository(client.db),
+        client.hosts,
+        client.groups,
+        client.keys,
+        apiFactory: (_, _) => api,
+      );
+      addTearDown(reloaded.dispose);
+      await reloaded.load();
+      reloaded.stop();
+      expect(reloaded.config.serverUrl, 'https://sync.example:8443');
+      expect(reloaded.config.token, 'secret-token');
+      expect(reloaded.config.passphrase, 'secret-pass');
+      expect(reloaded.config.intervalMinutes, 15);
+      expect(reloaded.config.lastSyncAt, 42);
+    });
+
+    test('从未保存过配置时加载为未配置，不启动自动同步', () async {
+      final fresh = SyncTestClient(api);
+      await fresh.sync.load();
+      expect(fresh.sync.config.isConfigured, isFalse);
+      expect(fresh.sync.config.intervalMinutes, 0);
+    });
+
+    test('同步完成写入时间时不覆盖途中保存的新配置', () async {
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      api.beforeIndex = () async {
+        entered.complete();
+        await release.future;
+      };
+      final running = client.sync.syncNow();
+      await entered.future;
+      final saving = client.sync.saveConfig(
+        const SyncConfig(
+          serverUrl: 'https://unit.test',
+          token: 'tok',
+          passphrase: 'pass',
+          intervalMinutes: 30,
+        ),
+      );
+      release.complete();
+      await Future.wait([running, saving]);
+      client.sync.stop();
+      final raw = await SettingsRepository(client.db).getJson('sync.config');
+      expect(raw['interval'], 30);
+      expect(raw['lastSyncAt'], client.sync.config.lastSyncAt);
+    });
+
+    test('同步途中修改服务器和口令，本轮仍只使用开始时的服务器和密钥', () async {
+      final other = MemorySyncApi();
+      final switching = SyncTestClient(
+        api,
+        apiFactory: (url, _) => url == 'https://other.test' ? other : api,
+      );
+      await switching.save(syncHost());
+      await api.seed(syncHost(uuid: 'h2', name: 'remote'));
+      api.beforeIndex = () => switching.sync.saveConfig(
+        const SyncConfig(
+          serverUrl: 'https://other.test',
+          token: 'tok',
+          passphrase: 'other',
+        ),
+      );
+      final report = await switching.sync.syncNow();
+      expect([report.pushed, report.pulled], [1, 1]);
+      expect([other.indexCalls, other.putCalls, other.fetchCalls], [0, 0, 0]);
+      // 能用原口令解密，说明上传未混入切换后的密钥。
+      expect((await api.decoded('h1'))['host'], containsPair('uuid', 'h1'));
+      expect((await switching.hosts.getByUuid('h2'))!.name, 'remote');
+      expect(switching.sync.config.serverUrl, 'https://other.test');
+    });
+
+    /// 在假时钟 zone 内创建客户端并运行，服务内部的写入队列和定时器才能被假时钟推进。
+    void inFakeTime(void Function(FakeAsync async, SyncTestClient c) body) {
+      fakeAsync((async) => body(async, SyncTestClient(api)));
+    }
+
+    /// 推进到指定时刻后再多留一秒，让触发的同步完成内部短计时器。
+    void advance(FakeAsync async, Duration d) {
+      async.elapse(d);
+      async.elapse(const Duration(seconds: 1));
+    }
+
+    test('按间隔自动同步，stop 后不再触发', () {
+      inFakeTime((async, c) {
+        c.sync.saveConfig(scheduled(5));
+        advance(async, const Duration(minutes: 4));
+        expect(api.indexCalls, 0);
+        advance(async, const Duration(minutes: 1));
+        expect(api.indexCalls, 1);
+        advance(async, const Duration(minutes: 5));
+        expect(api.indexCalls, 2);
+        c.sync.stop();
+        advance(async, const Duration(minutes: 30));
+        expect(api.indexCalls, 2);
+      });
+    });
+
+    test('自动同步失败只记录错误，下个周期继续重试', () {
+      inFakeTime((async, c) {
+        api.indexError = const SyncApiException(503, 'offline');
+        c.sync.saveConfig(scheduled(1));
+        advance(async, const Duration(minutes: 1));
+        expect(api.indexCalls, 1);
+        expect(c.sync.lastError, contains('503'));
+        api.indexError = null;
+        advance(async, const Duration(minutes: 1));
+        expect(api.indexCalls, 2);
+        expect(c.sync.lastError, isNull);
+        c.sync.stop();
+      });
+    });
+
+    test('退出时仍在同步，结束后不会重新启动自动同步', () {
+      inFakeTime((async, c) {
+        final release = Completer<void>();
+        api.beforeIndex = () => release.future;
+        c.sync.saveConfig(scheduled(5));
+        advance(async, const Duration(minutes: 5));
+        expect(api.indexCalls, 1);
+        c.sync.stop();
+        release.complete();
+        advance(async, Duration.zero);
+        expect(c.sync.syncing, isFalse);
+        expect(c.sync.config.lastSyncAt, isNotNull);
+        advance(async, const Duration(minutes: 30));
+        expect(api.indexCalls, 1);
+      });
+    });
+
+    for (final config in [scheduled(0), const SyncConfig(intervalMinutes: 5)]) {
+      test(
+        '间隔为 ${config.intervalMinutes} 且已配置=${config.isConfigured} 时不自动同步',
+        () {
+          inFakeTime((async, c) {
+            c.sync.saveConfig(config);
+            advance(async, const Duration(hours: 2));
+            expect(api.indexCalls, 0);
+          });
+        },
+      );
+    }
+
+    test('同步成功和失败后都通知主机列表刷新', () async {
+      var changed = 0;
+      client.sync.onHostsChanged = () => changed++;
+      await client.sync.syncNow();
+      expect(changed, 1);
+      api.indexError = const SyncApiException(503, 'offline');
+      await expectLater(client.sync.syncNow(), throwsA(anything));
+      expect(changed, 2);
+    });
+  });
+
+  group('启用、移除与依赖的补充场景', () {
+    test('重新加入时服务器已有更新版本，保持待同步并在下次同步拉取', () async {
+      final host = syncHost(enabled: false, name: 'local');
+      await client.save(host);
+      await api.seed(syncHost(version: 200, name: 'remote'));
+      await client.sync.enable(host);
+      expect(
+        (await client.hosts.getByUuid('h1'))!.syncState,
+        SyncState.pending,
+      );
+      expect(api.records['h1']!.updatedAt, 200);
+      final report = await client.sync.syncNow();
+      expect(report.pulled, 1);
+      final local = (await client.hosts.getByUuid('h1'))!;
+      expect(local.name, 'remote');
+      expect(local.syncState, SyncState.synced);
+    });
+
+    test('未配置服务器时移除同步只改本机状态，不请求服务器', () async {
+      await client.save(syncHost());
+      client.sync.config = const SyncConfig();
+      await client.sync.removeFromServer('h1');
+      expect(api.deleteCalls, 0);
+      expect((await client.hosts.getByUuid('h1'))!.syncState, SyncState.local);
+    });
+
+    test('从服务器移除从未上传的主机按成功处理，不留下删除标记', () async {
+      await client.save(syncHost());
+      await client.sync.removeFromServer('h1');
+      expect(api.deleteCalls, 1);
+      expect(api.records, isEmpty);
+      expect((await client.hosts.getByUuid('h1'))!.syncState, SyncState.local);
+    });
+
+    test('引用的 SSH 密钥本机已被删除时仍可上传，拉取端保留引用不创建空密钥', () async {
+      await client.save(
+        syncHost().copyWith(
+          authType: AuthType.key,
+          keyUuid: () => 'missing-key',
+        ),
+      );
+      expect((await client.sync.syncNow()).pushed, 1);
+      final payload = await api.decoded('h1');
+      expect(payload['keys'], isEmpty);
+      expect(payload.containsKey('key'), isFalse);
+      final other = SyncTestClient(api);
+      expect((await other.sync.syncNow()).pulled, 1);
+      final pulled = (await other.hosts.getByUuid('h1'))!;
+      expect(pulled.keyUuid, 'missing-key');
+      expect(await other.keys.get('missing-key'), isNull);
+    });
+
+    test('远端删除标记对应的仅本地主机保持不变，不计入解除', () async {
+      await client.save(syncHost(enabled: false, name: 'local'));
+      api.tombstone('h1');
+      final report = await client.sync.syncNow();
+      expect(report.detached, 0);
+      expect(api.fetchCalls, 0);
+      final local = (await client.hosts.getByUuid('h1'))!;
+      expect(local.name, 'local');
+      expect(local.syncState, SyncState.local);
     });
   });
 }

@@ -5,6 +5,7 @@ import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 
 import '../db/sync_repository.dart';
+import 'request_body.dart';
 
 /// 同步 HTTP 接口（/api/v1）。
 /// 认证：`Authorization: Bearer <token>`，令牌决定数据空间，不同令牌数据互相隔离。
@@ -40,6 +41,29 @@ class SyncApi {
 
   String _space(Request r) => r.context['space']! as String;
 
+  /// 请求体格式错误统一返回 400，避免畸形请求被记为服务端 500。
+  Middleware get _badRequest =>
+      (inner) => (req) async {
+        try {
+          return await inner(req);
+        } on BadRequest catch (e) {
+          return Response(
+            400,
+            body: jsonEncode({'error': e.message}),
+            headers: _json,
+          );
+        }
+      };
+
+  /// 路由参数保持 URL 编码，按路径段解码后才是客户端的主机 UUID。
+  static String _uuid(String raw) {
+    try {
+      return Uri.decodeComponent(raw);
+    } on ArgumentError {
+      throw const BadRequest('invalid uuid');
+    }
+  }
+
   /// 构造处理器
   Handler get handler {
     final router = Router()
@@ -53,8 +77,7 @@ class SyncApi {
         (Request r) async => _ok({'items': await _repo.index(_space(r))}),
       )
       ..post('/api/v1/items/batch-get', (Request r) async {
-        final body = jsonDecode(await r.readAsString()) as Map;
-        final uuids = (body['uuids'] as List).cast<String>();
+        final uuids = parseBatchGet(parseJsonObject(await r.readAsString()));
         if (uuids.length > 1000)
           return Response(400, body: '{"error":"too many"}', headers: _json);
         final items = await _repo.fetch(_space(r), uuids);
@@ -71,28 +94,29 @@ class SyncApi {
         });
       })
       ..put('/api/v1/items/<uuid>', (Request r, String uuid) async {
-        final body = jsonDecode(await r.readAsString()) as Map;
-        final updatedAt = (body['updatedAt'] as num).toInt();
-        final payload = body['payload'] as String;
-        if (payload.length > 1024 * 1024)
+        final body = parsePut(parseJsonObject(await r.readAsString()));
+        if (body.payload.length > 1024 * 1024)
           return Response(413, body: '{"error":"too large"}', headers: _json);
         final res = await _repo.put(
           _space(r),
-          uuid,
-          updatedAt,
-          payload,
-          restoreDeleted: body['restoreDeleted'] == true,
+          _uuid(uuid),
+          body.updatedAt,
+          body.payload,
+          restoreDeleted: body.restoreDeleted,
         );
         if (res == PutResult.conflict)
           return Response(409, body: '{"error":"conflict"}', headers: _json);
         return _ok({'ok': true});
       })
       ..delete('/api/v1/items/<uuid>', (Request r, String uuid) async {
-        final found = await _repo.delete(_space(r), uuid);
+        final found = await _repo.delete(_space(r), _uuid(uuid));
         return found
             ? _ok({'ok': true})
             : Response.notFound('{"error":"not found"}', headers: _json);
       });
-    return const Pipeline().addMiddleware(_auth).addHandler(router.call);
+    return const Pipeline()
+        .addMiddleware(_auth)
+        .addMiddleware(_badRequest)
+        .addHandler(router.call);
   }
 }

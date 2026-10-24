@@ -202,6 +202,7 @@ class SyncTestClient {
   SyncTestClient(
     MemorySyncApi api, {
     HostRepository Function(AppDatabase)? hostFactory,
+    SyncApi Function(String, String)? apiFactory,
   }) {
     db = AppDatabase(NativeDatabase.memory());
     hosts = hostFactory?.call(db) ?? HostRepository(db);
@@ -212,7 +213,7 @@ class SyncTestClient {
       hosts,
       groups,
       keys,
-      apiFactory: (_, _) => api,
+      apiFactory: apiFactory ?? (_, _) => api,
     );
     sync.config = const SyncConfig(
       serverUrl: 'https://unit.test',

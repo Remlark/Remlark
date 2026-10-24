@@ -26,6 +26,14 @@ class SyncReport {
   int detached = 0;
 }
 
+/// 单轮同步固定使用的服务器接口和加密密钥。
+class _SyncSession {
+  const _SyncSession(this.api, this.key);
+
+  final SyncApi api;
+  final Uint8List key;
+}
+
 /// 同步服务。规则：
 /// - 每台主机有唯一 uuid，以 uuid 对应的“最后更新时间”决定方向：本地新则上传，服务器新则下载
 /// - 主机的 syncedAt 记录最后一次与服务器一致时的时间，与 updatedAt 相等即为“已同步”
@@ -56,6 +64,8 @@ class SyncService extends ChangeNotifier {
   Uint8List? _key;
   String? _keyFor;
   Future<SyncReport>? _syncFuture;
+  Future<void> _persistTail = Future.value();
+  bool _stopped = false;
 
   /// 主机同步状态变化时回调（刷新主机列表）
   VoidCallback? onHostsChanged;
@@ -73,6 +83,7 @@ class SyncService extends ChangeNotifier {
       intervalMinutes: (j['interval'] as num?)?.toInt() ?? 0,
       lastSyncAt: (j['lastSyncAt'] as num?)?.toInt(),
     );
+    _stopped = false;
     _schedule();
     notifyListeners();
   }
@@ -84,20 +95,32 @@ class SyncService extends ChangeNotifier {
       _keyFor = null;
     }
     config = c;
-    await _settings.setJson(_cfgKey, {
-      'serverUrl': c.serverUrl.trim(),
-      'token': await SecretStore.instance.seal(c.token),
-      'passphrase': await SecretStore.instance.seal(c.passphrase),
-      'interval': c.intervalMinutes,
-      if (c.lastSyncAt != null) 'lastSyncAt': c.lastSyncAt,
-    });
+    await _persist();
     _schedule();
     notifyListeners();
   }
 
+  /// 串行写入当前内存配置；并发保存时最后落盘的一定是最新配置，不会被旧快照覆盖。
+  Future<void> _persist() {
+    final done = _persistTail.then((_) async {
+      final c = config;
+      await _settings.setJson(_cfgKey, {
+        'serverUrl': c.serverUrl.trim(),
+        'token': await SecretStore.instance.seal(c.token),
+        'passphrase': await SecretStore.instance.seal(c.passphrase),
+        'interval': c.intervalMinutes,
+        if (c.lastSyncAt != null) 'lastSyncAt': c.lastSyncAt,
+      });
+    });
+    _persistTail = done.catchError((_) {});
+    return done;
+  }
+
+  /// 按配置重建自动同步定时器；退出后不再恢复。
   void _schedule() {
     _timer?.cancel();
-    if (config.isConfigured && config.intervalMinutes > 0) {
+    _timer = null;
+    if (!_stopped && config.isConfigured && config.intervalMinutes > 0) {
       _timer = Timer.periodic(Duration(minutes: config.intervalMinutes), (_) {
         syncNow().catchError((_) => SyncReport());
       });
@@ -107,15 +130,22 @@ class SyncService extends ChangeNotifier {
   SyncApi get _api => _apiFactory(config.serverUrl, config.token);
 
   /// 派生加密密钥（盐由令牌决定，同一数据空间内各客户端一致）
-  Future<Uint8List> _cryptoKey() async {
-    final id = '${config.token}\u0000${config.passphrase}';
+  Future<Uint8List> _cryptoKey(SyncConfig c) async {
+    final id = '${c.token}\u0000${c.passphrase}';
     if (_key != null && _keyFor == id) return _key!;
     final salt = await CryptoUtils.sha256(
-      utf8.encode('remlark-sync:${config.token}'),
+      utf8.encode('remlark-sync:${c.token}'),
     );
-    _key = await CryptoUtils.deriveKey(config.passphrase, salt);
+    final key = await CryptoUtils.deriveKey(c.passphrase, salt);
+    _key = key;
     _keyFor = id;
-    return _key!;
+    return key;
+  }
+
+  /// 固定当前配置的服务器和密钥，同步途中修改配置不会混用新旧服务器或口令。
+  Future<_SyncSession> _session() async {
+    final c = config;
+    return _SyncSession(_apiFactory(c.serverUrl, c.token), await _cryptoKey(c));
   }
 
   /// 测试连接
@@ -123,7 +153,7 @@ class SyncService extends ChangeNotifier {
       _apiFactory(c.serverUrl, c.token).ping();
 
   /// 单台主机快照先压缩再加密，各主机保留独立 UUID 和配置修改版本。
-  Future<String> _encode(HostEntry h) async {
+  Future<String> _encode(_SyncSession s, HostEntry h) async {
     String? groupName;
     if (h.groupUuid != null) {
       for (final g in await _groups.list()) {
@@ -139,19 +169,17 @@ class SyncService extends ChangeNotifier {
         keys: keys.whereType<KeyEntry>().toList(),
       ).toJson(),
     );
-    return CryptoUtils.encryptCompressedString(await _cryptoKey(), payload);
+    return CryptoUtils.encryptCompressedString(s.key, payload);
   }
 
   /// 解密并校验主机身份，然后以一个事务应用完整主机快照。
   Future<bool> _apply(
+    _SyncSession s,
     String expectedUuid,
     String cipher,
     int remoteUpdatedAt,
   ) async {
-    final plain = await CryptoUtils.decryptCompressedString(
-      await _cryptoKey(),
-      cipher,
-    );
+    final plain = await CryptoUtils.decryptCompressedString(s.key, cipher);
     final bundle = HostSyncBundle.fromJson(
       jsonDecode(plain) as Map<String, dynamic>,
     );
@@ -179,11 +207,15 @@ class SyncService extends ChangeNotifier {
   }
 
   /// 上传一台主机
-  Future<bool> _push(HostEntry h, {bool restoreDeleted = false}) async {
-    final ok = await _api.put(
+  Future<bool> _push(
+    _SyncSession s,
+    HostEntry h, {
+    bool restoreDeleted = false,
+  }) async {
+    final ok = await s.api.put(
       h.uuid,
       h.updatedAt,
-      await _encode(h),
+      await _encode(s, h),
       restoreDeleted: restoreDeleted,
     );
     if (ok) {
@@ -212,7 +244,8 @@ class SyncService extends ChangeNotifier {
     final sw = Stopwatch()..start();
     AppLog.i('sync', '开始同步');
     try {
-      final remote = await _api.index();
+      final s = await _session();
+      final remote = await s.api.index();
       final locals = await _hosts.listSyncEnabled();
       final localIds = <String>{};
       final toPull = <String>{};
@@ -220,7 +253,7 @@ class SyncService extends ChangeNotifier {
         localIds.add(l.uuid);
         final r = remote[l.uuid];
         if (r == null) {
-          if (await _push(l)) {
+          if (await _push(s, l)) {
             report.pushed++;
           } else {
             toPull.add(l.uuid);
@@ -236,7 +269,7 @@ class SyncService extends ChangeNotifier {
             report.unchanged++;
           }
         } else if (l.updatedAt > r.updatedAt) {
-          if (await _push(l)) {
+          if (await _push(s, l)) {
             report.pushed++;
           } else {
             toPull.add(l.uuid);
@@ -250,7 +283,7 @@ class SyncService extends ChangeNotifier {
         if (r.deleted || localIds.contains(r.uuid)) continue;
         final local = await _hosts.getByUuid(r.uuid);
         if (local != null && local.updatedAt > r.updatedAt) {
-          if (await _push(local.copyWith(syncEnabled: true))) {
+          if (await _push(s, local.copyWith(syncEnabled: true))) {
             report.pushed++;
           } else {
             toPull.add(r.uuid);
@@ -260,7 +293,7 @@ class SyncService extends ChangeNotifier {
         }
       }
       if (toPull.isNotEmpty) {
-        final payloads = await _api.fetch(toPull.toList());
+        final payloads = await s.api.fetch(toPull.toList());
         for (final uuid in toPull) {
           final item = payloads[uuid];
           if (item == null) {
@@ -276,7 +309,7 @@ class SyncService extends ChangeNotifier {
             if (item.payload == null) {
               throw FormatException('Missing host sync ciphertext: $uuid');
             }
-            if (await _apply(uuid, item.payload!, item.updatedAt)) {
+            if (await _apply(s, uuid, item.payload!, item.updatedAt)) {
               report.pulled++;
             }
           }
@@ -288,9 +321,11 @@ class SyncService extends ChangeNotifier {
         '同步完成 ${sw.elapsedMilliseconds}ms：推送 ${report.pushed}，拉取 ${report.pulled}，'
             '未变 ${report.unchanged}，解除 ${report.detached}',
       );
-      await saveConfig(
-        config.copyWith(lastSyncAt: DateTime.now().millisecondsSinceEpoch),
+      // 只记录完成时间，不重建定时器：避免退出后被同步结束重新启动自动同步。
+      config = config.copyWith(
+        lastSyncAt: DateTime.now().millisecondsSinceEpoch,
       );
+      await _persist();
     } catch (e, st) {
       lastError = e is SecretBoxAuthenticationError
           ? 'sync.error.passphrase'
@@ -312,7 +347,9 @@ class SyncService extends ChangeNotifier {
     if (!config.isConfigured) return;
     try {
       final fresh = await _hosts.getByUuid(h.uuid);
-      if (fresh != null) await _push(fresh, restoreDeleted: true);
+      if (fresh != null) {
+        await _push(await _session(), fresh, restoreDeleted: true);
+      }
     } catch (_) {}
     onHostsChanged?.call();
   }
@@ -326,6 +363,7 @@ class SyncService extends ChangeNotifier {
 
   /// 停止自动同步（退出时调用；界面仍可能在监听，因此不 dispose）
   void stop() {
+    _stopped = true;
     _timer?.cancel();
     _timer = null;
   }

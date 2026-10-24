@@ -242,4 +242,19 @@ void main() {
     expect((await a.hosts.getByUuid('parallel-b'))!.name, 'client-b');
     expect((await b.hosts.getByUuid('parallel-a'))!.name, 'client-a');
   });
+  test('导入的非标准 UUID 含空格和斜杠时，真实服务端仍按同一主机同步和删除', () async {
+    final a = _Client(url);
+    final b = _Client(url);
+    const uuid = 'imported host/#1';
+    await a.hosts.save(_host(uuid, 'imported'));
+    expect((await a.sync.syncNow()).pushed, 1);
+    // 第二轮无上传无下载，说明服务端索引返回的 UUID 与本机一致。
+    final again = await a.sync.syncNow();
+    expect([again.pushed, again.pulled], [0, 0]);
+    expect((await b.sync.syncNow()).pulled, greaterThanOrEqualTo(1));
+    expect((await b.hosts.getByUuid(uuid))!.name, 'imported');
+    await a.sync.removeFromServer(uuid);
+    await b.sync.syncNow();
+    expect((await b.hosts.getByUuid(uuid))!.syncState, SyncState.local);
+  });
 }

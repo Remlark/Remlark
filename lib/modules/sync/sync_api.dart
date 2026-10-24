@@ -119,7 +119,7 @@ class SyncApi {
   }) async {
     final r = await _request(
       'PUT',
-      '/items/$uuid',
+      '/items/${Uri.encodeComponent(uuid)}',
       body: {
         'updatedAt': updatedAt,
         'payload': payload,
@@ -133,7 +133,7 @@ class SyncApi {
 
   /// 从服务器删除（留下删除标记，其他客户端据此停止同步该主机）
   Future<void> delete(String uuid) async {
-    final r = await _request('DELETE', '/items/$uuid');
+    final r = await _request('DELETE', '/items/${Uri.encodeComponent(uuid)}');
     if (r.statusCode == 404) return;
     _check(r);
   }

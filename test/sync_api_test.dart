@@ -168,4 +168,38 @@ void main() {
       throwsA(isA<TimeoutException>()),
     );
   });
+  test('主机 UUID 作为单个路径段编码，不会改写请求路径', () async {
+    final paths = <String>[];
+    final transport = MockClient((request) async {
+      paths.add(request.url.path);
+      return http.Response('{}', 200);
+    });
+    addTearDown(transport.close);
+    final api = SyncApi('https://sync.example', 'token', client: transport);
+    await api.put('a b/../c?#', 1, 'cipher');
+    await api.delete('a b/../c?#');
+    expect(paths, everyElement('/api/v1/items/a%20b%2F..%2Fc%3F%23'));
+  });
+
+  for (final (name, call) in <(String, Future<void> Function(SyncApi))>[
+    ('连接检测', (api) => api.ping()),
+    ('索引', (api) => api.index()),
+    ('下载', (api) => api.fetch(['h1'])),
+    ('删除', (api) => api.delete('h1')),
+  ]) {
+    test('$name 遇到 401/500 抛出带状态码的异常', () async {
+      for (final status in [401, 500]) {
+        final transport = MockClient(
+          (request) async => http.Response('{"error":"x"}', status),
+        );
+        addTearDown(transport.close);
+        await expectLater(
+          call(SyncApi('https://sync.example', 'token', client: transport)),
+          throwsA(
+            isA<SyncApiException>().having((e) => e.status, 'status', status),
+          ),
+        );
+      }
+    });
+  }
 }
