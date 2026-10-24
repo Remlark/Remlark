@@ -11,7 +11,9 @@ class FormatUtils {
       v /= 1024;
       i++;
     }
-    return i == 0 ? '${v.toInt()} ${units[i]}' : '${v.toStringAsFixed(1)} ${units[i]}';
+    return i == 0
+        ? '${v.toInt()} ${units[i]}'
+        : '${v.toStringAsFixed(1)} ${units[i]}';
   }
 
   /// 每秒字节数
@@ -24,6 +26,26 @@ class FormatUtils {
   static String dateTime(DateTime t) {
     final l = t.toLocal();
     return '${l.year}-${_two(l.month)}-${_two(l.day)} ${_two(l.hour)}:${_two(l.minute)}';
+  }
+
+  /// 最近时间使用本地化相对文案，超过一周保留完整时间；未来时间按刚刚处理。
+  static String relativeDateTime(
+    DateTime value,
+    String Function(String, [Map<String, Object?>]) translate, {
+    DateTime? now,
+  }) {
+    final elapsed = (now ?? DateTime.now()).difference(value);
+    if (elapsed.inMinutes < 1) return translate('time.just_now');
+    if (elapsed.inHours < 1) {
+      return translate('time.minutes_ago', {'n': elapsed.inMinutes});
+    }
+    if (elapsed.inDays < 1) {
+      return translate('time.hours_ago', {'n': elapsed.inHours});
+    }
+    if (elapsed.inDays < 7) {
+      return translate('time.days_ago', {'n': elapsed.inDays});
+    }
+    return dateTime(value);
   }
 
   /// yyyy-MM-dd 格式，同时作为 Token 统计的“日期键”

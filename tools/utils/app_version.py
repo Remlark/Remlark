@@ -9,6 +9,9 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+from tools.utils.build_guard import GuardError, assert_safe, target_platform
 
 
 def read_version(root=ROOT):
@@ -45,6 +48,9 @@ def run_flutter(arguments):
     if any(arg.split('=', 1)[0] in reserved or 'REMLARK_VERSION=' in arg for arg in arguments):
         raise SystemExit('Version arguments are managed by VERSION')
     version = read_version()
+    target = target_platform(arguments)
+    if target is not None:
+        assert_safe(ROOT, target)
     executable = shutil.which('flutter')
     if not executable:
         raise SystemExit('Flutter not found. Add the Flutter SDK bin directory to PATH.')
@@ -64,10 +70,17 @@ def main():
     if sys.argv[1:] == ['json']:
         print(json.dumps(read_version()))
         return 0
+    if sys.argv[1:2] == ['guard'] and len(sys.argv) == 3:
+        assert_safe(ROOT, sys.argv[2])
+        return 0
     if sys.argv[1:2] == ['flutter']:
         return run_flutter(sys.argv[2:])
-    raise SystemExit('Usage: app_version.py json | flutter <build|run> [arguments]')
+    raise SystemExit('Usage: app_version.py json | guard <macos|windows|linux|all> | flutter <build|run> [arguments]')
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except GuardError as error:
+        print(error, file=sys.stderr)
+        sys.exit(2)

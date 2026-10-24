@@ -59,6 +59,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | SSH TCP 首次连接恢复 | `utils/network/`、`modules/ssh/proxy_socket.dart` | 独立策略识别 51/65 | 独立策略识别 10051/10065 | 独立策略识别 101/113 | P-20：有限重试、预算和非瞬态错误 | M-24 |
 | 代理连通性检测 | `modules/proxies/proxy_connection_test.dart`、`modules/ssh/proxy_socket.dart`、`utils/network_endpoint.dart` | ProxyConnectionTest 接口，Dart Socket 的 HTTP CONNECT/SOCKS5 握手、认证、超时和取消；IPv6 目标 | 同左，不访问注册表或系统代理 | 同左，不调用系统网络命令 | P-17 | M-22 |
 | RDP 显示控制协商 | `native/rdp/src/remlark_rdp.c` | 共用 FreeRDP 能力回调，协商后发送布局 | 同 macOS | 同 macOS | P-21 | M-25 |
+| 运行中构建覆盖保护 | `tools/utils/build_guard/`、`tools/utils/app_version.py`、`Makefile`、`windows/run.ps1` | ps 读取完整可执行路径 | CIM 读取 ExecutablePath，按 Windows 路径规则比较 | procfs 读取 exe，识别 deleted 文件 | P-22 | M-26 |
 
 ## 2. 单元测试（test/platform）
 
@@ -88,6 +89,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-21 | [rdp_display_control_test.dart](../test/platform/rdp_display_control_test.dart) | 编译并运行生产 C 函数：能力到达前不发送、尺寸合并、重复轮询、旧通道隔离、重新协商；检查回调注册和断开重置。macOS/Linux 使用 cc，Windows 使用开发者终端 cl；无编译器时动态用例跳过，RMK_REQUIRE_RDP_NATIVE=1 时禁止跳过 | RDP 显示控制、M-25 |
 | P-20 | [connect_retry_test.dart](../test/platform/connect_retry_test.dart) | 三平台错误码分别验证；首次不可达后恢复、持续失败最多四次、总预算不重置；连接拒绝/权限/非 Socket 错误不重试；当前平台策略选择 | SSH TCP 首次连接恢复、M-24 |
 | P-19 | [update_installation_test.dart](../test/platform/update_installation_test.dart) | 实际隔离 Git helper；POSIX 未提交不安装、等待退出、失败回滚、特殊路径；macOS 真实签名/版本校验及 App 替换；Linux 便携解压与交换；Windows 实际 PowerShell 助手与假安装器成功/失败恢复 | 点击升级后安装、M-23 |
+| P-22 | [build_guard_test.dart](../test/platform/build_guard_test.dart) | 调用 12 项 Python 检查：三个桌面目标、路径边界/中文空格/大小写、独立副本放行、自定义输出和符号链接、三平台进程解析、查询失败保护、当前平台真实进程存活时拒绝/退出后放行；包装入口失败时不启动 Flutter | 构建覆盖保护、M-26 |
 
 P-11 的测试帧由 libx264 生成（BT.709 全范围，与 FreeRDP 的 YUV 转换一致），同一份字节内置在 [rmk_h264_probe_frame.h](../native/rdp/src/rmk_h264_probe_frame.h) 中，原生库首次连接时用它实际硬件解码一帧，解码成功且颜色正确才启用硬件（虚拟机、驱动异常等能创建设备却无法解码的环境会改用软件解码）。重新生成时两处同步更新：
 
@@ -370,3 +372,16 @@ Step 88（两项 Secrets 简化）：本机 `make test-platform` 52 项通过 / 
 macOS `make test-platform` 92 项通过、3 项跳过。新增 P-21 的原生 C 时序回归及定向 Dart 分析通过；原生胶水库 arm64、x86_64 均编译成功，macOS Debug 应用编译成功，本机 RDP 连接/剪贴板回归 3 项通过。Windows/Linux 当前没有可用的本项目测试环境，尚未执行 `make test-platform`；三平台使用同一修复，不代表完成三平台实测。真实 GNOME 桌面重连按 M-25 复测。
 
 P-21 补充兼容性用例：服务端能力先于窗口调整到达仍能正常发送；无能力服务端反复轮询不发送布局且连接状态不变。该用例验证发送门控，不模拟完整 Windows 服务端；仍需用修复后的应用执行 M-25，检查 Windows 登录、窗口调整、关闭 Tab 后重连及退出重启后的重连。
+
+
+### M-26：运行中的构建输出禁止覆盖
+
+1. 三个平台分别执行 `make test-platform`。启动本检出目录构建产物后，再执行 `make` / `make mac`、`make windows`、`make linux`（当前平台）、`make run` 和 `make clean`，应在覆盖或删除应用文件前失败，并提示 PID 与完整路径。Windows 另验证 `windows/run.ps1` 在依赖准备前拒绝继续。
+2. 提示后当前应用仍能操作，已有 SSH / RDP / VNC 连接不被终止；正常退出后重试构建应放行。安装目录中的应用、其他检出目录或 `build/validation/` 的独立副本不得误拦。
+3. 验证中文/空格路径、Windows 大小写与不同架构目录；配置 Flutter 自定义 build-dir 时，检查应跟随实际输出。进程列表查询失败、超时或同名进程路径无权限时应明确失败，不得继续覆盖。
+4. 使用项目 `make` / 版本包装工具构建。直接调用未包装的 `flutter build` / `flutter run` / `flutter clean` 无法由仓库脚本拦截；构建期间也不要另行启动同一输出目录的应用。检查是构建前的进程快照，不是系统级文件锁。`make -j` 可并行准备依赖，但实际 Flutter 构建入口仍会再次检查。
+5. 本机 macOS 用独立 bundle id 和数据目录的真实 Debug 副本验证：版本包装入口、`make mac`、`make run`、`make clean` 均以退出码 2 拒绝执行；应用仍存活，原 framework 的修改时间和 SHA-256 均不变，正常退出返回 0。证据：`build/validation/build-guard/live-results.json`。
+
+### Step 101 验证记录（2026-10-24）
+
+macOS `make test-platform`：93 项通过，3 项跳过（已有真实 RDP 与 Windows 专属助手用例）；P-22 内部 12 项 Python 检查通过，包含三份平台实现的解析/错误用例和 macOS 实际进程。版本工具原有回归仍通过，新增 Dart 测试静态检查无问题。Windows/Linux 当前无可用实机环境，尚未执行本轮 `make test-platform` 和 M-26，不能将本机纯逻辑覆盖等同于三平台实测。

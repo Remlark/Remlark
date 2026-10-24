@@ -5,6 +5,11 @@ Directory createVersionFixture(String version) {
   final root = Directory.systemTemp.createTempSync('remlark version 中文 ');
   for (final path in [
     'tools/utils/app_version.py',
+    ...Directory('tools/utils/build_guard')
+        .listSync()
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.py'))
+        .map((file) => file.path),
     'tools/release/prepare.py',
   ]) {
     final target = File('${root.path}/$path');

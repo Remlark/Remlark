@@ -51,6 +51,13 @@ void main() {
     for (final tab in [a, b, c, desktop]) {
       w.add(tab);
     }
+    // 新建会话是展示状态：重复打开不会创建标签，点击原活动标签可返回。
+    w.showStartPage();
+    w.showStartPage();
+    expect(w.showingStartPage, isTrue);
+    expect(w.tabs.length, 4);
+    w.selectTab(desktop.id);
+    expect(w.showingStartPage, isFalse);
     final files = w.openSftp(a);
     expect(w.showGrid([a.id, b.id, desktop.id, files.id, 'missing']), isTrue);
     expect(w.gridIds, [a.id, b.id, desktop.id]);
@@ -63,6 +70,13 @@ void main() {
     expect(b.received, isEmpty);
     expect(w.startBroadcast(ids: [a.id, b.id, desktop.id]), isTrue);
     expect(w.broadcastIds, [a.id, b.id]);
+    w.showStartPage();
+    expect(w.broadcast, isTrue);
+    expect(w.broadcastIds, [a.id, b.id]);
+    expect(w.gridIds, [a.id, b.id, desktop.id]);
+    w.resumeSessions();
+    expect(w.showingStartPage, isFalse);
+    expect(w.showingGrid, isTrue);
     a.onUserInput!(a, 'selected');
     c.onUserInput!(c, 'excluded');
     expect(b.received, ['selected']);
@@ -73,7 +87,9 @@ void main() {
     w.focusGridSession(a.id);
     expect(w.showingGrid, isTrue);
     final d = RecordingTerminal(host('new'), services.connector);
+    w.showStartPage();
     w.add(d);
+    expect(w.showingStartPage, isFalse);
     expect(w.broadcastIds, [a.id, b.id]);
     expect(w.gridIds, [a.id, b.id, desktop.id]);
     w.stopBroadcast();
@@ -103,6 +119,7 @@ void main() {
     await w.closeAll();
     expect(w.gridEnabled, isFalse);
     expect(w.tabs, isEmpty);
+    expect(w.showingStartPage, isTrue);
     await db.close();
   });
 }

@@ -7,11 +7,9 @@ import '../../../l10n/app_localizations.dart';
 import '../../../ui_kit/buttons.dart';
 import '../../hosts/ui/os_icon.dart';
 import '../../hosts/ui/protocol_tag.dart';
-import '../session_launcher.dart';
 import '../workspace_controller.dart';
 import '../workspace_tab.dart';
 import 'workspace_actions.dart';
-import 'host_picker.dart';
 
 /// 单行会话栏：左侧管理会话，右侧独立广播与布局，不再用广播条替换标签。
 class WorkspaceTabBar extends StatelessWidget {
@@ -60,16 +58,6 @@ class WorkspaceTabBar extends StatelessWidget {
 class _Tabs extends StatelessWidget {
   const _Tabs();
 
-  /// 选择主机并新建独立会话，不自动加入广播。
-  Future<void> _newSession(BuildContext context) async {
-    final pick = await HostPicker.show(
-      context,
-      title: context.tr('workspace.new_session'),
-    );
-    final h = pick?.host;
-    if (h != null && context.mounted) await SessionLauncher.open(context, h);
-  }
-
   @override
   Widget build(BuildContext context) {
     final w = context.watch<WorkspaceController>();
@@ -93,7 +81,7 @@ class _Tabs extends StatelessWidget {
                   index: i,
                   child: _TabChip(
                     tab: w.tabs[i],
-                    active: w.active == w.tabs[i],
+                    active: !w.showingStartPage && w.active == w.tabs[i],
                   ),
                 ),
             ],
@@ -102,10 +90,11 @@ class _Tabs extends StatelessWidget {
         const SizedBox(width: 4),
         ToolButton(
           compact: true,
+          selected: w.showingStartPage,
           icon: Icons.add,
           label: context.tr('workspace.new_session'),
           tooltip: context.tr('workspace.new_session'),
-          onPressed: () => _newSession(context),
+          onPressed: w.showStartPage,
         ),
       ],
     );

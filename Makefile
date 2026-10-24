@@ -18,7 +18,7 @@ else
   endif
 endif
 
-.PHONY: all build mac linux windows run deps gen test analyze server server-run clean rdp-lib crypto-lib native-lib rdp-test-server test-platform
+.PHONY: guard-mac guard-linux guard-windows guard-run all build mac linux windows run deps gen test analyze server server-run clean rdp-lib crypto-lib native-lib rdp-test-server test-platform
 
 # 默认：按当前平台打包
 all: build
@@ -64,25 +64,37 @@ native-lib: rdp-lib crypto-lib
 rdp-test-server:
 	native/rdp/scripts/build_test_server.sh
 
+# 在耗时依赖准备前先检查，Flutter 包装入口在实际构建前还会复查一次。
+guard-mac:
+	python3 tools/utils/app_version.py guard macos
+
+guard-linux:
+	python3 tools/utils/app_version.py guard linux
+
+guard-windows:
+	python3 tools/utils/app_version.py guard windows
+
+guard-run: guard-$(CURRENT)
+
 # macOS：生成 .app 并打包为 zip
-mac: deps native-lib
+mac: guard-mac deps native-lib
 	python3 tools/utils/app_version.py flutter build macos --release
 	mkdir -p $(DIST_DIR)
 	cd build/macos/Build/Products/Release && ditto -c -k --keepParent $(APP_NAME).app ../../../../../$(DIST_DIR)/$(APP_NAME)-macos.zip
 	@echo "输出：$(DIST_DIR)/$(APP_NAME)-macos.zip"
 
 # Linux：生成 Debian 安装包与便携 tar.gz，按主机架构选择 Flutter 输出目录
-linux: deps native-lib
+linux: guard-linux deps native-lib
 	python3 tools/utils/app_version.py flutter build linux --release
 	python3 linux/packaging/build.py --arch $(LINUX_ARCH) --output "$(DIST_DIR)"
 
 # Windows：生成安装向导 exe 与便携 zip（需要 Inno Setup 6.5+）
-windows: deps native-lib
+windows: guard-windows deps native-lib
 	python3 tools/utils/app_version.py flutter build windows --release
 	powershell -NoProfile -ExecutionPolicy Bypass -File windows/packaging/build.ps1 -Arch $(WINDOWS_ARCH) -OutputDir "$(DIST_DIR)"
 
 # 运行当前程序（当前平台）
-run: deps native-lib
+run: guard-run deps native-lib
 ifeq ($(CURRENT),mac)
 	python3 tools/utils/app_version.py flutter run -d macos
 else ifeq ($(CURRENT),linux)
@@ -114,6 +126,7 @@ server-run:
 	cd $(SERVER_DIR) && dart run bin/server.dart --port 8443 --token $(TOKEN) --db data/remlark-sync.sqlite
 
 clean:
+	python3 tools/utils/app_version.py guard all
 	flutter clean
 	rm -rf $(DIST_DIR)
 

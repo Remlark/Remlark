@@ -13,6 +13,23 @@ class WorkspaceController extends ChangeNotifier {
   final List<WorkspaceTab> tabs = [];
   String? activeId;
 
+  /// 开始页是独立的展示状态，不占用会话标签，也不修改网格或广播选择。
+  bool _startPageRequested = false;
+  bool get showingStartPage => tabs.isEmpty || _startPageRequested;
+
+  /// 新建会话进入完整主机选择页，保留当前连接与布局。
+  void showStartPage() {
+    _startPageRequested = true;
+    notifyListeners();
+  }
+
+  /// 返回原会话画布；广播期间仍展示原有广播网格。
+  void resumeSessions() {
+    if (!_startPageRequested) return;
+    _startPageRequested = false;
+    notifyListeners();
+  }
+
   /// 普通网格与输入广播分别管理，广播期间锁定布局。
   static const maxGrid = 9;
   bool gridEnabled = false;
@@ -29,8 +46,7 @@ class WorkspaceController extends ChangeNotifier {
   ];
 
   /// 当前是否以网格展示：广播期间固定为网格，与用户选择的布局无关
-  bool get showingGrid =>
-      broadcast || (gridEnabled && focusedGridId == null);
+  bool get showingGrid => broadcast || (gridEnabled && focusedGridId == null);
 
   /// 当前网格中展示的会话：广播时为广播目标，否则为普通网格选择
   List<WorkspaceTab> get displayedGridSessions =>
@@ -46,6 +62,7 @@ class WorkspaceController extends ChangeNotifier {
         .take(maxGrid)
         .toList();
     if (selected.isEmpty) return false;
+    _startPageRequested = false;
     gridIds
       ..clear()
       ..addAll(selected);
@@ -59,6 +76,7 @@ class WorkspaceController extends ChangeNotifier {
   /// 切回普通单窗口；保存网格选择，以便以后恢复。
   void showSingle() {
     if (broadcast) return;
+    _startPageRequested = false;
     gridEnabled = false;
     focusedGridId = null;
     notifyListeners();
@@ -67,6 +85,7 @@ class WorkspaceController extends ChangeNotifier {
   /// 临时聚焦网格中的一个会话，不关闭其他连接。
   void focusGridSession(String id) {
     if (broadcast || !gridEnabled || !gridIds.contains(id)) return;
+    _startPageRequested = false;
     activeId = id;
     focusedGridId = id;
     notifyListeners();
@@ -86,8 +105,7 @@ class WorkspaceController extends ChangeNotifier {
       if (broadcastIds.contains(id)) activate(id);
       return;
     }
-    if (gridEnabled &&
-        (focusedGridId != null || !gridIds.contains(id))) {
+    if (gridEnabled && (focusedGridId != null || !gridIds.contains(id))) {
       focusedGridId = id;
     }
     activate(id);
@@ -120,6 +138,7 @@ class WorkspaceController extends ChangeNotifier {
 
   /// 添加标签并激活
   void add(WorkspaceTab tab) {
+    _startPageRequested = false;
     tabs.add(tab);
     // 广播期间布局锁定，新会话在后台打开，不打断广播网格
     if (!broadcast) {
@@ -143,7 +162,9 @@ class WorkspaceController extends ChangeNotifier {
 
   /// 激活标签
   void activate(String id) {
-    if (!tabs.any((t) => t.id == id) || activeId == id) return;
+    if (!tabs.any((t) => t.id == id)) return;
+    if (activeId == id && !_startPageRequested) return;
+    _startPageRequested = false;
     activeId = id;
     notifyListeners();
   }
@@ -203,6 +224,7 @@ class WorkspaceController extends ChangeNotifier {
         return t;
       }
     }
+    _startPageRequested = false;
     final tab = SftpTab(session);
     // 插入到对应终端标签之后，便于识别归属
     final at = tabs.indexOf(session);
@@ -226,6 +248,7 @@ class WorkspaceController extends ChangeNotifier {
         .take(maxBroadcast)
         .toList();
     if (selected.isEmpty) return false;
+    _startPageRequested = false;
     broadcastIds
       ..clear()
       ..addAll(selected);

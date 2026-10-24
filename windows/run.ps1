@@ -12,6 +12,7 @@ if (-not (Get-Command flutter -ErrorAction SilentlyContinue)) {
 
 Push-Location $Root
 try {
+  Invoke-BuildCommand python3 "$Root\tools\utils\app_version.py" guard windows
   Invoke-BuildCommand flutter pub get
   $nativeDir = Join-Path $Root 'build\native\windows-x86_64'
   $needsNative = $RebuildNative -or

@@ -62,7 +62,7 @@ class SessionCanvas extends StatelessWidget {
                     ? cellHeight
                     : box.maxHeight,
                 child: _SessionVisibility(
-                  visible: grid ? ids.contains(tab.id) : w.active == tab,
+                  visible: !w.showingStartPage && (grid ? ids.contains(tab.id) : w.active == tab),
                   child: _SessionTile(
                     tab: tab,
                     grid: grid && ids.contains(tab.id),

@@ -322,3 +322,10 @@ python3 tools/utils/app_version.py flutter build macos --release
 Release CI 在 macOS 编译前检查配置并导入临时钥匙串，保存并临时更新钥匙串搜索列表，不修改证书信任设置。编译后按由内到外顺序重签嵌套二进制和 App，使用 Release.entitlements，严格验证全部架构；再重建 zip / DMG 并签 DMG。导入、签名、验证任何一步失败即阻止发布；始终清理临时钥匙串并还原搜索列表。Windows / Linux 打包和平台测试仍走原有入口。
 
 本地 `make mac` 仍使用原有临时签名；GitHub 自签不包含 Apple 公证，也不保证 Gatekeeper 或隐私权限免重新授权。真实下载与升级按 M-20 测试。
+
+
+## 构建前的运行实例保护
+
+桌面打包与运行请使用 `make` / `make mac` / `make linux` / `make windows` / `make run`；Windows 也可使用 `windows/run.ps1`。这些入口以及 `make clean` 会先检查项目输出目录中是否有运行中的 Remlark，存在时停止并提示 PID 与路径，请正常退出后重试。保护不会关闭应用或断开连接，已安装应用和其他检出目录不受影响。
+
+需要直接传递 Flutter 构建参数时，使用带版本与保护的包装入口，例如 `python3 tools/utils/app_version.py flutter build macos --debug`。直接调用 Flutter 命令会绕过此检查；构建期间不要重新启动同一路径的应用。运行中的原生库文件被覆盖后，Dart 惰性加载可能把 SQLite 再加载一次，在退出时产生 SIGSEGV，详见设计文档 Step 100/101 与多平台测试 M-26。
