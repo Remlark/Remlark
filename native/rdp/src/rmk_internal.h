@@ -58,6 +58,7 @@ struct rmk_rdp
 
 	/* 动态分辨率 */
 	DispClientContext* disp;
+	BOOL disp_caps_received; /* 收到服务端能力后才能发送显示布局，每次通道重建均重置 */
 	UINT32 pending_width;
 	UINT32 pending_height;
 

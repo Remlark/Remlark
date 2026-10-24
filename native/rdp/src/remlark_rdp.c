@@ -186,7 +186,7 @@ static BOOL rmk_desktop_resize(rdpContext* context)
 /* 发送待处理的分辨率调整 */
 static void rmk_apply_pending_resize(RmkRdp* rdp)
 {
-	if (!rdp->disp || !rdp->connected || rdp->pending_width == 0)
+	if (!rdp->disp || !rdp->disp_caps_received || !rdp->connected || rdp->pending_width == 0)
 		return;
 	DISPLAY_CONTROL_MONITOR_LAYOUT layout = { 0 };
 	layout.Flags = DISPLAY_CONTROL_MONITOR_PRIMARY;
@@ -199,6 +199,19 @@ static void rmk_apply_pending_resize(RmkRdp* rdp)
 	(void)rdp->disp->SendMonitorLayout(rdp->disp, 1, &layout);
 }
 
+/* 通道建立不代表服务端已就绪；能力协商完成后由连接线程发送最新的待处理尺寸。 */
+static UINT rmk_display_control_caps(DispClientContext* context, UINT32 max_monitors,
+                                     UINT32 area_factor_a, UINT32 area_factor_b)
+{
+	WINPR_UNUSED(area_factor_a);
+	WINPR_UNUSED(area_factor_b);
+	RmkRdp* rdp = (RmkRdp*)context->custom;
+	if (rdp && rdp->disp == context)
+		rdp->disp_caps_received = max_monitors > 0;
+	return CHANNEL_RC_OK;
+}
+
+/* 注册通道回调，每次重定向或重连都重新等待能力消息。 */
 static void rmk_on_channel_connected(void* ctx, const ChannelConnectedEventArgs* e)
 {
 	RmkContext* context = (RmkContext*)ctx;
@@ -210,13 +223,16 @@ static void rmk_on_channel_connected(void* ctx, const ChannelConnectedEventArgs*
 	}
 	else if (strcmp(e->name, DISP_DVC_CHANNEL_NAME) == 0)
 	{
+		rdp->disp_caps_received = FALSE;
 		rdp->disp = (DispClientContext*)e->pInterface;
 		rdp->disp->custom = rdp;
+		rdp->disp->DisplayControlCaps = rmk_display_control_caps;
 	}
 	else
 		freerdp_client_OnChannelConnectedEventHandler(ctx, e);
 }
 
+/* 断开显示通道时清除旧能力，避免下次连接提前发送布局。 */
 static void rmk_on_channel_disconnected(void* ctx, const ChannelDisconnectedEventArgs* e)
 {
 	RmkContext* context = (RmkContext*)ctx;
@@ -224,7 +240,10 @@ static void rmk_on_channel_disconnected(void* ctx, const ChannelDisconnectedEven
 	if (strcmp(e->name, CLIPRDR_SVC_CHANNEL_NAME) == 0)
 		rmk_clip_detach(rdp->clip);
 	else if (strcmp(e->name, DISP_DVC_CHANNEL_NAME) == 0)
+	{
+		rdp->disp_caps_received = FALSE;
 		rdp->disp = NULL;
+	}
 	else
 		freerdp_client_OnChannelDisconnectedEventHandler(ctx, e);
 }
@@ -526,6 +545,7 @@ void rmk_rdp_disconnect(RmkRdp* rdp)
 		rdp->thread = NULL;
 	}
 	rmk_clip_detach(rdp->clip);
+	rdp->disp_caps_received = FALSE;
 	rdp->disp = NULL;
 	freerdp_client_context_free(rdp->context);
 	rdp->context = NULL;

@@ -58,6 +58,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 共享代理配置与重连 | `modules/proxies/`、`host_repository.dart`、`ssh_connector.dart`、`rdp_session.dart` | 共用 drift/加密存储；SSH 与内嵌 RDP 在新连接/重连时解析共享配置 | 同左，不新增系统代理或注册表设置 | 同左，不修改系统代理环境变量 | P-16 | M-21 |
 | SSH TCP 首次连接恢复 | `utils/network/`、`modules/ssh/proxy_socket.dart` | 独立策略识别 51/65 | 独立策略识别 10051/10065 | 独立策略识别 101/113 | P-20：有限重试、预算和非瞬态错误 | M-24 |
 | 代理连通性检测 | `modules/proxies/proxy_connection_test.dart`、`modules/ssh/proxy_socket.dart`、`utils/network_endpoint.dart` | ProxyConnectionTest 接口，Dart Socket 的 HTTP CONNECT/SOCKS5 握手、认证、超时和取消；IPv6 目标 | 同左，不访问注册表或系统代理 | 同左，不调用系统网络命令 | P-17 | M-22 |
+| RDP 显示控制协商 | `native/rdp/src/remlark_rdp.c` | 共用 FreeRDP 能力回调，协商后发送布局 | 同 macOS | 同 macOS | P-21 | M-25 |
 
 ## 2. 单元测试（test/platform）
 
@@ -84,6 +85,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-16 | [proxy_profiles_test.dart](../test/platform/proxy_profiles_test.dart) | 真实 ORM 存储共享代理，SSH/RDP/VNC 内置 SSH 共用引用；变更后重连解析新参数、连接快照及目标端口保持、引用计数和删除保护；三平台执行相同实现 | 共享代理配置与重连 |
 | P-17 | [proxy_connection_test.dart](../test/platform/proxy_connection_test.dart) | 三平台真实本地 Socket 夹具；HTTP 认证/407、SOCKS5 认证/非法响应、总超时与慢速响应、取消断开、禁止无代理直连、目标格式与 IPv6 authority/地址类型 | 可选代理连通性检测 |
 | P-18 | [update_platform_test.dart](../test/platform/update_platform_test.dart) | 六种平台/架构附件映射、Linux deb/便携分流、不支持架构拒绝、current() 选择 | GitHub 升级、M-23 |
+| P-21 | [rdp_display_control_test.dart](../test/platform/rdp_display_control_test.dart) | 编译并运行生产 C 函数：能力到达前不发送、尺寸合并、重复轮询、旧通道隔离、重新协商；检查回调注册和断开重置。macOS/Linux 使用 cc，Windows 使用开发者终端 cl；无编译器时动态用例跳过，RMK_REQUIRE_RDP_NATIVE=1 时禁止跳过 | RDP 显示控制、M-25 |
 | P-20 | [connect_retry_test.dart](../test/platform/connect_retry_test.dart) | 三平台错误码分别验证；首次不可达后恢复、持续失败最多四次、总预算不重置；连接拒绝/权限/非 Socket 错误不重试；当前平台策略选择 | SSH TCP 首次连接恢复、M-24 |
 | P-19 | [update_installation_test.dart](../test/platform/update_installation_test.dart) | 实际隔离 Git helper；POSIX 未提交不安装、等待退出、失败回滚、特殊路径；macOS 真实签名/版本校验及 App 替换；Linux 便携解压与交换；Windows 实际 PowerShell 助手与假安装器成功/失败恢复 | 点击升级后安装、M-23 |
 
@@ -353,3 +355,18 @@ Step 88（两项 Secrets 简化）：本机 `make test-platform` 52 项通过 / 
 - Windows/Linux 分别在网络刚恢复时连接，确认有限重试；验证真实不可达主机、关闭的 SSH 端口及错误密码不会无限等待或重复认证。
 - 三平台检查直连、HTTP/SOCKS5 代理和跳板连接；代理握手/认证错误应立即按原流程返回。代理检测等待期间取消或关闭弹窗，后续迟到的 Socket 应释放。
 - 2026-10-23 macOS `make test-platform`：90 项通过、3 项跳过；P-20 在本机覆盖三份错误码策略。定向网络/SSH 端到端回归 40 项通过，相关静态检查通过。Windows/Linux 的 `make test-platform` 和三平台真实网络切换/权限交互待实机验证。
+
+
+### M-25：RDP 关闭与重连的显示控制协商
+
+1. 三平台分别连接 GNOME Remote Desktop（含系统远程登录重定向）、Windows RDP；建立连接时及重定向过程中调整窗口大小，应可进入桌面，且分辨率最终跟随最新窗口尺寸。
+2. 关闭 Tab 后重新连接、退出应用后重新启动连接，各重复三次；服务端不应出现 `Received monitor layout PDU before being able to send capabilities`，连接保持可用。
+3. 断开客户端后，从 SSH 检查远端桌面和应用仍在运行（服务器策略允许时）；VNC 两种服务分别检查，勿把服务器会话策略与客户端注销命令混淆。
+4. 本次 SSH 只读检查确认 Ubuntu 26.04 / GNOME Remote Desktop 50.0 的原用户会话一直 active，重连日志有上述协议时序违规。VNC 的 TigerVNC 和 GNOME 后台桌面进程也持续运行。未重启服务、未注销远端用户。修复后的真实桌面重连仍需复测；Windows/Linux 的完整 `make test-platform` 待对应环境执行。
+
+
+### 2026-10-24 RDP 显示控制验证（Step 98）
+
+macOS `make test-platform` 92 项通过、3 项跳过。新增 P-21 的原生 C 时序回归及定向 Dart 分析通过；原生胶水库 arm64、x86_64 均编译成功，macOS Debug 应用编译成功，本机 RDP 连接/剪贴板回归 3 项通过。Windows/Linux 当前没有可用的本项目测试环境，尚未执行 `make test-platform`；三平台使用同一修复，不代表完成三平台实测。真实 GNOME 桌面重连按 M-25 复测。
+
+P-21 补充兼容性用例：服务端能力先于窗口调整到达仍能正常发送；无能力服务端反复轮询不发送布局且连接状态不变。该用例验证发送门控，不模拟完整 Windows 服务端；仍需用修复后的应用执行 M-25，检查 Windows 登录、窗口调整、关闭 Tab 后重连及退出重启后的重连。
