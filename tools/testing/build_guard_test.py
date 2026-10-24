@@ -81,8 +81,11 @@ class BuildGuardTests(unittest.TestCase):
     def test_macos_process_output(self):
         """macOS ps 结果包含空格与中文时仍保留完整路径，坏结果拒绝构建。"""
         path = '/Users/test/代码/my project/build/macos/Debug/remlark'
-        with patch('tools.utils.build_guard.macos.run_query', return_value=f'  123 {path}\n  12 /bin/sleep\n'):
-            self.assertEqual(MacosInspector().executables(), [(123, path)])
+        with patch.dict(os.environ, {'LC_ALL': 'C'}):
+            with patch('tools.utils.build_guard.macos.run_query', return_value=f'  123 {path}\n  12 /bin/sleep\n') as query:
+                self.assertEqual(MacosInspector().executables(), [(123, path)])
+                self.assertEqual(query.call_args.kwargs['environment']['LC_ALL'], 'en_US.UTF-8')
+                self.assertEqual(os.environ['LC_ALL'], 'C')
         with patch('tools.utils.build_guard.macos.run_query', return_value='bad output'):
             with self.assertRaises(GuardError):
                 MacosInspector().executables()
@@ -130,6 +133,10 @@ class BuildGuardTests(unittest.TestCase):
 
     def test_query_errors_stop_build(self):
         """命令失败和超时都不得被当成没有运行实例，不泄漏查询输出。"""
+        environment = dict(os.environ, LC_ALL='en_US.UTF-8')
+        with patch('subprocess.run', return_value=subprocess.CompletedProcess([], 0, 'result', '')) as query:
+            self.assertEqual(run_query(['probe'], environment=environment), 'result')
+            self.assertEqual(query.call_args.kwargs['env'], environment)
         for error in [FileNotFoundError(), subprocess.TimeoutExpired('ps', 10)]:
             with patch('subprocess.run', side_effect=error):
                 with self.assertRaises(GuardError):
@@ -170,20 +177,28 @@ class BuildGuardTests(unittest.TestCase):
             target = root / 'build' / platform / ('remlark.exe' if platform == 'windows' else 'remlark')
             target.parent.mkdir(parents=True)
             env = os.environ.copy()
-            # 复用 Python 作为隔离进程，避免多调用入口 coreutils 的 sleep 改名后无法启动。
-            shutil.copy2(sys.executable, target)
-            env['PYTHONHOME'] = sys.base_prefix
-            if platform == 'windows':
-                env['PATH'] = str(Path(sys.executable).parent) + os.pathsep + env.get('PATH', '')
             if platform == 'macos':
+                # 使用系统 Mach-O，避免夹具依赖 CI Python 的进程路径；不复制系统文件的受限标志。
+                shutil.copyfile('/bin/sleep', target)
+                target.chmod(0o755)
                 subprocess.run(['codesign', '--force', '--sign', '-', str(target)], check=True, capture_output=True)
-            arguments = [str(target), '-c', 'import time; time.sleep(30)']
+                arguments = [str(target), '30']
+            else:
+                # Linux 的 sleep 可能来自多入口 coreutils，改名后不能启动；Windows 同样复用 Python。
+                shutil.copy2(sys.executable, target)
+                env['PYTHONHOME'] = sys.base_prefix
+                if platform == 'windows':
+                    env['PATH'] = str(Path(sys.executable).parent) + os.pathsep + env.get('PATH', '')
+                arguments = [str(target), '-c', 'import time; time.sleep(30)']
             process = subprocess.Popen(arguments, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             try:
                 time.sleep(0.2)
                 self.assertIsNone(process.poll(), process.stderr.read() if process.poll() is not None else '')
-                with self.assertRaisesRegex(GuardError, f'PID {process.pid}'):
-                    guard.assert_safe(root, platform, build_directory=root / 'build')
+                # 三平台均检查默认及 C locale，确保中文路径不因调用方语言环境漏检。
+                for overrides in [{}, {'LC_ALL': 'C'}]:
+                    with patch.dict(os.environ, overrides):
+                        with self.assertRaisesRegex(GuardError, f'PID {process.pid}'):
+                            guard.assert_safe(root, platform, build_directory=root / 'build')
                 self.assertIsNone(process.poll(), '保护不得终止进程')
             finally:
                 if process.poll() is None:
@@ -194,11 +209,12 @@ class BuildGuardTests(unittest.TestCase):
 
     def test_build_and_clean_entry_points(self):
         """清理、Windows 启动和三平台统一构建入口均保留保护。"""
-        self.assertIn('guard all\n\tflutter clean', (ROOT / 'Makefile').read_text())
+        makefile = (ROOT / 'Makefile').read_text(encoding='utf-8')
+        self.assertIn('guard all\n\tflutter clean', makefile)
         windows = (ROOT / 'windows/run.ps1').read_text(encoding='utf-8-sig')
         self.assertLess(windows.index('guard windows'), windows.index('flutter pub get'))
         for platform in guard.PLATFORMS:
-            self.assertIn(f'app_version.py flutter build {platform}', (ROOT / 'Makefile').read_text())
+            self.assertIn(f'app_version.py flutter build {platform}', makefile)
 
 
 if __name__ == '__main__':

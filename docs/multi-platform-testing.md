@@ -63,8 +63,8 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | SSH TCP 首次连接恢复 | `utils/network/`、`modules/ssh/proxy_socket.dart` | 独立策略识别 51/65 | 独立策略识别 10051/10065 | 独立策略识别 101/113 | P-20：有限重试、预算和非瞬态错误 | M-24 |
 | 代理连通性检测 | `modules/proxies/proxy_connection_test.dart`、`modules/ssh/proxy_socket.dart`、`utils/network_endpoint.dart` | ProxyConnectionTest 接口，Dart Socket 的 HTTP CONNECT/SOCKS5 握手、认证、超时和取消；IPv6 目标 | 同左，不访问注册表或系统代理 | 同左，不调用系统网络命令 | P-17 | M-22 |
 | RDP 显示控制协商 | `native/rdp/src/remlark_rdp.c` | 共用 FreeRDP 能力回调，协商后发送布局 | 同 macOS | 同 macOS | P-21 | M-25 |
-| 运行中构建覆盖保护 | `tools/utils/build_guard/`、`tools/utils/app_version.py`、`Makefile`、`windows/run.ps1` | ps 读取完整可执行路径 | CIM 读取 ExecutablePath，按 Windows 路径规则比较 | procfs 读取 exe，识别 deleted 文件 | P-22 | M-26 |
-| 构建保护真实进程测试夹具 | `tools/testing/build_guard_test.py` | 复制 Python 为隔离应用、设置 PYTHONHOME 并临时签名 | 复制 Python 为隔离应用、设置 PYTHONHOME / PATH | 复制 Python 为隔离应用、设置 PYTHONHOME，兼容多入口 coreutils | P-22 | — |
+| 运行中构建覆盖保护 | `tools/utils/build_guard/`、`tools/utils/app_version.py`、`Makefile`、`windows/run.ps1` | ps 子进程固定 UTF-8 locale，读取未转义的中文完整路径 | CIM 显式输出 UTF-8 JSON，按 Windows 路径规则比较 | procfs 读取 exe，识别 deleted 文件，comm 显式按 UTF-8 读取 | P-22 | M-26 |
+| 构建保护真实进程测试夹具 | `tools/testing/build_guard_test.py` | 复制系统 `/bin/sleep`，仅复制字节及设置可执行权限，临时签名；验证默认/C locale | 复制 Python 为隔离应用，设置 PYTHONHOME / PATH；仓库文本显式 UTF-8；验证默认/C locale | 复制 Python 为隔离应用，设置 PYTHONHOME，兼容多入口 coreutils；验证默认/C locale | P-22 | — |
 | Actions 临时产物清理 | `release.yml`、`tools/release/cleanup_artifacts.py` | 仅构建不上传，正式发布临时中转，结束后统一清理 | 同左 | 同左；清理在独立 Ubuntu 任务运行 | P-24 | M-27 |
 
 ## 2. 单元测试（test/platform）
@@ -95,7 +95,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-21 | [rdp_display_control_test.dart](../test/platform/rdp_display_control_test.dart) | 编译并运行生产 C 函数：能力到达前不发送、尺寸合并、重复轮询、旧通道隔离、重新协商；检查回调注册和断开重置。macOS/Linux 使用 cc，Windows 使用开发者终端 cl；无编译器时动态用例跳过，RMK_REQUIRE_RDP_NATIVE=1 时禁止跳过 | RDP 显示控制、M-25 |
 | P-20 | [connect_retry_test.dart](../test/platform/connect_retry_test.dart) | 三平台错误码分别验证；首次不可达后恢复、持续失败最多四次、总预算不重置；连接拒绝/权限/非 Socket 错误不重试；当前平台策略选择 | SSH TCP 首次连接恢复、M-24 |
 | P-19 | [update_installation_test.dart](../test/platform/update_installation_test.dart) | 实际隔离 Git helper；POSIX 未提交不安装、等待退出、失败回滚、特殊路径；macOS 真实签名/版本校验及 App 替换；Linux 便携解压与交换；任意宿主检查 Windows x64/arm64 BOM 和 POSIX shebang；Windows 实际解析 PowerShell 助手、执行假安装器并核对成功/失败恢复及结果文件 | 点击升级后安装、M-23 |
-| P-22 | [build_guard_test.dart](../test/platform/build_guard_test.dart) | 调用 12 项 Python 检查：三个桌面目标、路径边界/中文空格/大小写、独立副本放行、自定义输出和符号链接、三平台进程解析、查询失败保护、当前平台真实进程存活时拒绝/退出后放行；包装入口失败时不启动 Flutter | 构建覆盖保护、M-26 |
+| P-22 | [build_guard_test.dart](../test/platform/build_guard_test.dart) | 调用 12 项 Python 检查：三个桌面目标、路径边界/中文空格/大小写、独立副本放行、自定义输出和符号链接、三平台进程解析、查询环境透传及失败保护、默认/C locale 的真实进程存活时拒绝/退出后放行；包装入口失败时不启动 Flutter；仓库文本显式按 UTF-8 读取 | 构建覆盖保护、M-26 |
 | P-23 | [server_bundle_test.dart](../test/platform/server_bundle_test.dart)、[server_bundle_test.py](../tools/testing/server_bundle_test.py) | 六路服务端矩阵、发布依赖、macOS 双架构独立 runner；六种原生文件头与错误平台/架构、缺少/空主程序和 SQLite 库拒绝打包；压缩包布局与 POSIX 执行权限、额外资源保留；P-10 检查缺少服务端附件时禁止发布 | 同步服务端独立发布、M-13 |
 | P-24 | [artifact_cleanup_test.dart](../test/platform/artifact_cleanup_test.dart)、[artifact_cleanup_test.py](../tools/testing/artifact_cleanup_test.py) | 三平台执行相同清理逻辑；仅构建不上传、正式中转保留一天且始终清理；分页先快照再删除、历史运行复用查询、当前/已完成运行选择、保护其他工作流/并行运行/非托管文件及 API 失败上报 | Actions 存储、M-27 |
 
@@ -438,3 +438,11 @@ Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过�
 - `make native-lib rdp-test-server`、`make linux`、`make server` 成功。产物为 `dist/remlark-1.0.2-linux-amd64.deb`、`dist/remlark-linux-x64.tar.gz`、`dist/remlark-sync-server-1.0.2-linux-x64.tar.gz`；服务端通过 `python3 tools/release/server_bundle.py linux x64 --smoke` 的归档、解包启动及 SQLite 读写验证。
 - 便携包独立解压，9 个 ELF 文件经 ldd 检查无缺失依赖；`GDK_BACKEND=x11 xvfb-run` 下两次图形启动成功，窗口为 1280×820、最小尺寸 960×640，主密钥跨重启保持一致且权限为 0600。未执行系统安装；不代表干净系统安装、真实远端或 VAAPI GPU 验证。Windows / macOS / arm64 本轮未执行，也未触发远端 CI。
 - 日志：`build/validation/current-flutter-tests-final.log`、`current-platform-tests.log`、`current-server-tests.log`、`current-analyze.log`、`current-native.log`、`current-linux-build.log`、`current-server-build.log`、`current-server-smoke.log`、`current-gui-smoke.log`。
+
+### 2026-10-25 v1.0.3 Actions P-22 失败修复（Step 113）
+
+- [运行 40119649487](https://github.com/Remlark/Remlark/actions/runs/40119649487)，提交 `2fc5de3`：Linux 桌面两路及服务端六路通过；Windows x64/arm64 各 97 通过、1 失败、10 跳过，macOS universal 为 94 通过、1 失败、7 跳过。三路均在构建前的 P-22 失败，发布跳过；Node.js 弃用警告不是失败步骤。
+- Windows 两路日志均报告 `test_build_and_clean_entry_points` 的 Makefile `read_text()` 使用系统默认 charmap，中文内容导致 `UnicodeDecodeError`。显式按 UTF-8 读取一次并复用文本；不通过全局 Python UTF-8 开关掩盖遗漏。
+- macOS 日志报告 `test_real_current_platform_process` 没有抛出预期 GuardError。原始日志未打印 ps 路径与 locale，不能据此确定 runner 内的具体路径变化；本地在 C locale 独立复现 ps 将中文输出为 `M-...` 转义形式、匹配失败。macOS 查询显式指定 UTF-8 子进程环境，测试在默认/C locale 各验证一次存活时阻止构建，且调用方环境不变。夹具采用系统 `/bin/sleep` 的临时签名副本，仅复制字节并设置执行权限，不复制系统受限文件标志；Windows/Linux 继续使用可重命名的 Python 副本。
+- macOS 本机 Flutter 3.47.6 / Dart 3.13.5：修复后 `make test-platform` 99 通过、3 条件跳过；P-22 的 12 项检查在系统 Python、Homebrew Python 及 `LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0` 环境通过；`git diff --check` 通过。三平台纯逻辑测试由同一个 P-22 执行，真实系统检查仅覆盖本机 macOS。
+- Windows/Linux 本轮没有可用执行环境，修改后的 `make test-platform` 仍需对应 runner 执行；保留 Actions 三平台构建前后测试门禁。未推送提交、改动版本标签或触发远端运行；原始失败运行尚未转绿。M-26 的真实运行应用保护检查继续按原手工清单执行。

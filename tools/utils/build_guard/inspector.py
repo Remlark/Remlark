@@ -15,11 +15,12 @@ class ProcessInspector(ABC):
         """返回 (pid, executable_path) 列表，无法检查时抛出 GuardError。"""
 
 
-def run_query(arguments):
-    """以参数列表运行只读查询，限制等待时间且不输出其他进程信息。"""
+def run_query(arguments, *, environment=None):
+    """以参数列表运行只读查询，允许平台指定子进程环境，限制等待且不泄漏输出。"""
     try:
         result = subprocess.run(arguments, capture_output=True, text=True,
-                                encoding='utf-8', errors='replace', timeout=10)
+                                encoding='utf-8', errors='replace', timeout=10,
+                                env=environment)
     except (OSError, subprocess.TimeoutExpired) as error:
         raise GuardError('Cannot inspect running applications; build cancelled.') from error
     if result.returncode != 0:

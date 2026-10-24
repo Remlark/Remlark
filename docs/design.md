@@ -354,6 +354,7 @@ macOS、Windows、Linux 共用的 FreeRDP 显示控制通道，必须先收到 `
 - Makefile 为三个打包入口和开发运行增加前置检查；统一版本包装工具在启动 Flutter 前再次检查；Windows 直接启动脚本在准备依赖前检查；`make clean` 在删除前检查全部桌面输出。阻止时返回 2 并显示 PID、路径及中英文退出提示，保留运行应用和连接。
 - 本保护针对已确认的开发包覆盖原因，不修改业务退出清理、ORM 或用户数据库。直接调用未包装 Flutter 命令不受保护，构建期间手动新启动同路径应用也不在构建前检查的保证范围。使用项目构建入口。
 - P-22 与 M-26 详见多平台测试文档；真实 macOS 应用验证确认被拦截的构建未改变 framework，原应用仍正常退出。
+- Step 113：进程查询接口允许平台单独指定子进程环境。macOS 查询固定 `LC_ALL=en_US.UTF-8`，防止 C locale 的 ps 转义中文路径而漏检；Windows 继续显式输出 UTF-8 JSON，Linux 直接读取 procfs 并显式按 UTF-8 读取 comm。P-22 在默认及 C locale 验证真实进程，macOS 使用临时签名的系统 `/bin/sleep` 副本，Windows/Linux 继续使用配置环境后的 Python 副本；测试读取仓库文本显式指定 UTF-8，不依赖 Windows 默认代码页。
 
 
 ### 单元测试是否覆盖运行应用的复核（Step 102）

@@ -9,6 +9,7 @@ class WindowsInspector(ProcessInspector):
 
     def executables(self):
         """统一单个和多个 CIM 结果，并在路径不可读时阻止覆盖。"""
+        # 与 macOS 的查询环境隔离；PowerShell 直接固定 UTF-8 输出，不依赖调用方 locale。
         script = (
             "$ErrorActionPreference='Stop'; "
             "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); "

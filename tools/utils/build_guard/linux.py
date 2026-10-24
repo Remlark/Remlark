@@ -28,7 +28,8 @@ class LinuxInspector(ProcessInspector):
                 continue
             except PermissionError:
                 try:
-                    name = (entry / 'comm').read_text().strip()
+                    # procfs 不经过 ps 转义；读取名称也显式指定 UTF-8，兼容 C locale。
+                    name = (entry / 'comm').read_text(encoding='utf-8').strip()
                 except FileNotFoundError:
                     continue
                 except OSError as error:

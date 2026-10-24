@@ -808,3 +808,9 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 未声明版本的历史端固定按 1.0 兼容；未知或畸形版本拒绝，未来 2.0 不自动降级。补充中英文协议错误、客户端与服务端兼容/拒绝回归及真实服务联调。
   - 新增协议文档与未来多版本升级规则，明确与应用版本、主机快照及压缩加密封装版本分别维护。
   - 验证：客户端同步协议及相关回归 209 项、服务端全量 43 项通过；包含真实服务端联调，两端定向静态检查与 `git diff --check` 通过。本次无平台分支或原生实现变更。
+
+- [已完成] Step 113：定位并修复 v1.0.3 Actions 平台门禁失败
+  - 检查运行 40119649487：Windows x64/arm64 和 macOS 均失败于 P-22，Linux 两路及服务端六路通过，发布按门禁跳过。Windows 日志明确为默认代码页读取中文 Makefile 的 UnicodeDecodeError，测试改为显式 UTF-8。
+  - macOS 日志为隔离进程存活但保护未抛错；本地复现 C locale 的 ps 转义中文路径导致同样漏检，查询子进程固定 UTF-8，保留调用方环境。复核三平台实现，Linux comm 显式 UTF-8，Windows 保留 UTF-8 JSON；macOS 夹具改用临时签名的系统 sleep 副本，避免依赖 CI Python 的进程路径。
+  - 扩展 P-22 的查询环境透传、默认/C locale 真实进程及环境不被污染检查，更新设计及平台差异总览。
+  - 验证：macOS `make test-platform` 99 项通过、3 项条件跳过；系统 Python 与 Homebrew Python 的 P-22 内部 12 项通过，关闭 Python UTF-8 模式并使用 C locale 后 12 项也通过，`git diff --check` 通过。修改后的 Windows/Linux `make test-platform` 尚需对应 runner 验证；未提交推送、未重跑远端 CI。
