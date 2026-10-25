@@ -122,7 +122,7 @@ void main() {
       ], environment: windowsPowerShellEnvironment());
 
   test('暂存完整应用与 VC++ 运行库，原始 Release 保持完整', () async {
-    final result = await runPackaging(['-StageOnly', '-Arch', 'arm64']);
+    final result = await runPackaging(['-StageOnly', '-Arch', 'x64']);
     expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
     final stage = Directory((result.stdout as String).trim());
     addTearDown(() => stage.deleteSync(recursive: true));
@@ -133,12 +133,12 @@ void main() {
     expect(File(p.join(release.path, 'data/app.so')).existsSync(), isTrue);
   });
 
-  test('ARM64 不要求 x64 专用运行库，x64 必须包含 FH4 运行库', () async {
-    File(p.join(runtime.path, 'vcruntime140_1.dll')).deleteSync();
+  test('x64 必须包含 FH4 运行库，ARM64 参数被拒绝', () async {
+    // 桌面端不再发布 Windows ARM64，打包入口在参数校验阶段即拒绝。
     final arm = await runPackaging(['-StageOnly', '-Arch', 'arm64']);
-    expect(arm.exitCode, 0, reason: '${arm.stdout}${arm.stderr}');
-    final stage = Directory((arm.stdout as String).trim());
-    addTearDown(() => stage.deleteSync(recursive: true));
+    expect(arm.exitCode, isNot(0));
+    expect('${arm.stdout}${arm.stderr}', contains('Arch'));
+    File(p.join(runtime.path, 'vcruntime140_1.dll')).deleteSync();
     final x64 = await runPackaging(['-StageOnly', '-Arch', 'x64']);
     expect(x64.exitCode, isNot(0));
     expect(x64.stderr, contains('vcruntime140_1.dll'));
@@ -146,10 +146,10 @@ void main() {
 
   test('从当前工具链查找 VS 2026 CRT，避免写死 VC143', () async {
     final redist = Directory(
-      p.join(root.path, 'redist', 'arm64', 'Microsoft.VC145.CRT'),
+      p.join(root.path, 'redist', 'x64', 'Microsoft.VC145.CRT'),
     )..createSync(recursive: true);
-    for (final name in ['msvcp140.dll', 'vcruntime140.dll']) {
-      File(p.join(redist.path, name)).writeAsStringSync('arm-runtime');
+    for (final name in crt) {
+      File(p.join(redist.path, name)).writeAsStringSync('x64-runtime');
     }
     final result = await Process.run(
       'powershell',
@@ -161,7 +161,7 @@ void main() {
         'windows/packaging/build.ps1',
         '-StageOnly',
         '-Arch',
-        'arm64',
+        'x64',
         '-ReleaseDir',
         release.path,
       ],
@@ -175,7 +175,7 @@ void main() {
     addTearDown(() => stage.deleteSync(recursive: true));
     expect(
       File(p.join(stage.path, 'msvcp140.dll')).readAsStringSync(),
-      'arm-runtime',
+      'x64-runtime',
     );
   });
 
