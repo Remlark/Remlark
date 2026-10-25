@@ -924,3 +924,9 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 修复：rmk_h264.c 在 GFX 通道建立后包装 SurfaceCommand，每个表面首个 H.264 命令到达、FreeRDP 尚未创建解码器时，用该命令的实际码流和更新区域试解码；硬件失败而软件成功则打开 SoftwareGdi，该表面及后续表面改用软件解码，同尺寸表面校验通过后不重复校验。软件也失败视为数据问题，不改变解码方式。
   - 新增 RMK_EV_H264_SOFTWARE 事件，Dart 记录警告日志，界面不变；新增 rmk_rdp_h264_stream_check 接口供测试。三平台共用同一胶水代码，D3D11VA / VAAPI 拒绝码流时同样回退。
   - 验证：用应用保存的配置真实连接 ProRDP，修复前硬解路径整帧白色、软解正常；修复后开启硬解时自动回退，画面与软解一致；重新运行应用后实际连接 ProRDP 显示正常（用户确认）。P-11 新增 2 项通过，macOS make test-platform 130 项通过、3 项条件跳过；x86_64 / arm64 原生库编译通过，Dart 静态检查通过。Windows / Linux 待在对应系统执行 make test-platform。
+
+- [已完成] Step 134：Release macOS 构建优先使用自托管 Mac mini
+  - 新增 `pick-runner` 任务，通过 `RUNNER_STATUS_TOKEN` 查询带 `remlark-macmini` 标签的 runner；在线（含忙碌）时桌面 macOS universal 与服务端 arm64 改用该 runner，离线、未配置令牌或 API 失败回退 `macos-15`，不让选择导致发布失败。服务端 x64 固定 `macos-15-intel`，Windows / Linux 不变。
+  - GitHub REST 封装抽到 `tools/utils/actions_api.py`（含分页），清理脚本与选择脚本共用。
+  - 新增 P-31 与 M-34，build-environment.md 补充 Mac mini runner 配置、令牌权限与公开仓库安全限制。
+  - 验证：本机 Intel macOS make test-platform 132 项通过、3 项条件跳过，P-31 / P-24 Python 检查通过，工作流 YAML 解析通过。尚未在 Actions 真实运行；自托管与回退路径按 M-34 验证，Windows / Linux 待执行 make test-platform。

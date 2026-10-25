@@ -264,6 +264,7 @@
 - `.github/workflows/release.yml` 在推送与 VERSION 中版本号一致的 `v*` 标签或手工指定已有标签后运行。
 - 手工运行默认仅验证构建（`build_only=true`），tag 留空时使用所选分支；与正式发布共用完整五路编译、安装包和构建后平台测试，跳过标签校验与发布任务。正式手工发布需指定版本标签并关闭 `build_only`。
 - 独立原生 runner 构建 Windows x64 / arm64、Linux x64 / arm64；macOS 构建包含 Intel / Apple Silicon 的通用 app、zip 与 DMG，发布前用 lipo 检查主程序与 FFI 库。
+- macOS 桌面包与服务端 arm64 优先使用带 `remlark-macmini` 标签的自托管 Mac mini：`pick-runner` 任务用 `RUNNER_STATUS_TOKEN` 查询 runner 状态，在线（含忙碌）则改用该标签，离线、未配置令牌或查询失败回退 `macos-15`，选择本身不会让发布失败。服务端 x64 固定 `macos-15-intel`。原生缓存身份含工作区路径，自托管与托管 runner 的缓存互不混用。
 - 每个 runner 顺序执行依赖准备、`make test-platform` 与构建，保留锁文件。Windows 安装器架构与 Flutter / MSVC 目标一致，附带对应架构 CRT。
 - 桌面五路与服务端六路任务通过且 16 个附件完整后生成 SHA256SUMS；先上传草稿再公开 Release。默认 token 只读，发布任务有 contents:write，清理任务仅额外授予 actions:write；中转包在流程结束后删除，仅构建不上传包。
 
