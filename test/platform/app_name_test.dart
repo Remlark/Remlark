@@ -1,10 +1,10 @@
 // 多平台测试 P-30：应用产品名与启动入口保持 Remlark 大小写一致。
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 
-/// 读取受版本控制的配置，避免宿主文件系统忽略大小写掩盖发布错误。
-String read(String path) => File(path).readAsStringSync();
+import '../utils/source_text.dart';
+
+/// 读取受版本控制的配置，避免宿主文件系统忽略大小写掩盖发布错误；统一 LF 以兼容 Windows 检出。
+String read(String path) => readSourceText(path);
 
 /// 在三个宿主系统都检查全部平台的应用名称及兼容标识。
 void main() {

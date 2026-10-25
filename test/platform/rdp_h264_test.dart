@@ -5,12 +5,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:remlark/modules/remote_desktop/rdp/rdp_client.dart';
 import 'package:remlark/modules/remote_desktop/rdp/rdp_h264.dart';
 
+import '../utils/source_text.dart';
+
 /// 多平台测试 P-11：RDP H.264 硬件解码（见 docs/multi-platform-testing.md）
 /// 各平台的硬件解码实现在 native/rdp/src/hwdec/rmk_hwdec_<平台>.c，FFmpeg 硬件加速在构建脚本中按平台开启。
 /// 已编译原生库时实际解码 fixtures/h264_320x240.h264（libx264 编码，左半 #E04020、右半 #3080C0），
 /// 软件与硬件解码都要得到正确颜色且两者一致；未编译原生库时只做静态检查。
 void main() {
-  String src(String path) => File(path).readAsStringSync();
+  // 源码断言含换行片段，统一 LF 以兼容 Windows CRLF 检出
+  String src(String path) => readSourceText(path);
 
   // CI 构建后必须实际加载原生库，禁止因库缺失而跳过所有解码测试。
   setUpAll(() {
