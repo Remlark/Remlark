@@ -3,11 +3,11 @@
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from tools.release.cleanup_artifacts import cleanup
+from tools.utils.actions_api import ActionsApi
 
 
 class ArtifactCleanupTests(unittest.TestCase):
@@ -37,7 +37,9 @@ class ArtifactCleanupTests(unittest.TestCase):
                 return None
             return responses[path]
 
-        self.assertEqual(cleanup(Mock(request=request), 7), 100)
+        api = ActionsApi('owner/repo', 'token')
+        api.request = request
+        self.assertEqual(cleanup(api, 7), 100)
         self.assertEqual([path for path, method in calls if method == 'DELETE'],
                          ['artifacts/1', 'artifacts/2', 'artifacts/3', 'artifacts/101'])
         self.assertLess(calls.index(('runs/7/artifacts?per_page=100&page=2', 'GET')),
@@ -48,8 +50,12 @@ class ArtifactCleanupTests(unittest.TestCase):
 
     def test_api_failure_is_not_hidden(self):
         """权限或网络失败必须上报，不把清理失败当作成功。"""
-        api = Mock()
-        api.request.side_effect = RuntimeError('GitHub API unavailable')
+        def request(path, method='GET'):
+            """模拟权限不足或网络中断。"""
+            raise RuntimeError('GitHub API unavailable')
+
+        api = ActionsApi('owner/repo', 'token')
+        api.request = request
         with self.assertRaisesRegex(RuntimeError, 'unavailable'):
             cleanup(api, 1)
 
