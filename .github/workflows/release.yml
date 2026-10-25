@@ -74,7 +74,8 @@ jobs:
         run: python3 tools/release/macos_signing.py install
       - name: macOS build dependencies
         if: runner.os == 'macOS'
-        run: python3 tools/utils/retry_command.py -- brew install cmake ninja nasm
+        # 托管 macos-15 预装 pkg-config，自托管 Mac 可能没有；已安装时 brew 直接跳过。
+        run: python3 tools/utils/retry_command.py -- brew install cmake ninja nasm pkgconf
       - name: Windows build dependencies
         if: runner.os == 'Windows'
         shell: pwsh

@@ -940,3 +940,5 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - CI：release.yml 桌面矩阵去掉 windows-11-arm（服务端六路不变），`make windows` 不再传架构；test.yml 平台专项改为五路；prepare.py 必需附件由 16 个改为 14 个。
   - 打包与更新：build.ps1 只接受 x64 并固定附带 vcruntime140_1.dll，remlark.iss 去掉 arm64 分支（保留 x64compatible）；Makefile 移除 WINDOWS_ARCH，ARM64 主机在 guard-windows 直接停止；更新器 Abi.windowsArm64 不再映射安装包。原生库脚本 arm64 参数与 Codex/dsh 的 arm64 映射保留，仅供 ARM 主机本地开发。
   - 测试：P-10、P-25、P-18、P-19、windows_packaging 同步更新。本机 Intel macOS make test-platform 130 项通过、3 项条件跳过；make -n 模拟 ARM64 主机确认 guard-windows 停止。Windows x64 / Linux 待 CI 执行。
+  - 补充修复：windows_packaging_test.dart 中 3 项仅在 Windows 运行的打包测试仍以 `-Arch arm64` 调用 build.ps1，首次提交时 macOS 本机跳过未发现，Windows x64 CI 失败。改为：暂存测试用 x64；新增「x64 必须包含 FH4 运行库，ARM64 参数被拒绝」；VS 2026 CRT 查找夹具改到 redist/x64 并放齐三个 dll。已复查全部 build.ps1 调用与 arm64 参数，其余为 Linux / 服务端 / 原生库脚本保留项。本机无 PowerShell，这 3 项待 Windows CI 验证。
+  - Release 的 macOS 依赖安装增加 pkgconf：托管 macos-15 预装 pkg-config，自托管 Mac mini 缺失导致 rdp-lib 失败；已安装时 brew 跳过。

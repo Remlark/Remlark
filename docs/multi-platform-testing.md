@@ -575,3 +575,5 @@ Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过�
 - 决定：没有 Windows ARM 测试机，桌面端不再构建、测试和发布 Windows ARM64；Windows 11 ARM 设备可安装仿真运行 x64 版（安装器 x64compatible）。仓库私有、无存量 ARM 用户，不做旧版升级兼容。服务端 Windows ARM64 保留。
 - 变更：release.yml 桌面矩阵去掉 windows-11-arm（服务端保留），test.yml 平台专项改为五路；prepare.py 必需附件 14 个；build.ps1 只接受 x64、固定附带 FH4 运行库，remlark.iss 去掉 arm64 分支；Makefile 固定 x64，ARM64 主机在 guard-windows 停止；更新器 ARM64 ABI 不再映射安装包。原生库脚本的 arm64 参数与 Codex/dsh 的 arm64 映射保留，仅用于 ARM 主机本地开发，未验证。
 - 测试：P-10（桌面无 windows-11-arm、服务端保留、14 个附件且不含桌面 ARM64 包）、P-25（五路且无 windows-11-arm）、P-18（ARM64 返回 null）、P-19（仅 x64）、windows_packaging（无 arm64 安装器分支、只接受 x64、Makefile ARM64 停止）。本机 Intel macOS make test-platform 130 项通过、3 项条件跳过；`make -n guard-windows PROCESSOR_ARCHITECTURE=ARM64` 实际停止并提示。Windows x64 待 CI 执行。
+- 补充（同日）：windows_packaging_test.dart 的 3 项 Windows 专属打包测试仍传 `-Arch arm64`，macOS 本机因 `if (!Platform.isWindows) return;` 未注册而未发现，Windows x64 CI 失败；已改为 x64 并新增 ARM64 参数被拒绝检查，待 Windows CI 验证。教训：修改脚本参数后须检索全部调用处，并明确说明哪些 Windows 专属测试本机未执行。
+- Release 的 macOS 构建依赖增加 pkgconf，覆盖未预装 pkg-config 的自托管 Mac。
