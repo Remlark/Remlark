@@ -68,7 +68,6 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | SSH TCP 首次连接恢复 | `utils/network/`、`modules/ssh/proxy_socket.dart` | 独立策略识别 51/65 | 独立策略识别 10051/10065 | 独立策略识别 101/113 | P-20：有限重试、预算和非瞬态错误 | M-24 |
 | VNC / RDP 连接失败恢复 | `utils/network/connect_retry.dart`、`vnc/rfb_client.dart`、`vnc/rfb_isolate_client.dart`、`rdp/rdp_session.dart`、`rdp/rdp_connect_error.dart` | VNC 复用 51/65；RDP 共用 FreeRDP DNS/建连/传输错误码 | VNC 复用 10051/10065；RDP 同左 | VNC 复用 101/113；RDP 同左 | P-29：有限重试、关闭取消、原生回调隔离 | M-32 |
 | 应用名称大小写 | 三平台产品配置、packaging、tools/release、updates/platform | Remlark.app / Remlark | Remlark.exe / Remlark 产品属性 | Remlark 主程序、Exec 与命令入口；保留小写 Debian 包标识 | P-30；P-18/P-19 更新、P-22 构建保护 | M-33 |
-| M-34 | Release 自托管 macOS runner 切换 | Mac mini 注册带 `remlark-macmini` 标签的 runner 并配置 `RUNNER_STATUS_TOKEN`（Administration 只读）。在线时手工 build_only 运行，确认 Select macOS runner 摘要显示自托管、macos-universal 与 server-macos-arm64 在 Mac mini 执行，server-macos-x64 仍在 macos-15-intel；停止 runner 后重跑，确认回退 macos-15 且成功；删除令牌后同样回退。检查签名后临时钥匙串已删除、搜索列表还原，DMG 在 Intel / Apple Silicon 均可启动。选择后 runner 恰好掉线时任务会排队，需人工重跑 |
 | 代理连通性检测 | `modules/proxies/proxy_connection_test.dart`、`modules/ssh/proxy_socket.dart`、`utils/network_endpoint.dart` | ProxyConnectionTest 接口，Dart Socket 的 HTTP CONNECT/SOCKS5 握手、认证、超时和取消；IPv6 目标 | 同左，不访问注册表或系统代理 | 同左，不调用系统网络命令 | P-17 | M-22 |
 | RDP 显示控制协商 | `native/rdp/src/remlark_rdp.c` | 共用 FreeRDP 能力回调，协商后发送布局 | 同 macOS | 同 macOS | P-21 | M-25 |
 | 运行中构建覆盖保护 | `tools/utils/build_guard/`、`tools/utils/app_version.py`、`Makefile`、`windows/run.ps1` | ps 子进程固定 UTF-8 locale，读取未转义的中文完整路径 | CIM 显式输出 UTF-8 JSON，按 Windows 路径规则比较；PowerShell 5.1 使用自身默认 PSModulePath，查询上限 60 秒 | procfs 读取 exe，识别 deleted 文件，comm 显式按 UTF-8 读取 | P-22 | M-26 |
@@ -76,7 +75,6 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 发布前平台专项测试工作流 | `.github/workflows/test.yml` | Intel / ARM64 独立 runner；ARM64 复用精确匹配的 universal 原生缓存；Xcode 测试夹具 | x64 / ARM64 独立 runner；PowerShell、Make、MSVC 测试夹具 | x64 / ARM64 独立 runner；安装运行库及桌面入口测试依赖 | P-25 | M-28 |
 | Actions 临时产物清理 | `release.yml`、`tools/release/cleanup_artifacts.py` | 仅构建不上传，正式发布中转保留 7 天，publish 成功后只清理当前运行；失败保留供重跑 | 同左 | 同左；清理在独立 Ubuntu 任务运行 | P-24 | M-27 |
 | CI 网络安装重试 | `release.yml`、`test.yml`、[retry_command.py](../tools/utils/retry_command.py) | git clone Flutter、brew、flutter 初始化在 bash 中经 python3 重试 | choco、MSYS2 pacman、flutter 初始化在 pwsh 中经 python3 重试，失败仍由 `$LASTEXITCODE` 判断；`.bat`/`.cmd` 按 PATH 解析 | apt-get、flutter 初始化重试；publish 的 gh release upload/edit 同样重试 | P-28 | M-31 |
-| Release 自托管 macOS runner | `release.yml`、[pick_runner.py](../tools/release/pick_runner.py)、[actions_api.py](../tools/utils/actions_api.py) | 带 `remlark-macmini` 标签的自托管 Mac mini 在线时承担桌面 universal 包与服务端 arm64；离线、未配置 `RUNNER_STATUS_TOKEN` 或查询失败回退 `macos-15`；服务端 x64 固定 `macos-15-intel` | 不受影响，固定 GitHub 托管 | 不受影响，固定 GitHub 托管 | P-31 | M-34 |
 
 ## 2. 单元测试（test/platform）
 
@@ -112,7 +110,6 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-28 | [ci_retry_test.dart](../test/platform/ci_retry_test.dart)、[retry_command_test.py](../tools/testing/retry_command_test.py) | 6 项 Python 检查：指数退避、重试前清理半成品且首次不清理、最后退出码传递、命令不存在不重试、非法参数、真实子进程下 `--` 可省略且保留目标命令的 --选项/含空格参数；两个工作流所有网络安装都经过重试工具且无裸命令 | CI 网络安装、M-31 |
 | P-29 | [desktop_connect_retry_test.dart](../test/platform/desktop_connect_retry_test.dart) | 三平台 VNC 错误策略与 RDP 协议错误分类；真实 VNC TCP 入口不可达后恢复且协议错误不重试；isolate 建连立即取消；RDP 首次失败恢复、四次上限、认证/证书确认、总预算超时、关闭取消和旧回调隔离 | VNC / RDP 连接失败恢复、M-32 |
 | P-30 | [app_name_test.dart](../test/platform/app_name_test.dart) | 三平台产品名、可执行文件、桌面入口、打包与签名路径精确大小写；保留 bundle ID 与 Debian 包标识 | 应用名称大小写、M-33 |
-| P-31 | [pick_runner_test.dart](../test/platform/pick_runner_test.dart)、[pick_runner_test.py](../tools/testing/pick_runner_test.py) | 5 项 Python 检查：在线（含忙碌）选择自托管标签、离线/无标签/空列表回退、分页查找、403 与无令牌回退、命令行写入 GITHUB_OUTPUT；工作流检查选择任务、build/server 依赖与 runs-on 表达式，Intel 服务端固定托管 | Release 自托管 runner、M-34 |
 | P-25 | [platform_test_workflow_test.dart](../test/platform/platform_test_workflow_test.dart) | 独立 test* 触发及手动入口、三平台双架构六路矩阵、锁文件与每路仅一次平台专项、禁止客户端全量/dsh/服务端测试及服务端依赖；精确原生缓存及缺失摘要；禁止应用/原生产品构建、上传产物、签名凭据及发布 | 发布前测试、M-28 |
 | P-26 | [source_archive_test.dart](../test/platform/source_archive_test.dart)、[source_archive_test.py](../tools/testing/source_archive_test.py) | 20 项 Python 检查：实际 gzip/tar/SHA、tar 仅接收 ASCII 相对参数（Windows bsdtar 中文路径）、错误响应/截断/CRC、退避/镜像/慢速预算、本地磁盘失败不重试、有效包复用、源码原子发布/回滚、缺失关键文件、非 UTF-8 日志与 CLI；三平台下载入口及 Windows zlib 下载先于编译 | 原生源码下载、M-29 |
 | P-27 | [native_build_resilience_test.dart](../test/platform/native_build_resilience_test.dart)、`tools/testing/native_build_state_test.py`、`tools/testing/windows_build_checks.ps1` | 15 项 Python 检查：阶段完整性/摘要/旧配方/错架构/位置/工具链缓存身份、半安装不混旧产物、通用双架构及 CLI；实际 POSIX 缺工具/架构/语言前置失败；Windows 包装器、实际 Fetch 参数和无工具驱动拒绝；缓存恢复/保存路径集合一致及完整/阶段缓存区分 | 编译恢复、M-30 |
@@ -558,8 +555,3 @@ Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过�
 - 新增 P-30，对三平台产品属性、应用包/可执行文件、桌面入口和打包签名路径进行精确大小写检查；P-18/P-19、打包、发布及构建保护测试同步使用新名称。
 - 本机 macOS make test-platform 128 项通过、3 条件跳过（14 秒），包括真实隔离 App 的签名/解包/替换；相关 Dart 静态检查与 diff 检查通过。测试日志 `/tmp/remlark-name-platform.log`。
 - Windows/Linux 尚未执行本轮 make test-platform；三平台真实产品重新打包、旧应用覆盖安装和显示名称按 M-33 验证。旧版客户端需手动下载安装这次新版，后续新版更新器使用大写附件名。未提交、推送或触发远端 CI，未修改已安装应用。
-
-### 2026-10-25 Release 自托管 macOS runner（Step 134）
-
-- 新增 P-31；选择逻辑只在 Ubuntu 选择任务中运行，桌面 macOS 与服务端 arm64 共用同一结果，服务端 x64 及 Windows / Linux 不变。抽出 `tools/utils/actions_api.py` 供清理与选择脚本共用，P-24 同步改用真实分页实现。
-- 本机 Intel macOS make test-platform 132 项通过、3 项条件跳过，P-31 / P-24 Python 检查通过，工作流 YAML 解析通过；尚未在 Actions 上真实运行，自托管与回退两种路径按 M-34 验证。Windows / Linux 待执行 make test-platform。

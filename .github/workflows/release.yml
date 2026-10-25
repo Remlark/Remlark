@@ -28,28 +28,8 @@ env:
   DART_VERSION: '3.13.5'
 
 jobs:
-  # 自托管 Mac mini 在线时承担 macOS 桌面包与服务端 arm64，离线或查询失败回退 macos-15。
-  # RUNNER_STATUS_TOKEN 需仓库 Administration 只读权限；未配置时直接回退，不影响发布。
-  pick-runner:
-    name: Select macOS runner
-    timeout-minutes: 5
-    runs-on: ubuntu-24.04
-    outputs:
-      macos: ${{ steps.pick.outputs.macos }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag || github.ref_name }}
-          persist-credentials: false
-      - name: Pick self-hosted or hosted macOS runner
-        id: pick
-        env:
-          RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
-        run: python3 tools/release/pick_runner.py --label remlark-macmini --fallback macos-15 --output-name macos --github-output "$GITHUB_OUTPUT"
-
   build:
     name: ${{ matrix.platform }}-${{ matrix.arch }}
-    needs: [pick-runner]
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -60,7 +40,7 @@ jobs:
           - { platform: windows, arch: x64, runner: windows-2022 }
           - { platform: windows, arch: arm64, runner: windows-11-arm }
           - { platform: macos, arch: universal, runner: macos-15 }
-    runs-on: ${{ matrix.runner == 'macos-15' && needs.pick-runner.outputs.macos || matrix.runner }}
+    runs-on: ${{ matrix.runner }}
     defaults:
       run:
         shell: bash
@@ -243,7 +223,6 @@ jobs:
 
   server:
     name: server-${{ matrix.platform }}-${{ matrix.arch }}
-    needs: [pick-runner]
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -255,7 +234,7 @@ jobs:
           - { platform: windows, arch: arm64, runner: windows-11-arm }
           - { platform: macos, arch: x64, runner: macos-15-intel }
           - { platform: macos, arch: arm64, runner: macos-15 }
-    runs-on: ${{ matrix.runner == 'macos-15' && needs.pick-runner.outputs.macos || matrix.runner }}
+    runs-on: ${{ matrix.runner }}
     defaults:
       run:
         shell: bash
