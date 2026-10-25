@@ -563,3 +563,9 @@ Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过�
 - 原因：断言片段含 `\n`（`Exec=Remlark\n`、`OnChannelConnectedEventHandler(ctx, e);\n\t\t/*`），Windows 检出为 CRLF 后不匹配；产品代码与安装包不受影响。
 - 修复：新增 `test/utils/source_text.dart`，两项测试改用统一 LF 的读取，并在维护规则中要求含换行的源码断言使用该函数。
 - 验证：本机把相关源文件转为 CRLF，修复前精确复现这 2 项失败，修复后 13 项全部通过；本机 Intel macOS make test-platform 130 项通过、3 项条件跳过。Windows / Linux 待 CI 重新执行。
+
+### 2026-10-26 Windows ARM64 构建保护未检出真实进程（Step 135，待定位）
+
+- 现象：Windows ARM64 Release 的 P-22 `test_real_current_platform_process` 失败（GuardError not raised）：PowerShell/CIM 查询成功，但未匹配到测试启动的 `build\windows\Remlark.exe`。该测试在 1.0.3 时已存在且通过，此后 Windows 路径只改了大小写（WQL 与路径比较均不区分大小写）及查询超时 / PSModulePath；x64 与 macOS 通过。
+- 处理：无 Windows ARM 实机，未凭猜测修改产品检测逻辑。测试未检出时改为输出诊断：Python 路径与架构、目标及 build 目录解析结果、查询返回的原始行（ascii 转义，可看出中文路径是否被替换）。
+- 待办：下一次 Windows ARM64 CI 运行后依据诊断定位原因并修复；修复前该项在 ARM64 上仍会失败。

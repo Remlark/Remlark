@@ -1,6 +1,7 @@
 """P-22：三平台构建保护，验证路径判定、检查失败保护和真实运行进程。"""
 import json
 import os
+import platform as platform_module
 from pathlib import Path
 import shutil
 import subprocess
@@ -30,6 +31,24 @@ class FixedInspector(ProcessInspector):
     def executables(self):
         """按统一接口返回进程列表。"""
         return self.rows
+
+
+def live_process_diagnostics(platform, root, target, pid, overrides):
+    """未检测到运行中的测试进程时，输出实际查询结果与路径，便于定位无法本地复现的平台差异。"""
+    inspector = {'macos': MacosInspector, 'windows': WindowsInspector, 'linux': LinuxInspector}[platform]()
+    try:
+        rows = inspector.executables()
+    except GuardError as error:
+        rows = f'query failed: {error!r}'
+    # ascii() 保留转义形式，可直接看出中文路径是否在查询输出中被替换或截断。
+    return '\n'.join([
+        f'GuardError not raised for PID {pid} (env overrides {overrides})',
+        f'python: {ascii(sys.executable)} {platform_module.machine()} {sys.version.split()[0]}',
+        f'target: {ascii(str(target))}',
+        f'target resolved: {ascii(str(target.resolve()))}',
+        f'build resolved: {ascii(str((root / "build").resolve()))}',
+        f'inspector rows: {ascii(rows)}',
+    ])
 
 
 class BuildGuardTests(unittest.TestCase):
@@ -210,8 +229,12 @@ class BuildGuardTests(unittest.TestCase):
                 # 三平台均检查默认及 C locale，确保中文路径不因调用方语言环境漏检。
                 for overrides in [{}, {'LC_ALL': 'C'}]:
                     with patch.dict(os.environ, overrides):
-                        with self.assertRaisesRegex(GuardError, f'PID {process.pid}'):
+                        try:
                             guard.assert_safe(root, platform, build_directory=root / 'build')
+                        except GuardError as error:
+                            self.assertIn(f'PID {process.pid}', str(error))
+                        else:
+                            self.fail(live_process_diagnostics(platform, root, target, process.pid, overrides))
                 self.assertIsNone(process.poll(), '保护不得终止进程')
             finally:
                 if process.poll() is None:

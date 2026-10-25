@@ -929,3 +929,8 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - Windows x64 上 P-30 Linux 桌面入口检查与 P-11 H.264 回退源码检查失败，原因是断言片段含换行而 Windows 检出为 CRLF；产品代码无问题。
   - 新增 test/utils/source_text.dart 的 readSourceText 统一 LF，两项测试改用它；multi-platform-testing.md 维护规则补充含换行断言的要求。
   - 验证：本机将相关源文件转为 CRLF，修复前复现 2 项失败、修复后通过；macOS make test-platform 130 项通过、3 项条件跳过。Windows / Linux 待 CI 重新执行。
+
+- Step 135：定位 Windows ARM64 构建保护未检出真实进程
+  - 现象：Windows ARM64 CI 中 P-22 真实进程测试未检出测试启动的 Remlark.exe（查询成功但无匹配），x64 / macOS 通过；1.0.3 时该测试在 ARM64 通过，此后 Windows 侧仅有大小写与查询超时 / PSModulePath 调整。
+  - 已完成：测试未检出时输出 Python 架构、目标与 build 目录解析结果及查询原始行（ascii 转义）。本机 build_guard_test.py 12 项通过，诊断输出格式已在 macOS 验证。
+  - 待完成：依据下一次 ARM64 CI 的诊断定位并修复，修复后标记完成。
