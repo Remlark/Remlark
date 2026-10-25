@@ -62,11 +62,11 @@ def manifest():
     """在发布前检查所有平台附件齐全，并对实际字节生成 SHA-256 校验文件。"""
     validate_tag()
     dist = ROOT / 'dist'
-    required = [f'Remlark-{version()}-macos-universal.dmg', 'Remlark-macos.zip']
+    # Windows 桌面仅发布 x64（ARM64 设备可仿真运行 x64）；服务端仍按三平台双架构发布。
+    required = [f'Remlark-{version()}-macos-universal.dmg', 'Remlark-macos.zip',
+                f'Remlark-{version()}-windows-x64-setup.exe', 'Remlark-windows-x64.zip']
     for arch, deb_arch in [('x64', 'amd64'), ('arm64', 'arm64')]:
-        required.extend([f'Remlark-{version()}-windows-{arch}-setup.exe',
-                         f'Remlark-windows-{arch}.zip',
-                         f'Remlark-{version()}-linux-{deb_arch}.deb',
+        required.extend([f'Remlark-{version()}-linux-{deb_arch}.deb',
                          f'Remlark-linux-{arch}.tar.gz'])
         for target in ('macos', 'windows', 'linux'):
             extension = 'zip' if target == 'windows' else 'tar.gz'

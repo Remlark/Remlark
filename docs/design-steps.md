@@ -930,12 +930,18 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 新增 test/utils/source_text.dart 的 readSourceText 统一 LF，两项测试改用它；multi-platform-testing.md 维护规则补充含换行断言的要求。
   - 验证：本机将相关源文件转为 CRLF，修复前复现 2 项失败、修复后通过；macOS make test-platform 130 项通过、3 项条件跳过。Windows / Linux 待 CI 重新执行。
 
-- Step 135：定位 Windows ARM64 构建保护未检出真实进程
+- [已完成] Step 135：定位 Windows ARM64 构建保护未检出真实进程（随 Step 136 放弃 ARM64 关闭）
   - 现象：Windows ARM64 CI 中 P-22 真实进程测试未检出测试启动的 Remlark.exe（查询成功但无匹配），x64 / macOS 通过；1.0.3 时该测试在 ARM64 通过，此后 Windows 侧仅有大小写与查询超时 / PSModulePath 调整。
   - 已完成：测试未检出时输出 Python 架构、目标与 build 目录解析结果及查询原始行（ascii 转义）。本机 build_guard_test.py 12 项通过，诊断输出格式已在 macOS 验证。
-  - 待完成：依据下一次 ARM64 CI 的诊断定位并修复，修复后标记完成。
+  - 结论：没有 Windows ARM 测试机，Step 136 放弃 Windows ARM64 桌面端，不再追查原因；诊断输出保留。
 
-- [已完成] Step 136：Release macOS 构建优先使用自托管 Mac mini
+- [已完成] Step 136：放弃 Windows ARM64 桌面端
+  - 原因：没有 Windows ARM 测试机，无法实机验证；Windows 11 ARM 设备可仿真运行 x64 版。仓库私有、无存量 ARM 用户，不做旧版自动升级兼容；服务端 Windows ARM64 保留。
+  - CI：release.yml 桌面矩阵去掉 windows-11-arm（服务端六路不变），`make windows` 不再传架构；test.yml 平台专项改为五路；prepare.py 必需附件由 16 个改为 14 个。
+  - 打包与更新：build.ps1 只接受 x64 并固定附带 vcruntime140_1.dll，remlark.iss 去掉 arm64 分支（保留 x64compatible）；Makefile 移除 WINDOWS_ARCH，ARM64 主机在 guard-windows 直接停止；更新器 Abi.windowsArm64 不再映射安装包。原生库脚本 arm64 参数与 Codex/dsh 的 arm64 映射保留，仅供 ARM 主机本地开发。
+  - 测试：P-10、P-25、P-18、P-19、windows_packaging 同步更新。本机 Intel macOS make test-platform 130 项通过、3 项条件跳过；make -n 模拟 ARM64 主机确认 guard-windows 停止。Windows x64 / Linux 待 CI 执行。
+
+- [已完成] Step 137：Release macOS 构建优先使用自托管 Mac mini
   - 新增 `pick-runner` 任务，通过 `RUNNER_STATUS_TOKEN` 依次查询仓库级与组织级带 `remlark-macmini` 标签的 runner；在线（含忙碌）时桌面 macOS universal 与服务端 arm64 改用该 runner，离线、未配置令牌或 API 失败回退 `macos-15`，不让选择导致发布失败。服务端 x64 固定 `macos-15-intel`，Windows / Linux 不变。
   - GitHub REST 封装抽到 `tools/utils/actions_api.py`（含分页，支持仓库与组织范围），清理脚本与选择脚本共用。
   - 新增 P-31 与 M-34，build-environment.md 补充 Mac mini runner 配置、令牌权限与公开仓库安全限制。

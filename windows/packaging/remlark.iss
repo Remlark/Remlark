@@ -14,13 +14,9 @@ DefaultDirName={localappdata}\Programs\Remlark
 DefaultGroupName=Remlark
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
-#if InstallerArch == "arm64"
-ArchitecturesAllowed=arm64
-ArchitecturesInstallIn64BitMode=arm64
-#else
+; 仅发布 x64；x64compatible 允许在 Windows 11 ARM64 上以仿真方式安装运行。
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-#endif
 MinVersion=10.0
 OutputDir={#DistDir}
 OutputBaseFilename={#InstallerName}

@@ -53,7 +53,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | RDP H.264 硬件解码 | [native/rdp/src/hwdec/](../native/rdp/src/hwdec/)、[rmk_h264.c](../native/rdp/src/rmk_h264.c)、`native/rdp/scripts/` 中的 FFmpeg 编译 | VideoToolbox；FFmpeg 由 `build.sh` 编译 | D3D11VA（FreeRDP 默认 DXVA2，改为显式指定）；FFmpeg 用 MSVC 编译，configure 经 MSYS2 bash 运行（`build_ffmpeg_msvc.sh`），ARM64 关闭汇编；需要 VS 英文语言包，脚本预设工具 PATH、保护 CL 编译选项并固定英文输出 | VAAPI，自动选择第一个可读写的 `/dev/dri/renderD*`；运行时依赖 libva2 / libva-drm2 | P-11 | M-17 |
 
 三平台共用 [rmk_h264.c](../native/rdp/src/rmk_h264.c) 中的实际视频流校验：连接后接管 GFX 表面命令，每个表面的首个 H.264 命令先用其码流试解码，硬件失败而软件成功时本次会话改用软件解码（K-24）。
-| 打包 | [Makefile](../Makefile)、[Windows 安装器](../windows/packaging/) | `make mac` → zip | `make windows` → Inno Setup 安装 exe + 便携 zip，附带应用本地 VC++ 运行库 | `make linux` → deb + tar.gz，按 x64 / arm64 输出；发布前检查原生库和资源 | P-06、P-08、P-09 | M-12、M-14 |
+| 打包 | [Makefile](../Makefile)、[Windows 安装器](../windows/packaging/) | `make mac` → zip | `make windows` → Inno Setup 安装 exe + 便携 zip（仅 x64，ARM64 主机由 guard-windows 停止），附带应用本地 VC++ 运行库 | `make linux` → deb + tar.gz，按 x64 / arm64 输出；发布前检查原生库和资源 | P-06、P-08、P-09 | M-12、M-14 |
 | 可选 JNI 依赖 | `linux/CMakeLists.txt`，Flutter 间接依赖 | 无 Linux JNI 插件 | 可选插件，未发现 JDK 时不构建 | 关闭 Android 间接依赖引入的可选 JNI，避免携带构建机 Java 绝对路径 | P-09 | M-12 |
 | 开发启动 | [Makefile](../Makefile)、[Windows 启动脚本](../windows/run.ps1) | `make run` | `windows/run.ps1` 无须 Make，按需构建原生库；也支持 `make run` | `make run` | P-08 | M-15 |
 | 应用图标 | `tools/branding/`、`macos/Runner/Branding/`、`linux/packaging/` | Asset Catalog / AppIcon.icns；启动后刷新 NSApplication 图标 | exe 内嵌 7 帧 ICO，经窗口类 LoadIcon 关联 | PNG + .desktop，与 APPLICATION_ID 关联 | —（P-14 已按用户要求移除） | M-12、M-19 |
@@ -62,7 +62,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 源码编码与构建失败检查 | `windows/CMakeLists.txt`、`native/*/CMakeLists.txt`、`native/utils/windows_build.ps1` | UTF-8，shell 严格错误检查 | MSVC `/utf-8`；PowerShell 带 UTF-8 BOM，外部命令失败立即停止 | UTF-8，shell 严格错误检查 | P-06 | M-12 |
 | 测试 Dart 子进程与日志关闭 | `test/helpers/platform_tools.dart`、`lib/utils/app_log.dart` | Dart 可执行文件；关闭日志释放句柄 | 定位 SDK 的 `dart.exe`；删除日志目录前关闭句柄 | 同 macOS | P-07 | M-01、M-13 |
 | 编译与发布版本 | `VERSION`、`tools/utils/app_version.py`、`lib/utils/app_version.dart`、各平台打包入口 | Flutter build 数字版本 / 构建号写入 Info.plist；DMG 打包校验系统元数据 | Flutter build 写入 exe 四段资源，安装器校验并复用；独立 run 复用 Python 工具 | deb control 从 VERSION 读取，预发布映射为 ~ | P-13、P-10 | M-18 |
-| Release CI | `.github/workflows/release.yml`、`tools/release/` | Intel / Apple Silicon 通用 zip + DMG，lipo 校验 | x64 / arm64 安装 exe + zip；匹配 CRT 与 Inno 架构 | 原生 x64 / arm64 runner，deb + tar.gz | P-10、P-08、P-09、P-11（原生库编译后重新执行 make test-platform，实际解码）；手工 build_only 验证分支且不发布，构建后 RMK_REQUIRE_RDP_NATIVE=1 禁止跳过解码 | M-16 |
+| Release CI | `.github/workflows/release.yml`、`tools/release/` | Intel / Apple Silicon 通用 zip + DMG，lipo 校验 | 仅 x64 安装 exe + zip（2026-10-26 起不再发布 ARM64 桌面，x64compatible 可在 ARM64 仿真安装）；服务端仍含 windows-11-arm | 原生 x64 / arm64 runner，deb + tar.gz | P-10、P-08、P-09、P-11（原生库编译后重新执行 make test-platform，实际解码）；手工 build_only 验证分支且不发布，构建后 RMK_REQUIRE_RDP_NATIVE=1 禁止跳过解码 | M-16 |
 | GitHub 软件更新 | `lib/modules/updates/`、`utils/git_credentials/`、`utils/script_utils.dart` | 通用 zip，签名/版本校验，App 交换、按需系统授权；共用 shell 助手为 UTF-8 无 BOM | x64/arm64 Inno 静默安装到原目录，备份与失败恢复、按需 UAC；两个 PowerShell 助手为 UTF-8 带 BOM | dpkg 管理的 deb 或便携 bundle 交换，按需 polkit；共用 shell 助手为 UTF-8 无 BOM | P-18/P-19；Git credential fill、助手握手、等待退出、非提权重启、脚本编码 | M-23 |
 | macOS 发布自签 | `tools/release/macos_signing.py`、Release CI | 两个 Secrets 导入临时钥匙串，重签嵌套代码 / App / DMG，重建 zip；始终清理凭据并还原钥匙串搜索列表 | 不调用 Apple 工具，保持原有打包 | 不调用 Apple 工具，保持原有打包 | P-15 | M-20 |
 | 共享代理配置与重连 | `modules/proxies/`、`host_repository.dart`、`ssh_connector.dart`、`rdp_session.dart` | 共用 drift/加密存储；SSH 与内嵌 RDP 在新连接/重连时解析共享配置 | 同左，不新增系统代理或注册表设置 | 同左，不修改系统代理环境变量 | P-16 | M-21 |
@@ -74,7 +74,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | RDP 显示控制协商 | `native/rdp/src/remlark_rdp.c` | 共用 FreeRDP 能力回调，协商后发送布局 | 同 macOS | 同 macOS | P-21 | M-25 |
 | 运行中构建覆盖保护 | `tools/utils/build_guard/`、`tools/utils/app_version.py`、`Makefile`、`windows/run.ps1` | ps 子进程固定 UTF-8 locale，读取未转义的中文完整路径 | CIM 显式输出 UTF-8 JSON，按 Windows 路径规则比较；PowerShell 5.1 使用自身默认 PSModulePath，查询上限 60 秒 | procfs 读取 exe，识别 deleted 文件，comm 显式按 UTF-8 读取 | P-22 | M-26 |
 | 构建保护真实进程测试夹具 | `tools/testing/build_guard_test.py`、`test/platform/fixtures/build_guard_probe.c` | xcrun clang 从源码编译本机架构的普通进程，避免复制系统二进制的 SIGKILL；等待就绪标记，验证默认/C locale | 复制 Python 为隔离应用，设置 PYTHONHOME / PATH；仓库文本显式 UTF-8；等待就绪标记，验证默认/C locale | 复制 Python 为隔离应用，设置 PYTHONHOME，兼容多入口 coreutils；等待就绪标记，验证默认/C locale | P-22 | — |
-| 发布前平台专项测试工作流 | `.github/workflows/test.yml` | Intel / ARM64 独立 runner；ARM64 复用精确匹配的 universal 原生缓存；Xcode 测试夹具 | x64 / ARM64 独立 runner；PowerShell、Make、MSVC 测试夹具 | x64 / ARM64 独立 runner；安装运行库及桌面入口测试依赖 | P-25 | M-28 |
+| 发布前平台专项测试工作流 | `.github/workflows/test.yml` | Intel / ARM64 独立 runner；ARM64 复用精确匹配的 universal 原生缓存；Xcode 测试夹具 | 仅 x64 runner（不再运行 Windows ARM64）；PowerShell、Make、MSVC 测试夹具 | x64 / ARM64 独立 runner；安装运行库及桌面入口测试依赖 | P-25 | M-28 |
 | Actions 临时产物清理 | `release.yml`、`tools/release/cleanup_artifacts.py` | 仅构建不上传，正式发布中转保留 7 天，publish 成功后只清理当前运行；失败保留供重跑 | 同左 | 同左；清理在独立 Ubuntu 任务运行 | P-24 | M-27 |
 | CI 网络安装重试 | `release.yml`、`test.yml`、[retry_command.py](../tools/utils/retry_command.py)、[flutter_sdk.py](../tools/utils/flutter_sdk.py) | release.yml 经 flutter_sdk.py 安装 Flutter（自托管 Mac mini 缓存到 RUNNER_TOOL_CACHE 复用），test.yml git clone Flutter、brew、flutter 初始化在 bash 中经 python3 重试 | choco、MSYS2 pacman、flutter 初始化在 pwsh 中经 python3 重试，失败仍由 `$LASTEXITCODE` 判断；`.bat`/`.cmd` 按 PATH 解析 | apt-get、flutter 初始化重试；publish 的 gh release upload/edit 同样重试 | P-28 | M-31 |
 | Release 自托管 macOS runner | `release.yml`、[pick_runner.py](../tools/release/pick_runner.py)、[actions_api.py](../tools/utils/actions_api.py) | 带 `remlark-macmini` 标签的自托管 Mac mini 在线时承担桌面 universal 包与服务端 arm64；离线、未配置 `RUNNER_STATUS_TOKEN` 或查询失败回退 `macos-15`；服务端 x64 固定 `macos-15-intel` | 不受影响，固定 GitHub 托管 | 不受影响，固定 GitHub 托管 | P-31 | M-34 |
@@ -103,10 +103,10 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-15 | [macos_signing_test.dart](../test/platform/macos_signing_test.dart)、`fixtures/macos_signing_checks.py` | 三平台检查仅两项凭据、自动识别唯一身份 / 拒绝缺失或多身份、自动生成钥匙串密码、缺失 / 损坏凭据、失败日志不泄密、嵌套签名顺序及部分失败清理；Windows / Linux 拒绝 Apple 工具；macOS 创建一次性证书，真实导入 / 重签 App / 严格验证 / 还原搜索列表并移除私钥 | macOS 发布自签 |
 | P-16 | [proxy_profiles_test.dart](../test/platform/proxy_profiles_test.dart) | 真实 ORM 存储共享代理，SSH/RDP/VNC 内置 SSH 共用引用；变更后重连解析新参数、连接快照及目标端口保持、引用计数和删除保护；三平台执行相同实现 | 共享代理配置与重连 |
 | P-17 | [proxy_connection_test.dart](../test/platform/proxy_connection_test.dart) | 三平台真实本地 Socket 夹具；HTTP 认证/407、SOCKS5 认证/非法响应、总超时与慢速响应、取消断开、禁止无代理直连、目标格式与 IPv6 authority/地址类型 | 可选代理连通性检测 |
-| P-18 | [update_platform_test.dart](../test/platform/update_platform_test.dart) | 六种平台/架构附件映射、Linux deb/便携分流、不支持架构拒绝、current() 选择 | GitHub 升级、M-23 |
+| P-18 | [update_platform_test.dart](../test/platform/update_platform_test.dart) | 五种平台/架构附件映射（Windows ARM64 无安装包返回 null）、Linux deb/便携分流、不支持架构拒绝、current() 选择 | GitHub 升级、M-23 |
 | P-21 | [rdp_display_control_test.dart](../test/platform/rdp_display_control_test.dart) | 编译并运行生产 C 函数：能力到达前不发送、尺寸合并、重复轮询、旧通道隔离、重新协商；检查回调注册和断开重置。macOS/Linux 使用 cc，Windows 使用开发者终端 cl；无编译器时动态用例跳过，RMK_REQUIRE_RDP_NATIVE=1 时禁止跳过 | RDP 显示控制、M-25 |
 | P-20 | [connect_retry_test.dart](../test/platform/connect_retry_test.dart) | 三平台错误码分别验证；首次不可达后恢复、持续失败最多四次、总预算不重置；连接拒绝/权限/非 Socket 错误不重试；当前平台策略选择 | SSH TCP 首次连接恢复、M-24 |
-| P-19 | [update_installation_test.dart](../test/platform/update_installation_test.dart) | 实际隔离 Git helper；POSIX 未提交不安装、等待退出、失败回滚、特殊路径；macOS 真实签名/版本校验及 App 替换；Linux 便携解压与交换；任意宿主检查 Windows x64/arm64 BOM 和 POSIX shebang；Windows 实际解析 PowerShell 助手、执行假安装器并核对成功/失败恢复及结果文件 | 点击升级后安装、M-23 |
+| P-19 | [update_installation_test.dart](../test/platform/update_installation_test.dart) | 实际隔离 Git helper；POSIX 未提交不安装、等待退出、失败回滚、特殊路径；macOS 真实签名/版本校验及 App 替换；Linux 便携解压与交换；任意宿主检查 Windows x64 BOM 和 POSIX shebang；Windows 实际解析 PowerShell 助手、执行假安装器并核对成功/失败恢复及结果文件 | 点击升级后安装、M-23 |
 | P-22 | [build_guard_test.dart](../test/platform/build_guard_test.dart) | 调用 12 项 Python 检查：三个桌面目标、路径边界/中文空格/大小写、独立副本放行、自定义输出和符号链接、三平台进程解析（Windows 校验 5.1 模块路径）、查询环境透传及失败保护、默认/C locale 的真实进程存活时拒绝/退出后放行；包装入口失败时不启动 Flutter；仓库文本显式按 UTF-8 读取 | 构建覆盖保护、M-26 |
 | P-23 | [server_bundle_test.dart](../test/platform/server_bundle_test.dart)、[server_bundle_test.py](../tools/testing/server_bundle_test.py) | 六路服务端矩阵、发布依赖、macOS 双架构独立 runner；六种原生文件头与错误平台/架构、缺少/空主程序和 SQLite 库拒绝打包；压缩包布局与 POSIX 执行权限、额外资源保留；P-10 检查缺少服务端附件时禁止发布 | 同步服务端独立发布、M-13 |
 | P-24 | [artifact_cleanup_test.dart](../test/platform/artifact_cleanup_test.dart)、[artifact_cleanup_test.py](../tools/testing/artifact_cleanup_test.py) | 三平台执行相同清理逻辑；仅构建不上传、正式中转保留 7 天且重跑覆盖、仅 publish 成功后清理（不使用 always()）；只查询当前运行的 artifacts 并分页先快照再删除，不访问仓库级列表，保护非托管文件及 API 失败上报 | Actions 存储、M-27 |
@@ -199,7 +199,7 @@ P-06 还检查 macOS / Linux 测试服务端与应用使用同一 OpenSSL 前缀
 | M-18 | 编译版本 | 将 VERSION 改为新的测试版本后重新构建：macOS Finder 应用信息显示数字版本和构建号，Windows exe / 安装器属性显示相同四段资源版本，Linux deb 元数据显示正确版本；预发布 deb 低于对应正式版；正式发布标签等于 v + VERSION 的版本号（不含构建号）。开发 run 的系统元数据使用 Flutter 默认值，Dart / AI clientInfo 使用 VERSION；不把开发包用于分发 |
 | M-19 | 应用图标 | macOS 从 Finder / make run 启动新版，Dock 显示“连接之门”；固定到 Dock 后退出 / 重开、替换旧版后重开图标正确；Windows 任务栏 / 桌面快捷方式、Linux 应用菜单 / 任务栏使用相同品牌图标。运行中刷新不等于清理系统为旧路径保留的静态固定项 |
 | M-17 | RDP H.264 硬件解码 | 连接开启 H.264 的 Windows 服务器（组策略“远程桌面会话主机 → 远程会话环境”中开启“为远程桌面连接优先使用 H.264/AVC 444 图形模式”与“配置 H.264/AVC 硬件编码”），播放视频或拖动窗口：画面正常、无花屏与色偏；日志中连接行显示“H.264 硬件解码（videotoolbox / d3d11va / vaapi）”；活动监视器 / 任务管理器 / `intel_gpu_top` 或 `radeontop` 中可见 GPU 视频解码负载，CPU 占用低于软件解码时（在设置 → 远程桌面中关闭“RDP 硬件解码”后新建连接即为软件解码，日志显示“设置中已关闭硬件解码”，用于对比）；设置页说明显示本机可用的设备名，显卡不支持时开关禁用；Linux 无 VAAPI 驱动或 Windows 无显卡时日志显示软件解码且画面正常 ；硬件解码不支持服务端视频流时（如 Intel Mac 连接 macOS ProRDP，K-24）画面仍正常显示，日志出现“H.264 硬件解码不支持服务端 …视频流，本次会话改用软件解码” |
-| M-16 | Release 安装验证 | 在干净的 Windows / Linux x64、arm64 与 Intel / Apple Silicon macOS 下载附件，验证 SHA256SUMS，安装、启动、升级、卸载并连接 SSH / RDP；macOS DMG 拖入 Applications。macOS CI 使用固定自签证书，尚未公证；Windows 未签名，CI 成功不代替实机交互验证 |
+| M-16 | Release 安装验证 | 在干净的 Windows x64、Linux x64 / arm64 与 Intel / Apple Silicon macOS 下载附件（Windows ARM64 桌面已不支持），验证 SHA256SUMS，安装、启动、升级、卸载并连接 SSH / RDP；macOS DMG 拖入 Applications。macOS CI 使用固定自签证书，尚未公证；Windows 未签名，CI 成功不代替实机交互验证 |
 | M-27 | Actions 存储 | 仅构建运行结束后没有 packages/logs artifacts，cleanup 跳过；正式发布成功后 Release 的 16 个附件及 SHA256SUMS 可下载，当前运行的中转包已删除。人为让一路构建失败：cleanup 跳过，其他平台包保留；Re-run failed jobs 后 publish 拿到完整矩阵并发布，随后清理当前运行。其他历史运行的包和原生缓存不受影响 |
 | M-28 | 发布前平台专项测试 | 推送新的 test* 标签，确认仅 Platform Tests 触发，检出标签提交且六路各只执行一次 make test-platform，没有客户端全量/dsh/服务端测试及服务端依赖安装，不取消其他 runner；检查原生缓存命中及缺失摘要，缺失时不得编译原生库；无应用/服务端产品构建、签名、打包、artifact 或 Release。后续推送 v* 标签仍独立触发正式发布 |
 | M-29 | 原生源码下载与构建 | 三平台分别执行 make test-platform；在对应系统使用无源码缓存的独立检出目录验证原生构建。Windows x64/arm64 均应在 OpenSSL 编译前完成 zlib/FFmpeg 下载校验；错误响应明确重试/回退且不解压损坏文件，通过校验后继续构建。实际 Windows tar/MSVC 集成及外网偶发响应需对应 runner 验证 |
@@ -567,13 +567,19 @@ Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过�
 - 修复：新增 `test/utils/source_text.dart`，两项测试改用统一 LF 的读取，并在维护规则中要求含换行的源码断言使用该函数。
 - 验证：本机把相关源文件转为 CRLF，修复前精确复现这 2 项失败，修复后 13 项全部通过；本机 Intel macOS make test-platform 130 项通过、3 项条件跳过。Windows / Linux 待 CI 重新执行。
 
-### 2026-10-26 Windows ARM64 构建保护未检出真实进程（Step 135，待定位）
+### 2026-10-26 Windows ARM64 构建保护未检出真实进程（Step 135，已随 Step 136 放弃 ARM64 关闭）
 
 - 现象：Windows ARM64 Release 的 P-22 `test_real_current_platform_process` 失败（GuardError not raised）：PowerShell/CIM 查询成功，但未匹配到测试启动的 `build\windows\Remlark.exe`。该测试在 1.0.3 时已存在且通过，此后 Windows 路径只改了大小写（WQL 与路径比较均不区分大小写）及查询超时 / PSModulePath；x64 与 macOS 通过。
 - 处理：无 Windows ARM 实机，未凭猜测修改产品检测逻辑。测试未检出时改为输出诊断：Python 路径与架构、目标及 build 目录解析结果、查询返回的原始行（ascii 转义，可看出中文路径是否被替换）。
-- 待办：下一次 Windows ARM64 CI 运行后依据诊断定位原因并修复；修复前该项在 ARM64 上仍会失败。
+- 结论：无 Windows ARM 测试机，Step 136 起不再支持 Windows ARM64 桌面，CI 不再运行该路，原因不再追查；诊断输出保留供其他平台使用。
 
-### 2026-10-25 Release 自托管 macOS runner（Step 136）
+### 2026-10-26 放弃 Windows ARM64 桌面端（Step 136）
+
+- 决定：没有 Windows ARM 测试机，桌面端不再构建、测试和发布 Windows ARM64；Windows 11 ARM 设备可安装仿真运行 x64 版（安装器 x64compatible）。仓库私有、无存量 ARM 用户，不做旧版升级兼容。服务端 Windows ARM64 保留。
+- 变更：release.yml 桌面矩阵去掉 windows-11-arm（服务端保留），test.yml 平台专项改为五路；prepare.py 必需附件 14 个；build.ps1 只接受 x64、固定附带 FH4 运行库，remlark.iss 去掉 arm64 分支；Makefile 固定 x64，ARM64 主机在 guard-windows 停止；更新器 ARM64 ABI 不再映射安装包。原生库脚本的 arm64 参数与 Codex/dsh 的 arm64 映射保留，仅用于 ARM 主机本地开发，未验证。
+- 测试：P-10（桌面无 windows-11-arm、服务端保留、14 个附件且不含桌面 ARM64 包）、P-25（五路且无 windows-11-arm）、P-18（ARM64 返回 null）、P-19（仅 x64）、windows_packaging（无 arm64 安装器分支、只接受 x64、Makefile ARM64 停止）。本机 Intel macOS make test-platform 130 项通过、3 项条件跳过；`make -n guard-windows PROCESSOR_ARCHITECTURE=ARM64` 实际停止并提示。Windows x64 待 CI 执行。
+
+### 2026-10-25 Release 自托管 macOS runner（Step 137）
 
 - 新增 P-31；选择逻辑只在 Ubuntu 选择任务中运行，桌面 macOS 与服务端 arm64 共用同一结果，服务端 x64 及 Windows / Linux 不变。抽出 `tools/utils/actions_api.py` 供清理与选择脚本共用，P-24 同步改用真实分页实现。
 - 本机 Intel macOS make test-platform 132 项通过、3 项条件跳过，P-31 / P-24 Python 检查通过，工作流 YAML 解析通过；尚未在 Actions 上真实运行，自托管与回退两种路径按 M-34 验证。Windows / Linux 待执行 make test-platform。

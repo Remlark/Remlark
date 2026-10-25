@@ -40,11 +40,20 @@ void main() {
       'ubuntu-24.04',
       'ubuntu-24.04-arm',
       'windows-2022',
-      'windows-11-arm',
       'macos-15',
     ]) {
       expect(workflow, contains('runner: $runner }'));
     }
+    // 桌面不再构建 Windows ARM64；windows-11-arm 只保留在服务端矩阵。
+    final desktop = workflow.substring(
+      workflow.indexOf('  build:'),
+      workflow.indexOf('  server:'),
+    );
+    expect(desktop, isNot(contains('windows-11-arm')));
+    expect(
+      workflow.substring(workflow.indexOf('  server:')),
+      contains('platform: windows, arch: arm64, runner: windows-11-arm }'),
+    );
   });
 
   test('版本标签不匹配时拒绝发布', () async {
@@ -77,11 +86,14 @@ void main() {
     addTearDown(() => root.deleteSync(recursive: true));
     final script = File('${root.path}/tools/release/prepare.py');
     final dist = Directory('${root.path}/dist')..createSync();
-    final names = ['Remlark-1.2.3-macos-universal.dmg', 'Remlark-macos.zip'];
+    final names = [
+      'Remlark-1.2.3-macos-universal.dmg',
+      'Remlark-macos.zip',
+      'Remlark-1.2.3-windows-x64-setup.exe',
+      'Remlark-windows-x64.zip',
+    ];
     for (final arch in ['x64', 'arm64']) {
       names.addAll([
-        'Remlark-1.2.3-windows-$arch-setup.exe',
-        'Remlark-windows-$arch.zip',
         'Remlark-1.2.3-linux-${arch == 'x64' ? 'amd64' : 'arm64'}.deb',
         'Remlark-linux-$arch.tar.gz',
       ]);
@@ -113,7 +125,12 @@ void main() {
     );
     expect(result.exitCode, 0, reason: '${result.stderr}');
     final lines = File('${dist.path}/SHA256SUMS').readAsLinesSync();
-    expect(lines.length, 16);
+    expect(lines.length, 14);
+    // Windows ARM64 桌面包不再是必需附件；服务端 windows-arm64 仍保留。
+    final listed = lines.join('\n');
+    expect(listed, isNot(contains('Remlark-1.2.3-windows-arm64-setup.exe')));
+    expect(listed, isNot(contains('Remlark-windows-arm64.zip')));
+    expect(listed, contains('Remlark-sync-server-1.2.3-windows-arm64.zip'));
     for (final line in lines) {
       expect(
         line,

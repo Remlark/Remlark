@@ -24,6 +24,12 @@ void main() {
       contains(r'DefaultDirName={localappdata}\Programs\Remlark'),
     );
     expect(installer, contains('ArchitecturesAllowed=x64compatible'));
+    // 不再打包 Windows ARM64：安装器无 arm64 分支，打包脚本只接受 x64，Makefile 在 ARM64 主机停止。
+    expect(installer, isNot(contains('ArchitecturesAllowed=arm64')));
+    final packaging = File('windows/packaging/build.ps1').readAsStringSync();
+    expect(packaging, contains("[ValidateSet('x64')]"));
+    expect(makefile, contains('-Arch x64'));
+    expect(makefile, contains('ifeq (\$(PROCESSOR_ARCHITECTURE),ARM64)'));
     expect(installer, contains('compiler:Default.isl'));
     expect(installer, contains(r'languages\ChineseSimplified.isl'));
     expect(installer, isNot(contains('[UninstallDelete]')));

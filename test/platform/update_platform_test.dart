@@ -17,10 +17,8 @@ void main() {
       WindowsUpdatePlatform(Abi.windowsX64).assetName('1.2.0'),
       'Remlark-1.2.0-windows-x64-setup.exe',
     );
-    expect(
-      WindowsUpdatePlatform(Abi.windowsArm64).assetName('1.2.0'),
-      'Remlark-1.2.0-windows-arm64-setup.exe',
-    );
+    // 只发布 x64；ARM64 设备运行仿真 x64 版本，原生 ARM64 构建没有安装包。
+    expect(WindowsUpdatePlatform(Abi.windowsArm64).assetName('1.2.0'), isNull);
     expect(
       LinuxUpdatePlatform(Abi.linuxX64).assetName('1.2.0'),
       'Remlark-linux-x64.tar.gz',

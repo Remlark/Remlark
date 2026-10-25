@@ -129,7 +129,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File windows/packaging/build.ps1
 # 可选：-ReleaseDir <目录> -OutputDir <目录> -CompilerPath <ISCC.exe> -RuntimeDir <CRT目录>
 ```
 
-Makefile 按 Windows 主机选择 x64 / arm64，安装器通过 `-Arch` 选择相同目标；不能混用 arm64 原生库和 x64 Flutter 输出。ARM64 实机验证见 M-16。安装包暂未配置代码签名；正式签名需要发布方证书。
+Windows 桌面端只发布 x64（2026-10-26 起不再支持 ARM64，Windows 11 ARM 设备可仿真运行 x64 版）。`make windows` 固定打 x64 包，在 ARM64 主机上由 guard-windows 直接停止；打包脚本只接受 `-Arch x64`。原生库脚本仍保留 arm64 参数，仅供 ARM 主机本地 `flutter run` 开发，未验证。安装包暂未配置代码签名；正式签名需要发布方证书。
 
 ### 已固定的原生构建约定
 
@@ -292,9 +292,9 @@ Release 的 macOS 桌面包（universal）与服务端 arm64 会优先使用自�
 
 一台 Mac mini 默认只注册一个 runner，桌面包和服务端 arm64 会排队顺序执行。选择任务判定在线后 runner 恰好掉线时，任务会一直排队，需要取消后重跑以回退托管 runner。
 
-固定 Flutter 3.47.7，从官方源码标签启动 SDK，以便 ARM64 runner 下载原生 Dart SDK。Linux 使用 Ubuntu 24.04（x64 / arm64）及发行版配套 C++ 库，Windows 使用 windows-2022 / windows-11-arm、MSVC、原生 Perl、NASM 和 Inno Setup，macOS 使用 macos-15，构建双架构原生库和通用 app。桌面各任务运行 `make test-platform`；服务端独立六路构建。所有构建通过后统一上传 10 个桌面附件、6 个服务端附件及 SHA256SUMS，并公开 Release。构建失败时发布任务不会执行，错误信息查看 Actions 执行日志，不额外上传日志压缩包。
+固定 Flutter 3.47.7，从官方源码标签启动 SDK，以便 ARM64 runner 下载原生 Dart SDK。Linux 使用 Ubuntu 24.04（x64 / arm64）及发行版配套 C++ 库，Windows 桌面使用 windows-2022（仅 x64）、MSVC、原生 Perl、NASM 和 Inno Setup，macOS 使用 macos-15，构建双架构原生库和通用 app。桌面四路任务运行 `make test-platform`；服务端独立六路构建（含 windows-11-arm）。所有构建通过后统一上传 8 个桌面附件、6 个服务端附件及 SHA256SUMS，并公开 Release。构建失败时发布任务不会执行，错误信息查看 Actions 执行日志，不额外上传日志压缩包。
 
-Windows ARM64 自动选择匹配架构的 CRT 和安装器；手工可执行 `make windows WINDOWS_ARCH=arm64`，必须在原生 ARM64 Windows 与对应 VS 环境运行。打包脚本支持 `-Arch arm64`。macOS DMG 包含应用与 Applications 入口，通用 zip 同时保留。macOS CI 已接入固定自签证书（未公证），Windows 安装包仍未签名；需 M-16 / M-20 实机验证。
+Windows 安装包附带 x64 CRT（含 FH4 的 vcruntime140_1.dll），安装器 `x64compatible` 允许在 Windows 11 ARM64 上安装。macOS DMG 包含应用与 Applications 入口，通用 zip 同时保留。macOS CI 已接入固定自签证书（未公证），Windows 安装包仍未签名；需 M-16 / M-20 实机验证。
 
 Release CI 额外固定 FreeRDP `USE_VERSION_FROM_GIT_TAG=OFF`，防止读取应用标签后生成错误的 ABI 库名。Windows 构建步骤使用原生 PowerShell，源码解压显式调用系统 tar，避免 Git Bash 工具覆盖系统命令。
 
@@ -319,7 +319,7 @@ git push origin test-20261025-01
 
 每次修改后使用新标签；工作流检出触发标签对应的提交，标签不要求匹配 VERSION。测试标签不会触发 `v*` Release 工作流。
 
-测试矩阵覆盖 macOS / Windows / Linux 各 x64、arm64，共六路。每路使用与 Release 相同的 Flutter 3.47.7，仅按锁文件安装客户端测试依赖，每路只执行一次 `make test-platform`，不运行客户端全量、服务端或真实 dsh 安装测试，也不安装服务端依赖；某个平台失败不会取消其他平台。每路超时上限为 20 分钟。
+测试矩阵覆盖 macOS / Linux 各 x64、arm64 与 Windows x64，共五路（Windows ARM64 桌面已不支持）。每路使用与 Release 相同的 Flutter 3.47.7，仅按锁文件安装客户端测试依赖，每路只执行一次 `make test-platform`，不运行客户端全量、服务端或真实 dsh 安装测试，也不安装服务端依赖；某个平台失败不会取消其他平台。每路超时上限为 20 分钟。
 
 本流程不执行应用、安装包、服务端可执行文件或 RDP/SSH 原生库的产品构建，不上传 artifacts，不读取发布签名凭据或发布 Release。测试执行本身仍会生成 Dart 测试程序、SQLite 测试资产及小型 C/Swift 测试夹具，这些属于运行测试的必要步骤。
 
@@ -327,7 +327,7 @@ git push origin test-20261025-01
 
 ### 仅验证 GitHub Actions 编译
 
-在 Desktop Release 中选择 Run workflow，选择待验证分支，tag 留空并保持 `build_only=true`。工作流执行桌面五路构建、安装包生成与构建前后 `make test-platform`，以及服务端六路构建、测试与解包启动验证，不上传 Actions artifacts、不发布 Release。正式手工发布需填写与 VERSION 中版本号一致的已有版本标签，并关闭 `build_only`；推送 v* 标签仍自动发布。
+在 Desktop Release 中选择 Run workflow，选择待验证分支，tag 留空并保持 `build_only=true`。工作流执行桌面四路构建、安装包生成与构建前后 `make test-platform`，以及服务端六路构建、测试与解包启动验证，不上传 Actions artifacts、不发布 Release。正式手工发布需填写与 VERSION 中版本号一致的已有版本标签，并关闭 `build_only`；推送 v* 标签仍自动发布。
 
 正式发布所需的压缩包仅作为任务间中转上传，保留 7 天，重跑同名包时覆盖。只有 `publish` 成功（附件已全部进入 Release）后，`cleanup` 任务才删除**本次运行**的 `packages-*`、`logs-*`；任一构建或发布失败都不删除，已成功平台的包保留，可直接 Re-run failed jobs。历史运行的中转包不自动清理，由 7 天保留期过期或手动删除。Release 附件和原生缓存不受影响。清理使用 `actions: write`，API 失败会明确报错。
 

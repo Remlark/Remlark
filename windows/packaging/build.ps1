@@ -1,6 +1,6 @@
-﻿# Windows x64 / arm64 分发：校验 Release，附带应用本地 VC++ 运行库，生成安装程序和便携包。
+﻿# Windows x64 分发（不再发布 ARM64）：校验 Release，附带应用本地 VC++ 运行库，生成安装程序和便携包。
 param(
-  [ValidateSet('x64', 'arm64')] [string]$Arch = 'x64',
+  [ValidateSet('x64')] [string]$Arch = 'x64',
   [string]$ReleaseDir,
   [string]$OutputDir = 'dist',
   [string]$CompilerPath = $env:ISCC,
@@ -57,9 +57,8 @@ foreach ($file in $required) {
   }
 }
 $runtime = Find-RuntimeDirectory
-# ARM64 不要求 x64 专用的 FH4 运行库；分发时复制目标架构完整 CRT。
-$runtimeFiles = @('msvcp140.dll', 'vcruntime140.dll')
-if ($Arch -eq 'x64') { $runtimeFiles += 'vcruntime140_1.dll' }
+# x64 需要 FH4 运行库 vcruntime140_1.dll；分发时复制完整 CRT。
+$runtimeFiles = @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
 foreach ($file in $runtimeFiles) {
   if (-not (Test-Path -LiteralPath (Join-Path $runtime $file))) { throw "Missing VC++ runtime: $file" }
 }
@@ -82,7 +81,7 @@ $actualVersion = @($exeVersion.FileMajorPart, $exeVersion.FileMinorPart, $exeVer
 if ($actualVersion -ne $resourceVersion) { throw 'Release version does not match VERSION; run make windows first.' }
 $installerName = "Remlark-$appVersion-windows-$Arch-setup"
 Invoke-BuildCommand $compiler "/DSourceDir=$StageDir" "/DDistDir=$OutputDir" "/DAppVersion=$appVersion" `
-  "/DInstallerArch=$Arch" "/DResourceVersion=$resourceVersion" "/DInstallerName=$installerName" "$PSScriptRoot\remlark.iss"
+  "/DResourceVersion=$resourceVersion" "/DInstallerName=$installerName" "$PSScriptRoot\remlark.iss"
 Compress-Archive -Force -Path "$StageDir\*" -DestinationPath (Join-Path $OutputDir "Remlark-windows-$Arch.zip")
 Write-Host "Installer: $(Join-Path $OutputDir ($installerName + '.exe'))"
 Write-Host "Portable: $(Join-Path $OutputDir "Remlark-windows-$Arch.zip")"
