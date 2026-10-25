@@ -4,35 +4,79 @@ import 'package:remlark/app/app_services.dart';
 import 'package:remlark/data/database.dart';
 import 'package:remlark/modules/hosts/host_model.dart';
 import 'package:remlark/modules/remote_desktop/vnc/vnc_session.dart';
-import 'package:remlark/modules/ssh/ssh_connector.dart';
 import 'package:remlark/modules/ssh/ui/ssh_dialogs.dart';
-import 'package:remlark/modules/terminal/terminal_session.dart';
 
-/// 记录广播输入，不发起网络连接。
-class RecordingTerminal extends TerminalSession {
-  RecordingTerminal(HostEntry host, SshConnector connector)
-    : super(host, connector, DialogInteraction());
-  final received = <String>[];
-  @override
-  void sendRaw(String data) => received.add(data);
-}
-
-/// 生成无需保存到数据库的会话主机。
-HostEntry host(String name, [HostProtocol protocol = HostProtocol.ssh]) =>
-    HostEntry(
-      uuid: name,
-      name: name,
-      protocol: protocol,
-      address: 'localhost',
-      port: protocol.defaultPort,
-      username: 'test',
-      createdAt: 0,
-      updatedAt: 0,
-    );
+import 'utils/workspace_test_utils.dart';
 
 /// 验证布局和广播状态独立，且输入只到明确选中的 SSH 目标。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('网格切单页后关闭并新开会话，恢复网格包含新会话', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final services = AppServices(db);
+    final w = services.workspace;
+    addTearDown(() async {
+      await w.closeAll();
+      await db.close();
+    });
+    final a = RecordingTerminal(host('a'), services.connector);
+    final b = RecordingTerminal(host('b'), services.connector);
+    final excluded = RecordingTerminal(host('excluded'), services.connector);
+    for (final tab in [a, b, excluded]) {
+      w.add(tab);
+    }
+    w.showGrid([b.id, a.id]);
+    w.showSingle();
+    await w.closeTab(a);
+    w.showStartPage();
+    final replacement = RecordingTerminal(host('new'), services.connector);
+    w.add(replacement);
+    expect(w.showingGrid, isFalse);
+    expect(w.active, replacement);
+    expect(w.focusedGridId, isNull);
+    expect(w.showGrid(), isTrue);
+    expect(w.showingGrid, isTrue);
+    expect(w.showingStartPage, isFalse);
+    expect(w.displayedGridSessions, [b, replacement]);
+    expect(w.active, replacement);
+    // 再次切换不丢失顺序，也不把用户排除的旧会话加回来。
+    w.showSingle();
+    w.showGrid();
+    expect(w.displayedGridSessions, [b, replacement]);
+  });
+
+  test('单页保存的网格排除文件标签并遵守九格上限', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final services = AppServices(db);
+    final w = services.workspace;
+    addTearDown(() async {
+      await w.closeAll();
+      await db.close();
+    });
+    final first = RecordingTerminal(host('first'), services.connector);
+    w.add(first);
+    w.showGrid();
+    w.showSingle();
+    w.openSftp(first);
+    final ui = DialogInteraction();
+    final desktop = VncSession(
+      host('desktop', HostProtocol.vnc),
+      services.hostRepo,
+      services.connector,
+      ui,
+      ui,
+    );
+    w.add(desktop);
+    for (var i = 0; i < 8; i++) {
+      w.add(RecordingTerminal(host('extra-$i'), services.connector));
+    }
+    w.showGrid();
+    expect(w.gridIds.length, 9);
+    expect(w.displayedGridSessions, w.gridCandidates.take(9).toList());
+    expect(w.gridIds, contains(desktop.id));
+    expect(w.active, first);
+  });
+
   test('混合网格聚焦恢复、广播隔离、新会话及关闭清理', () async {
     final db = AppDatabase(NativeDatabase.memory());
     final services = AppServices(db);

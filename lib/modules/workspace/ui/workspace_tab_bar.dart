@@ -69,11 +69,7 @@ class _Tabs extends StatelessWidget {
             buildDefaultDragHandles: false,
             shrinkWrap: true,
             padding: const EdgeInsets.symmetric(vertical: 10),
-            onReorderItem: (a, b) {
-              final t = w.tabs.removeAt(a);
-              w.tabs.insert(b, t);
-              w.activate(t.id);
-            },
+            onReorderItem: w.reorderTab,
             children: [
               for (var i = 0; i < w.tabs.length; i++)
                 ReorderableDragStartListener(

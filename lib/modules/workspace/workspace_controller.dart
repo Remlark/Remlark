@@ -100,15 +100,22 @@ class WorkspaceController extends ChangeNotifier {
   /// 标签栏切换：网格内只改变输入焦点，网格外的标签临时全页展示。
   /// 广播期间布局锁定为广播目标网格，只能在目标之间切换输入焦点。
   void selectTab(String id) {
-    if (!tabs.any((t) => t.id == id)) return;
-    if (broadcast) {
-      if (broadcastIds.contains(id)) activate(id);
+    activate(id);
+  }
+
+  /// 调整标签顺序；即使活动标签未变或广播禁止激活，也必须通知界面刷新顺序。
+  void reorderTab(int oldIndex, int newIndex) {
+    if (oldIndex < 0 ||
+        oldIndex >= tabs.length ||
+        newIndex < 0 ||
+        newIndex >= tabs.length ||
+        oldIndex == newIndex) {
       return;
     }
-    if (gridEnabled && (focusedGridId != null || !gridIds.contains(id))) {
-      focusedGridId = id;
-    }
-    activate(id);
+    final tab = tabs.removeAt(oldIndex);
+    tabs.insert(newIndex, tab);
+    activate(tab.id);
+    notifyListeners();
   }
 
   /// 广播模式：同步选中 SSH 的输入，期间以网格展示广播目标；原布局保留，停止后恢复。
@@ -143,12 +150,14 @@ class WorkspaceController extends ChangeNotifier {
     // 广播期间布局锁定，新会话在后台打开，不打断广播网格
     if (!broadcast) {
       activeId = tab.id;
-      if (gridEnabled) {
+      // 单窗口期间也维护已保存的网格，避免关闭旧会话后新会话无法补入。
+      // 尚未选择网格时仍由首次 showGrid 收集会话；广播期间不修改保存的布局。
+      if (gridEnabled || gridIds.isNotEmpty) {
         if ((tab is TerminalSession || tab is RemoteDisplay) &&
             gridIds.length < maxGrid &&
             focusedGridId == null) {
           gridIds.add(tab.id);
-        } else {
+        } else if (gridEnabled) {
           focusedGridId = tab.id;
         }
       }
@@ -160,10 +169,21 @@ class WorkspaceController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 激活标签
+  /// 所有激活入口统一维护可见布局，防止拖动标签或 SFTP 返回终端绕过限制。
   void activate(String id) {
     if (!tabs.any((t) => t.id == id)) return;
-    if (activeId == id && !_startPageRequested) return;
+    if (broadcast && !broadcastIds.contains(id)) return;
+    final previousFocus = focusedGridId;
+    if (!broadcast &&
+        gridEnabled &&
+        (focusedGridId != null || !gridIds.contains(id))) {
+      focusedGridId = id;
+    }
+    if (activeId == id &&
+        previousFocus == focusedGridId &&
+        !_startPageRequested) {
+      return;
+    }
     _startPageRequested = false;
     activeId = id;
     notifyListeners();
@@ -196,9 +216,8 @@ class WorkspaceController extends ChangeNotifier {
       activeId = showingGrid && visible.isNotEmpty
           ? visible.first.id
           : (tabs.isEmpty ? null : tabs.last.id);
-    } else if (!broadcast) {
-      _ensureActiveVisible();
     }
+    if (!broadcast) _ensureActiveVisible();
     if (tabs.isEmpty) broadcast = false;
     notifyListeners();
     await tab.close();
@@ -266,9 +285,13 @@ class WorkspaceController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 恢复布局后当前会话可能不在网格内，此时切到网格第一个，避免焦点落在隐藏会话上
+  /// 恢复布局时优先还原聚焦会话，否则确保输入焦点位于可见网格内。
   void _ensureActiveVisible() {
-    if (showingGrid && gridIds.isNotEmpty && !gridIds.contains(activeId)) {
+    if (gridEnabled && focusedGridId != null) {
+      activeId = focusedGridId;
+    } else if (showingGrid &&
+        gridIds.isNotEmpty &&
+        !gridIds.contains(activeId)) {
       activeId = gridIds.first;
     }
   }
