@@ -15,11 +15,11 @@ class WindowsUpdatePlatform implements UpdatePlatform {
   WindowsUpdatePlatform(this.abi);
   final Abi abi;
 
-  /// setup 按 ABI 选择，便携用户点击升级后也安装到当前目录。
+  /// 只发布 x64 setup；Windows ARM64 设备运行的是仿真 x64 版本（ABI 为 x64），
+  /// 原生 ARM64 开发构建没有对应安装包。便携用户点击升级后也安装到当前目录。
   @override
   String? assetName(String version) => switch (abi) {
     Abi.windowsX64 => 'Remlark-$version-windows-x64-setup.exe',
-    Abi.windowsArm64 => 'Remlark-$version-windows-arm64-setup.exe',
     _ => null,
   };
 

@@ -262,10 +262,10 @@
 - macOS CI 必须从两个证书 Secrets 导入固定自签身份到临时钥匙串；签名身份从导入证书自动读取 SHA-1 指纹，临时钥匙串密码随机生成，无需额外配置；缺失配置、导入或签名失败即阻止发布，不退回临时签名。`tools/release/macos_signing.py` 封装 Apple 系统工具，仅 macOS 调用；Windows / Linux 保持各自打包入口，不导入 Apple 凭据。
 - 签名顺序为嵌套 Mach-O / Framework → 主 App（保留 Release.entitlements）→ 重新生成 zip / DMG → 签 DMG；严格校验 App 全部架构与嵌套代码。自签不使用可信时间戳、不公证；工作流成功或失败均删除临时钥匙串并还原钥匙串搜索列表。固定自签身份不等于 Gatekeeper 默认信任，安装放行及隐私权限延续须实机验证。
 - `.github/workflows/release.yml` 在推送与 VERSION 中版本号一致的 `v*` 标签或手工指定已有标签后运行。
-- 手工运行默认仅验证构建（`build_only=true`），tag 留空时使用所选分支；与正式发布共用完整五路编译、安装包和构建后平台测试，跳过标签校验与发布任务。正式手工发布需指定版本标签并关闭 `build_only`。
-- 独立原生 runner 构建 Windows x64 / arm64、Linux x64 / arm64；macOS 构建包含 Intel / Apple Silicon 的通用 app、zip 与 DMG，发布前用 lipo 检查主程序与 FFI 库。
+- 手工运行默认仅验证构建（`build_only=true`），tag 留空时使用所选分支；与正式发布共用完整桌面四路编译、安装包和构建后平台测试，跳过标签校验与发布任务。正式手工发布需指定版本标签并关闭 `build_only`。
+- 独立原生 runner 构建 Windows x64、Linux x64 / arm64（Windows ARM64 桌面自 2026-10-26 起不再构建，ARM 设备仿真运行 x64 版）；macOS 构建包含 Intel / Apple Silicon 的通用 app、zip 与 DMG，发布前用 lipo 检查主程序与 FFI 库。
 - 每个 runner 顺序执行依赖准备、`make test-platform` 与构建，保留锁文件。Windows 安装器架构与 Flutter / MSVC 目标一致，附带对应架构 CRT。
-- 桌面五路与服务端六路任务通过且 16 个附件完整后生成 SHA256SUMS；先上传草稿再公开 Release。默认 token 只读，发布任务有 contents:write，清理任务仅额外授予 actions:write；中转包在流程结束后删除，仅构建不上传包。
+- 桌面四路与服务端六路任务通过且 14 个附件完整后生成 SHA256SUMS；先上传草稿再公开 Release。默认 token 只读，发布任务有 contents:write，清理任务仅额外授予 actions:write；中转包在流程结束后删除，仅构建不上传包。
 
 
 ## 统一版本来源
@@ -320,7 +320,7 @@
 - 点击升级后创建应用数据目录下独立暂存目录，按平台下载并用 GitHub digest 或同 Release 的 SHA256SUMS 校验 SHA-256 和大小；失败不启动安装、不退出当前应用。GitHub 下载仅允许固定仓库 API/Release 和 GitHub 附件 HTTPS 主机，重定向不继承 Authorization。
 - 安装由 `UpdatePlatform` 的三个实现生成独立助手。助手完成权限获取后写 ready，控制器写 commit，再复用 `AppServices.shutdown()` 关闭连接、子进程及数据库后退出。助手等原进程消失且存在 commit、没有 abort 才安装；等待超时和取消系统授权不能修改运行中的应用。退出流程幂等，防止系统退出和更新退出重复关闭数据库。
 - macOS：下载通用 `Remlark-macos.zip`，ditto 解包，验证签名与内嵌版本；拒绝磁盘镜像和 AppTranslocation 内的运行位置。在目标同级复制完整新 App，再备份旧 App、原位替换，提交失败回滚；不可写目录通过 AppleScript 系统管理员授权。非提权监督进程使用 open 重启应用。
-- Windows：选择 x64/arm64 setup.exe；助手等待进程退出，完整备份应用目录，再以 `/VERYSILENT /SUPPRESSMSGBOXES /SP- /NORESTART /NOCLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /DIR=原目录` 调用 Inno Setup。备份完整后才允许失败恢复，禁止用不完整备份覆盖原目录。不可写目录请求 UAC；监督进程以原用户重新启动应用。便携版通过安装器升级后会成为原目录下的安装版。
+- Windows：选择 x64 setup.exe（ARM64 设备运行的 x64 版 ABI 为 x64，原生 ARM64 构建无安装包）；助手等待进程退出，完整备份应用目录，再以 `/VERYSILENT /SUPPRESSMSGBOXES /SP- /NORESTART /NOCLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /DIR=原目录` 调用 Inno Setup。备份完整后才允许失败恢复，禁止用不完整备份覆盖原目录。不可写目录请求 UAC；监督进程以原用户重新启动应用。便携版通过安装器升级后会成为原目录下的安装版。
 - Linux：`/opt/remlark` 中经 dpkg-query 确认的系统安装使用对应 amd64/arm64 deb，并验证包名、版本，通过 polkit 授权后 dpkg 安装；包管理失败需按 dpkg 状态恢复，不声称可事务回滚包数据库。其他有效 bundle 使用便携 tar.gz，解压校验目录后同级复制、备份与交换，提交失败回滚；不可写父目录使用 polkit。应用以原用户、原安装目录为工作目录重启。
 - 安装结果及预期版本记录在本机更新状态；下一次启动必须确认实际版本一致才显示成功，失败保留恢复材料。成功启动后尽力清理暂存及对应备份；受保护目录中无法由普通用户删除的备份可能保留，需管理员回收。不自动回滚已经启动但随后崩溃的应用，不把该机制描述为完整启动健康监测。
 - 验证：网络与迁移见 `updates_test.dart`，升级串行/授权失败/退出失败/结果确认见 `update_upgrade_test.dart`，UI 见 `updates_ui_test.dart`，平台映射 P-18、安装脚本与 Git 凭据 P-19，系统授权/真实安装交互见 M-23。
@@ -372,9 +372,9 @@ macOS、Windows、Linux 共用的 FreeRDP 显示控制通道，必须先收到 `
 ### 发布前平台专项测试（Step 115/116）
 
 - `.github/workflows/test.yml` 独立处理 `test*` 标签及手动执行，按触发提交检出；不校验 Release 版本标签，不运行产品构建、签名、打包或发布，不上传中转产物。`v*` 继续由原有发布工作流处理。
-- 三平台各 x64/arm64 六路原生 runner 每路仅执行一次 `make test-platform`，不运行客户端全量、服务端或真实 dsh 安装测试，不安装服务端依赖及本地 sshd。锁定客户端依赖及 Flutter 版本，Windows 使用系统默认 PowerShell、POSIX 使用默认 shell；SDK 启动和覆盖摘要明确使用 bash。矩阵不提前取消，每路超时上限为 20 分钟。
+- macOS / Linux 各 x64/arm64 及 Windows x64 五路原生 runner 每路仅执行一次 `make test-platform`，不运行客户端全量、服务端或真实 dsh 安装测试，不安装服务端依赖及本地 sshd。锁定客户端依赖及 Flutter 版本，Windows 使用系统默认 PowerShell、POSIX 使用默认 shell；SDK 启动和覆盖摘要明确使用 bash。矩阵不提前取消，每路超时上限为 20 分钟。
 - 原生测试只读恢复与源码完全匹配的已有缓存；macOS ARM64 使用 Release 的 universal 缓存键。缺失时摘要明确指出原生/本地 RDP 服务相关用例的条件跳过，不编译原生依赖。小型测试夹具及测试程序仍按测试运行需要生成；正式发布的构建后强制原生验证保持独立。
-- P-25 验证触发方式、六路矩阵、只执行平台专项且排除其他测试套件、精确缓存与覆盖说明、禁止产品构建/上传/发布。运行方法见 `docs/build-environment.md`，平台差异和手工验证见多平台测试文档。
+- P-25 验证触发方式、五路矩阵（不含 Windows ARM64）、只执行平台专项且排除其他测试套件、精确缓存与覆盖说明、禁止产品构建/上传/发布。运行方法见 `docs/build-environment.md`，平台差异和手工验证见多平台测试文档。
 
 
 ### 单元测试是否覆盖运行应用的复核（Step 102）
@@ -389,7 +389,7 @@ macOS、Windows、Linux 共用的 FreeRDP 显示控制通道，必须先收到 `
 
 - 更新安装仍由 `UpdatePlatform` 接口分离 Windows、macOS 与 Linux 实现。脚本写入统一经过 `lib/utils/script_utils.dart`，显式使用 UTF-8 并指定是否携带 BOM，不依赖当前系统代码页。
 - Windows 的 `worker.ps1` 与 `launch.ps1` 均带 UTF-8 BOM，确保 PowerShell 5.1 能正确解析中文注释和 LF 换行。macOS / Linux 共用的 `worker.sh` 与 `launch.sh` 保持无 BOM，使 shebang 位于首字节。
-- P-19 在任意宿主检查 Windows x64/arm64 的生成脚本和 POSIX 共用脚本编码；Windows 额外使用 PowerShell 5.1 解析生成文件，并实际执行成功/失败安装路径。回滚用例必须确认假安装器已经运行、助手写入结果、旧文件恢复，不能只凭退出码 1 判定通过。
+- P-19 在任意宿主检查 Windows x64 的生成脚本和 POSIX 共用脚本编码；Windows 额外使用 PowerShell 5.1 解析生成文件，并实际执行成功/失败安装路径。回滚用例必须确认假安装器已经运行、助手写入结果、旧文件恢复，不能只凭退出码 1 判定通过。
 - Actions 保留构建前后 `make test-platform` 门禁，不跳过失败测试。三平台实际执行记录与未验证项目见多平台测试文档。
 
 ### Shell 样式重置兼容

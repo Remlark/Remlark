@@ -29,9 +29,9 @@ void main() {
     if (await root.exists()) await root.delete(recursive: true);
   });
 
-  test('P-19 Windows 两种架构生成带 BOM 的助手，PowerShell 5.1 可以解析', () async {
+  test('P-19 Windows 生成带 BOM 的助手，PowerShell 5.1 可以解析', () async {
     final target = await Directory(p.join(root.path, '安装目录')).create();
-    for (final abi in [Abi.windowsX64, Abi.windowsArm64]) {
+    for (final abi in [Abi.windowsX64]) {
       final stage = await Directory(p.join(root.path, '$abi')).create();
       await WindowsUpdatePlatform(abi).prepare(
         InstallContext(

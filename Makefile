@@ -4,7 +4,6 @@
 APP_NAME   := Remlark
 DIST_DIR   := dist
 SERVER_DIR := server
-WINDOWS_ARCH = $(if $(filter ARM64 arm64,$(PROCESSOR_ARCHITECTURE)),arm64,x64)
 LINUX_ARCH = $(if $(filter aarch64 arm64,$(shell uname -m)),arm64,x64)
 
 ifeq ($(OS),Windows_NT)
@@ -72,6 +71,9 @@ guard-linux:
 	python3 tools/utils/app_version.py guard linux
 
 guard-windows:
+ifeq ($(PROCESSOR_ARCHITECTURE),ARM64)
+	$(error Windows ARM64 桌面包已不再支持，请在 x64 机器上执行 make windows)
+endif
 	python3 tools/utils/app_version.py guard windows
 
 guard-run: guard-$(CURRENT)
@@ -89,9 +91,10 @@ linux: guard-linux deps native-lib
 	python3 linux/packaging/build.py --arch $(LINUX_ARCH) --output "$(DIST_DIR)"
 
 # Windows：生成安装向导 exe 与便携 zip（需要 Inno Setup 6.5+）
+# 桌面端只发布 x64：Flutter 不能在 ARM64 主机交叉编译 x64，guard-windows 在 ARM64 主机直接停止
 windows: guard-windows deps native-lib
 	python3 tools/utils/app_version.py flutter build windows --release
-	powershell -NoProfile -ExecutionPolicy Bypass -File windows/packaging/build.ps1 -Arch $(WINDOWS_ARCH) -OutputDir "$(DIST_DIR)"
+	powershell -NoProfile -ExecutionPolicy Bypass -File windows/packaging/build.ps1 -Arch x64 -OutputDir "$(DIST_DIR)"
 
 # 运行当前程序（当前平台）
 run: guard-run deps native-lib

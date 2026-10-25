@@ -2,13 +2,13 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// 多平台测试 P-25：发布前仅运行平台专项，覆盖六路且不构建或发布应用。
+/// 多平台测试 P-25：发布前仅运行平台专项，覆盖五路（Windows 仅 x64）且不构建或发布应用。
 void main() {
   final workflow = File('.github/workflows/test.yml')
       .readAsLinesSync()
       .join('\n');
 
-  test('test 前缀标签触发独立测试，六路平台均保留失败结果', () {
+  test('test 前缀标签触发独立测试，五路平台均保留失败结果', () {
     expect(workflow, contains("tags: ['test*']"));
     expect(workflow, contains('workflow_dispatch:'));
     expect(workflow, contains('fail-fast: false'));
@@ -16,12 +16,13 @@ void main() {
       'linux, arch: x64, runner: ubuntu-24.04',
       'linux, arch: arm64, runner: ubuntu-24.04-arm',
       'windows, arch: x64, runner: windows-2022',
-      'windows, arch: arm64, runner: windows-11-arm',
       'macos, arch: x64, runner: macos-15-intel',
       'macos, arch: arm64, runner: macos-15',
     ]) {
       expect(workflow, contains('platform: $entry }'));
     }
+    // 不再支持 Windows ARM64 桌面端，平台专项不再运行该路。
+    expect(workflow, isNot(contains('windows-11-arm')));
     // v 标签仍由独立发布工作流处理。
     expect(
       File('.github/workflows/release.yml').readAsStringSync(),

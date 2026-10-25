@@ -11,7 +11,7 @@ on:
         required: false
         type: string
       build_only:
-        description: '验证桌面五路及服务端六路构建与测试，不发布 Release；留空 tag 时构建所选分支'
+        description: '验证桌面四路及服务端六路构建与测试，不发布 Release；留空 tag 时构建所选分支'
         required: true
         default: true
         type: boolean
@@ -38,7 +38,6 @@ jobs:
           - { platform: linux, arch: x64, runner: ubuntu-24.04 }
           - { platform: linux, arch: arm64, runner: ubuntu-24.04-arm }
           - { platform: windows, arch: x64, runner: windows-2022 }
-          - { platform: windows, arch: arm64, runner: windows-11-arm }
           - { platform: macos, arch: universal, runner: macos-15 }
     runs-on: ${{ matrix.runner }}
     defaults:
@@ -152,7 +151,7 @@ jobs:
       - name: Build Windows installers
         if: runner.os == 'Windows'
         shell: pwsh
-        run: make windows WINDOWS_ARCH=${{ matrix.arch }}
+        run: make windows
       - name: Build macOS universal installer
         if: runner.os == 'macOS'
         run: |
