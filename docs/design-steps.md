@@ -939,4 +939,5 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 新增 `pick-runner` 任务，通过 `RUNNER_STATUS_TOKEN` 依次查询仓库级与组织级带 `remlark-macmini` 标签的 runner；在线（含忙碌）时桌面 macOS universal 与服务端 arm64 改用该 runner，离线、未配置令牌或 API 失败回退 `macos-15`，不让选择导致发布失败。服务端 x64 固定 `macos-15-intel`，Windows / Linux 不变。
   - GitHub REST 封装抽到 `tools/utils/actions_api.py`（含分页，支持仓库与组织范围），清理脚本与选择脚本共用。
   - 新增 P-31 与 M-34，build-environment.md 补充 Mac mini runner 配置、令牌权限与公开仓库安全限制。
+  - Flutter SDK 缓存：自托管 runner 每个任务清空 RUNNER_TEMP，导致每次重新下载 Flutter / Dart / 引擎；新增 `tools/utils/flutter_sdk.py`（复用 run_with_retry），自托管时安装到 RUNNER_TOOL_CACHE/flutter/<版本> 并以完成标记复用、半成品重装、升级删除旧版本，托管 runner 行为不变（RUNNER_TEMP 每次克隆）。P-28 新增 flutter_sdk_test.py 4 项。
   - 验证：本机 Intel macOS make test-platform 132 项通过、3 项条件跳过，P-31 / P-24 Python 检查通过，工作流 YAML 解析通过。尚未在 Actions 真实运行；自托管与回退路径按 M-34 验证，Windows / Linux 待执行 make test-platform。
