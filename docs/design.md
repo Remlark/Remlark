@@ -129,7 +129,7 @@
 - SSH 加密：dartssh2 使用内置副本（third_party/dartssh2，仅补丁 AES-GCM 后端可注入），AES-GCM 由原生库 native/ssh_crypto（静态链接 OpenSSL，硬件 AES 指令）经 Dart FFI 计算；原生库缺失时退回纯 Dart 加密并优先 chacha20-poly1305。SFTP 读写请求 64KB，传输进度通知限频 100ms。
   - 登录：保存的密码直接登录；未保存则弹框（可记住）；用户名或密码错误时重新弹框。
   - 证书：首次连接记录 SHA-256 指纹，之后指纹变化时警告并由用户决定是否信任。
-  - 显示：GDI 合成 BGRA 画面；图形管线支持 RemoteFX / Progressive / Planar 与 H.264（AVC420 / AVC444），H.264 经 FFmpeg 硬件解码（macOS VideoToolbox / Windows D3D11VA / Linux VAAPI，设备由 native/rdp/src/hwdec/ 的平台实现选择），硬件不可用时软件解码；设置 → 远程桌面中可关闭硬件解码（对新连接生效）；未设置固定分辨率时，远程分辨率随窗口大小动态调整（Display Control 通道）。
+  - 显示：GDI 合成 BGRA 画面；图形管线支持 RemoteFX / Progressive / Planar 与 H.264（AVC420 / AVC444），H.264 经 FFmpeg 硬件解码（macOS VideoToolbox / Windows D3D11VA / Linux VAAPI，设备由 native/rdp/src/hwdec/ 的平台实现选择），硬件不可用时软件解码；连接中每个表面的首个 H.264 命令会用实际码流校验硬件解码，硬件不支持该码流时本次会话自动改用软件解码；设置 → 远程桌面中可关闭硬件解码（对新连接生效）；未设置固定分辨率时，远程分辨率随窗口大小动态调整（Display Control 通道）。
   - 剪贴板：文本双向；本地复制的文件 / 目录可在远程粘贴（远程按需读取内容）；远程复制的文件下载到本地后写入系统剪贴板，可在本地粘贴。
   - 文件拖拽：拖入 RDP 画面的文件放入共享文件夹（远程 \\tsclient\Remlark）并写入远程剪贴板；服务端确认后在松手处单击激活窗口并发送 Ctrl+V，直接粘贴到松手处的文件夹或桌面。
   - 支持 HTTP / SOCKS5 出口代理；macOS 上 Command 键映射为 Ctrl，工具栏提供 Ctrl+Alt+Del 与 Windows 键。

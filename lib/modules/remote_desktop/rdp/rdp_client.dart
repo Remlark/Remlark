@@ -21,6 +21,7 @@ class RdpEvent {
   static const clipFilesSkipped = 9;
   static const clipFilesProgress = 10;
   static const clipReady = 11;
+  static const h264Software = 12;
 }
 
 /// RDP 鼠标标志位
@@ -147,6 +148,9 @@ class RdpClient {
   /// 服务端已确认本地剪贴板内容（[ok] 为 false 表示服务端拒绝）
   void Function(bool ok)? onClipboardReady;
 
+  /// 硬件解码不支持服务端的 H.264 视频流（[width]×[height] 为表面尺寸），本次会话已改用软件解码
+  void Function(int width, int height)? onH264Software;
+
   /// 分发原生事件
   static void _dispatch(int id, int type, int a, int b, int c, int d, Pointer<Utf8> str) {
     String? s;
@@ -185,6 +189,8 @@ class RdpClient {
         client.onClipboardFilesProgress?.call(a, b);
       case RdpEvent.clipReady:
         client.onClipboardReady?.call(a == 1);
+      case RdpEvent.h264Software:
+        client.onH264Software?.call(a, b);
     }
   }
 

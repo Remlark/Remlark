@@ -229,7 +229,12 @@ static void rmk_on_channel_connected(void* ctx, const ChannelConnectedEventArgs*
 		rdp->disp->DisplayControlCaps = rmk_display_control_caps;
 	}
 	else
+	{
 		freerdp_client_OnChannelConnectedEventHandler(ctx, e);
+		/* GDI 注册 GFX 回调之后再接管表面命令，用实际视频流校验硬件解码 */
+		if (strcmp(e->name, RDPGFX_DVC_CHANNEL_NAME) == 0)
+			rmk_h264_attach_gfx(rdp, (RdpgfxClientContext*)e->pInterface);
+	}
 }
 
 /* 断开显示通道时清除旧能力，避免下次连接提前发送布局。 */

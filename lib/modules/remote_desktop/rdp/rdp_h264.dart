@@ -58,6 +58,18 @@ class RdpH264Support {
     }
   }
 
+  /// 用实际视频流（Annex B，含 SPS / IDR）检查硬件解码，与连接中的回退判断相同：
+  /// 1 硬件可解码（或本就软件解码），0 硬件失败但软件成功，-1 都失败
+  static int streamCheck(Uint8List h264, int width, int height) {
+    final src = malloc<Uint8>(h264.length);
+    try {
+      src.asTypedList(h264.length).setAll(0, h264);
+      return rmk_rdp_h264_stream_check(src, h264.length, width, height);
+    } finally {
+      malloc.free(src);
+    }
+  }
+
   /// 平台硬件解码设备的显示名
   String get hwName => switch (hwType) {
     'videotoolbox' => 'VideoToolbox',

@@ -33,7 +33,8 @@ enum RmkEventType
 	RMK_EV_CLIP_FILES = 8,     /* 远程复制的文件已下载到本地 str=以 \n 分隔的本地路径 */
 	RMK_EV_CLIP_FILES_SKIPPED = 9, /* 远程复制的文件过大未下载 a=文件数 */
 	RMK_EV_CLIP_FILES_PROGRESS = 10, /* 远程文件下载进度 a=已完成 KB b=总 KB */
-	RMK_EV_CLIP_READY = 11     /* 服务端已确认本地剪贴板格式列表（此后远程粘贴可取到新内容） a=1 成功 / 0 失败 */
+	RMK_EV_CLIP_READY = 11,    /* 服务端已确认本地剪贴板格式列表（此后远程粘贴可取到新内容） a=1 成功 / 0 失败 */
+	RMK_EV_H264_SOFTWARE = 12  /* 硬件解码不支持服务端的 H.264 视频流，本次会话改用软件解码 a=表面宽 b=表面高 */
 };
 
 /* 事件回调：str 为 malloc 分配的字符串（可能为 NULL），使用后需调用 rmk_rdp_free_string 释放 */
@@ -109,6 +110,11 @@ RMK_API const char* rmk_rdp_h264_hw_type(void);
  * hardware 非 0 且探测到硬件可用时使用平台硬件解码（与连接时的选择一致），否则软件解码。返回值 >= 0 表示成功，供多平台测试使用 */
 RMK_API int32_t rmk_rdp_h264_self_test(const uint8_t* data, int32_t size, int32_t width,
                                        int32_t height, int32_t hardware, uint8_t* bgra);
+
+/* 用实际视频流（Annex B，含 SPS / IDR）检查硬件解码，与连接中表面首个 H.264 命令的处理相同：
+ * 返回 1 硬件可解码（或硬件不可用、本就软件解码），0 硬件解码失败但软件解码成功（会话将改用软件解码），-1 都失败 */
+RMK_API int32_t rmk_rdp_h264_stream_check(const uint8_t* data, int32_t size, int32_t width,
+                                          int32_t height);
 
 /* FreeRDP 版本 */
 RMK_API const char* rmk_rdp_version(void);

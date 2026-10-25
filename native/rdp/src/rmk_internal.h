@@ -5,6 +5,7 @@
 #include <freerdp/freerdp.h>
 #include <freerdp/client.h>
 #include <freerdp/client/cliprdr.h>
+#include <freerdp/client/rdpgfx.h>
 #include <freerdp/client/disp.h>
 #include <winpr/synch.h>
 #include <winpr/thread.h>
@@ -49,6 +50,11 @@ struct rmk_rdp
 	BOOL clipboard_enabled;
 	BOOL hwdec_enabled; /* 是否允许 H.264 硬件解码（用户设置，默认允许） */
 
+	/* H.264 实际视频流校验（rmk_h264.c）：包装前的 GFX 表面命令处理函数，与已校验通过的表面尺寸 */
+	pcRdpgfxSurfaceCommand gfx_surface_command;
+	UINT32 h264_verified_width;
+	UINT32 h264_verified_height;
+
 	/* 出口代理 */
 	UINT32 proxy_type;
 	char* proxy_host;
@@ -79,6 +85,8 @@ void rmk_emit(RmkRdp* rdp, int32_t type, int32_t a, int32_t b, int32_t c, int32_
 /* H.264 模块（rmk_h264.c）：探测解码能力（结果缓存）并按结果配置连接参数 */
 int32_t rmk_h264_caps(void);
 BOOL rmk_h264_apply(rdpSettings* settings, BOOL hw_enabled);
+/* GFX 通道建立后接管表面命令：硬件解码不支持实际视频流时整个会话改用软件解码 */
+void rmk_h264_attach_gfx(RmkRdp* rdp, RdpgfxClientContext* gfx);
 
 /* 剪贴板模块 */
 RmkClipboard* rmk_clip_new(RmkRdp* rdp);

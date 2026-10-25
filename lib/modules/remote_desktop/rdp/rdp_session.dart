@@ -243,6 +243,9 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
     };
     c.onFrame = notifyListeners;
     c.onResize = (_, _) => notifyListeners();
+    // 原生库已自动回退，只记录日志便于排查（例如 Intel Mac 的 VideoToolbox 拒绝部分 1080p 视频流）
+    c.onH264Software = (w, h) =>
+        AppLog.w('rdp', 'H.264 硬件解码不支持服务端 $w×$h 视频流，本次会话改用软件解码');
     c.onDisconnected = (code, msg) {
       if (_client != c) return;
       if (!done.isCompleted) {

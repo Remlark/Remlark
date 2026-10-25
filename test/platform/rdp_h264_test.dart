@@ -108,6 +108,24 @@ void main() {
     expect(rdp, isNot(contains('FreeRDP_GfxAVC444, FALSE')));
   });
 
+  test('连接中用实际视频流校验硬件解码，失败时整个会话改用软件解码', () {
+    final rdp = src('native/rdp/src/remlark_rdp.c');
+    final h264 = src('native/rdp/src/rmk_h264.c');
+    // GDI 注册 GFX 回调之后再接管表面命令
+    final handler = rdp.indexOf('freerdp_client_OnChannelConnectedEventHandler(ctx, e);\n\t\t/*');
+    expect(handler, greaterThanOrEqualTo(0));
+    expect(rdp.indexOf('rmk_h264_attach_gfx(rdp, (RdpgfxClientContext*)e->pInterface)'), greaterThan(handler));
+    // 包装 SurfaceCommand，在 FreeRDP 创建表面解码器之前校验，使用命令自身的更新区域（表面高度按 16 对齐）
+    expect(h264, contains('gfx->SurfaceCommand = rmk_gfx_surface_command;'));
+    expect(h264, contains('surface->h264'));
+    expect(h264, contains('bs->meta.regionRects, bs->meta.numRegionRects'));
+    expect(h264, contains('freerdp_settings_set_bool(settings, FreeRDP_SoftwareGdi, TRUE)'));
+    // 回退事件编号与 Dart 一致，会话记录日志
+    expect(src('native/rdp/src/remlark_rdp.h'), contains('RMK_EV_H264_SOFTWARE = 12'));
+    expect(src('lib/modules/remote_desktop/rdp/rdp_client.dart'), contains('static const h264Software = 12;'));
+    expect(src('lib/modules/remote_desktop/rdp/rdp_session.dart'), contains('c.onH264Software ='));
+  });
+
   test('原生库探测：编入 H.264 解码器，设备类型与当前平台一致', () {
     if (!RdpClient.isAvailable) {
       markTestSkipped('RDP 原生库未编译（make rdp-lib）');
@@ -194,6 +212,18 @@ void main() {
       }
       expect(RdpH264Support.selfTest(Uint8List(0), w, h, hardware: true), isNull);
       expect(RdpH264Support.selfTest(Uint8List.fromList(List.filled(64, 7)), w, h, hardware: true), isNull);
+    });
+
+    test('实际视频流校验：可解码的码流不回退，无效码流不误判为硬件故障', () {
+      if (!RdpClient.isAvailable) {
+        markTestSkipped('RDP 原生库未编译（make rdp-lib）');
+        return;
+      }
+      // 硬件可用时硬件解码成功；硬件不可用时本就软件解码，同样返回 1
+      expect(RdpH264Support.streamCheck(frame, w, h), 1);
+      // 软件也解码失败说明是数据问题，不能据此关闭硬件解码
+      expect(RdpH264Support.streamCheck(Uint8List.fromList(List.filled(64, 7)), w, h), -1);
+      expect(RdpH264Support.streamCheck(Uint8List(0), w, h), -1);
     });
   });
 }

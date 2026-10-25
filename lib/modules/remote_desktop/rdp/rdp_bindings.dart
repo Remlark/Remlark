@@ -141,6 +141,11 @@ external int rmk_rdp_h264_self_test(
   Pointer<Uint8> bgra,
 );
 
+/// 用实际视频流检查硬件解码（与连接中表面首个 H.264 命令的处理相同）：
+/// 1 硬件可解码（或本就软件解码），0 硬件失败但软件成功（会话改用软件解码），-1 都失败
+@Native<Int32 Function(Pointer<Uint8>, Int32, Int32, Int32)>()
+external int rmk_rdp_h264_stream_check(Pointer<Uint8> data, int size, int width, int height);
+
 /// 当前平台使用的硬件解码设备类型：videotoolbox / d3d11va / vaapi
 @Native<Pointer<Utf8> Function()>()
 external Pointer<Utf8> rmk_rdp_h264_hw_type();

@@ -918,3 +918,9 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 新增中英文真实布局菜单测试，检查关闭/新开后两列画布坐标、聚焦按钮及返回网格，并验证 VNC 视图 State 没有重建。复用测试工具放入 test/utils。
   - 本次只修改共用 Dart 状态与标签排序回调，无新增平台分支或界面文案；测试使用未连接会话，真实远程连接和三平台实机交互不计入验证结论。
   - 验证：工作区布局、状态矩阵、中英文菜单、开始页及全应用布局回归共 73 项全部通过（含 1,600 步连续操作）；相关 Dart 静态分析和 diff 检查通过。
+
+- [已完成] Step 133：修复硬件解码不支持服务端 H.264 视频流时 RDP 白屏
+  - 现象：Intel iMac 用 Remlark 连接 Mac mini 上的 ProRDP 服务白屏，Windows App 正常。连接成功、首帧尺寸正确，但 VideoToolbox 无法为服务端的 High 档次 Level 5.0 1080p 码流创建会话（内置 320×240 探测帧可正常硬解），FreeRDP 3.32.2 的 get_format 在硬件初始化失败后不回退软件格式，所有 AVC420 更新被丢弃。
+  - 修复：rmk_h264.c 在 GFX 通道建立后包装 SurfaceCommand，每个表面首个 H.264 命令到达、FreeRDP 尚未创建解码器时，用该命令的实际码流和更新区域试解码；硬件失败而软件成功则打开 SoftwareGdi，该表面及后续表面改用软件解码，同尺寸表面校验通过后不重复校验。软件也失败视为数据问题，不改变解码方式。
+  - 新增 RMK_EV_H264_SOFTWARE 事件，Dart 记录警告日志，界面不变；新增 rmk_rdp_h264_stream_check 接口供测试。三平台共用同一胶水代码，D3D11VA / VAAPI 拒绝码流时同样回退。
+  - 验证：用应用保存的配置真实连接 ProRDP，修复前硬解路径整帧白色、软解正常；修复后开启硬解时自动回退，画面与软解一致；重新运行应用后实际连接 ProRDP 显示正常（用户确认）。P-11 新增 2 项通过，macOS make test-platform 130 项通过、3 项条件跳过；x86_64 / arm64 原生库编译通过，Dart 静态检查通过。Windows / Linux 待在对应系统执行 make test-platform。
