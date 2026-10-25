@@ -92,7 +92,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-07 | [runtime_lifecycle_test.dart](../test/platform/runtime_lifecycle_test.dart) | 实际启动 Dart 子进程；重新初始化后写入新日志目录，关闭后目录可删除 | 同步测试启动、日志句柄生命周期 |
 | P-08 | [windows_packaging_test.dart](../test/platform/windows_packaging_test.dart) | 三平台打包与启动入口；Windows VS 2022 / 2026 CRT 查找、按架构运行库、当前用户安装、数据保留与 BOM；实际暂存应用和 VC++ 运行库，覆盖中文空格路径、缺少原生库 / CRT 时终止；无 Make 启动参数与 PowerShell 解析 | Windows 安装器、开发启动与分发完整性 |
 | P-09 | [linux_packaging_test.dart](../test/platform/linux_packaging_test.dart) | 三平台保留独立打包入口；Linux x64 / arm64 架构命名；禁用无用 JNI；实际运行打包脚本，缺少原生库时立即终止；在中文、空格、引号、反斜线、% 等路径中实际注册桌面入口并用 GIO 启动 | Linux 安装器与分发完整性 |
-| P-10 | [release_workflow_test.dart](../test/platform/release_workflow_test.dart) | 手工默认仅构建、正式标签仍发布，三个平台构建后强制加载原生库并重跑平台测试；配置读取兼容 CRLF / LF；拒绝错误版本标签、缺失附件时阻止发布、完整双架构矩阵生成正确 SHA-256 清单 | 自动发布与仅构建验证 |
+| P-10 | [release_workflow_test.dart](../test/platform/release_workflow_test.dart) | 手工默认仅构建、正式标签仍发布，三个平台构建后强制加载原生库并重跑平台测试；配置读取兼容 CRLF / LF；拒绝错误版本标签、缺失附件时阻止发布、完整双架构矩阵生成正确 SHA-256 清单；macOS 用真实 clang 产物验证 verify_universal 逐个架构校验（兼容 Xcode 27 lipo） | 自动发布与仅构建验证 |
 | P-11 | [rdp_h264_test.dart](../test/platform/rdp_h264_test.dart) | 三个平台都有硬件解码实现且设备类型正确，CMake 按平台选择；FFmpeg 只编译 H.264 解码器并按平台开启硬件加速，Windows 用 MSVC /MT 编译；FreeRDP 开启 FFmpeg 硬件解码；连接参数不再强制关闭 H.264，设置中的硬件解码开关传到原生库；原生库内置探测帧与测试资源一致；已编译原生库时：编入解码器、设备类型与当前平台一致，macOS 上 VideoToolbox 必须可用（Windows / Linux 取决于显卡，CI 无显卡时为软件解码），并用与连接相同的 FreeRDP AVC420 流程实际解码 [h264_320x240.h264](../test/platform/fixtures/h264_320x240.h264)：软件解码、硬件解码（不可用时为软件解码）的左右两半颜色都正确；平坦区域逐像素 RGB 差不超过 4，双色交界两侧各 2 像素的色度插值差不超过 64，输出差异列供核对，无效数据返回失败不崩溃 ；连接中接管 GFX 表面命令并用实际视频流校验硬件解码，失败时会话改用软件解码（K-24），回退事件编号与 Dart 一致；实际码流校验接口对可解码帧返回 1、无效数据返回 -1（不误判为硬件故障）| RDP H.264 硬件解码 |
 | P-12 | [rdp_live_test.dart](../test/platform/rdp_live_test.dart) | 显式指定已授权的已保存 RDP 配置，默认跳过；通过 ORM 索引只读配置；测试硬解开关两种模式的真实认证、首帧、键盘触发更新，保存实际解码 PNG；通过 GDI TRACE 日志另行确认实际编码，不能用连接成功代替 H.264 / GPU 验证 | 真实 RDP、M-05 / M-17 部分验证 |
 
@@ -577,3 +577,9 @@ Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过�
 - 测试：P-10（桌面无 windows-11-arm、服务端保留、14 个附件且不含桌面 ARM64 包）、P-25（五路且无 windows-11-arm）、P-18（ARM64 返回 null）、P-19（仅 x64）、windows_packaging（无 arm64 安装器分支、只接受 x64、Makefile ARM64 停止）。本机 Intel macOS make test-platform 130 项通过、3 项条件跳过；`make -n guard-windows PROCESSOR_ARCHITECTURE=ARM64` 实际停止并提示。Windows x64 待 CI 执行。
 - 补充（同日）：windows_packaging_test.dart 的 3 项 Windows 专属打包测试仍传 `-Arch arm64`，macOS 本机因 `if (!Platform.isWindows) return;` 未注册而未发现，Windows x64 CI 失败；已改为 x64 并新增 ARM64 参数被拒绝检查，待 Windows CI 验证。教训：修改脚本参数后须检索全部调用处，并明确说明哪些 Windows 专属测试本机未执行。
 - Release 的 macOS 构建依赖增加 pkgconf，覆盖未预装 pkg-config 的自托管 Mac。
+
+### 2026-10-26 Xcode 27 的 lipo 只接受单个 -verify_arch 架构（Step 138）
+
+- 现象：Mac mini（Xcode 27.1）上 Release 在 `prepare.py macos` 失败：`lipo <文件> -verify_arch x86_64 arm64` 报「-verify_arch requires exactly one input file」，多出的架构被当成输入文件；GitHub macos-15 的旧 Xcode 不受影响。
+- 修复：`tools/release/prepare.py` 新增 `verify_universal`，对 x86_64、arm64 分别执行单架构校验，缺少时报出具体架构；主程序和两个 FFI 库都使用它。单架构写法新旧 lipo 均支持。
+- 测试：P-10 新增 macOS 专属用例，用 clang 编译真实 universal 与仅 arm64 的二进制调用 `verify_universal`。本机 Xcode 26.4 通过；同一函数已拷贝到 Mac mini 在 Xcode 27.1 实测，universal 返回 0、仅 arm64 报缺少 x86_64。
