@@ -17,6 +17,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 ## 维护规则
 
 - 启动外部进程的平台测试文件统一在文件头声明 `@Timeout(Duration(minutes: 3))`，ARM runner 进程启动慢，不能依赖默认 30 秒；启动 Windows PowerShell 5.1 必须使用 [windows_powershell.dart](../test/utils/windows_powershell.dart) 的环境，避免继承 pwsh 7 的模块路径。
+- 读取仓库源码/配置做文本断言时，断言片段含换行（`\n`）就必须使用 [source_text.dart](../test/utils/source_text.dart) 的 `readSourceText` 统一 LF；Windows runner 的 git 默认 autocrlf 检出为 CRLF，直接 `readAsStringSync` 只会在 Windows 失败。
 - 新增或修改与平台有关的功能时（`Platform.isXxx`、`defaultTargetPlatform`、`Process.run`/`Process.start` 调用系统命令、FFI 原生库、MethodChannel、平台工程目录 `macos/` `windows/` `linux/` 下的原生代码、按平台区分的快捷键或路径），必须同时完成以下三件事：
   1. 在[平台差异总览](#1-平台差异总览)中加一行或更新对应行；
   2. 在 `test/platform/` 下加单元测试（或扩展已有测试），给测试分配新的 P 编号，文件头注释写上“多平台测试 P-xx”，并登记到[单元测试](#2-单元测试test-platform)表中；
@@ -555,3 +556,10 @@ Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过�
 - 新增 P-30，对三平台产品属性、应用包/可执行文件、桌面入口和打包签名路径进行精确大小写检查；P-18/P-19、打包、发布及构建保护测试同步使用新名称。
 - 本机 macOS make test-platform 128 项通过、3 条件跳过（14 秒），包括真实隔离 App 的签名/解包/替换；相关 Dart 静态检查与 diff 检查通过。测试日志 `/tmp/remlark-name-platform.log`。
 - Windows/Linux 尚未执行本轮 make test-platform；三平台真实产品重新打包、旧应用覆盖安装和显示名称按 M-33 验证。旧版客户端需手动下载安装这次新版，后续新版更新器使用大写附件名。未提交、推送或触发远端 CI，未修改已安装应用。
+
+### 2026-10-25 Windows CRLF 检出导致 P-30 / P-11 误报（Step 134）
+
+- 现象：Windows x64 Release 的 make test-platform 中 P-30「Linux 区分大小写的桌面入口」与 P-11「实际视频流校验硬件解码」失败。两项均为 1.0.3 之后新增（Step 130、133），此前只在 macOS 执行。
+- 原因：断言片段含 `\n`（`Exec=Remlark\n`、`OnChannelConnectedEventHandler(ctx, e);\n\t\t/*`），Windows 检出为 CRLF 后不匹配；产品代码与安装包不受影响。
+- 修复：新增 `test/utils/source_text.dart`，两项测试改用统一 LF 的读取，并在维护规则中要求含换行的源码断言使用该函数。
+- 验证：本机把相关源文件转为 CRLF，修复前精确复现这 2 项失败，修复后 13 项全部通过；本机 Intel macOS make test-platform 130 项通过、3 项条件跳过。Windows / Linux 待 CI 重新执行。

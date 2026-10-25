@@ -924,3 +924,8 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 修复：rmk_h264.c 在 GFX 通道建立后包装 SurfaceCommand，每个表面首个 H.264 命令到达、FreeRDP 尚未创建解码器时，用该命令的实际码流和更新区域试解码；硬件失败而软件成功则打开 SoftwareGdi，该表面及后续表面改用软件解码，同尺寸表面校验通过后不重复校验。软件也失败视为数据问题，不改变解码方式。
   - 新增 RMK_EV_H264_SOFTWARE 事件，Dart 记录警告日志，界面不变；新增 rmk_rdp_h264_stream_check 接口供测试。三平台共用同一胶水代码，D3D11VA / VAAPI 拒绝码流时同样回退。
   - 验证：用应用保存的配置真实连接 ProRDP，修复前硬解路径整帧白色、软解正常；修复后开启硬解时自动回退，画面与软解一致；重新运行应用后实际连接 ProRDP 显示正常（用户确认）。P-11 新增 2 项通过，macOS make test-platform 130 项通过、3 项条件跳过；x86_64 / arm64 原生库编译通过，Dart 静态检查通过。Windows / Linux 待在对应系统执行 make test-platform。
+
+- [已完成] Step 134：修复 Windows CRLF 检出导致的平台测试误报
+  - Windows x64 上 P-30 Linux 桌面入口检查与 P-11 H.264 回退源码检查失败，原因是断言片段含换行而 Windows 检出为 CRLF；产品代码无问题。
+  - 新增 test/utils/source_text.dart 的 readSourceText 统一 LF，两项测试改用它；multi-platform-testing.md 维护规则补充含换行断言的要求。
+  - 验证：本机将相关源文件转为 CRLF，修复前复现 2 项失败、修复后通过；macOS make test-platform 130 项通过、3 项条件跳过。Windows / Linux 待 CI 重新执行。
