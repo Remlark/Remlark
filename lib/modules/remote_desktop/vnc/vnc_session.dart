@@ -41,6 +41,8 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
   /// RFB 客户端（协议与解码运行在后台 isolate）
   RfbIsolateClient? client;
   Timer? _clipTimer;
+  int _connectionGeneration = 0;
+  RfbIsolateClient? _connectingClient;
 
   /// 远程是否锁屏（经关联 SSH 主机查询；未知为 null）。锁屏时画面可能仍显示锁屏前的桌面，但输入由锁屏界面接收
   bool? remoteLocked;
@@ -84,6 +86,8 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
 
   /// 连接
   Future<void> connect() async {
+    final generation = ++_connectionGeneration;
+    _connectingClient?.close();
     setState(SessionState.connecting);
     var password = host.savePassword ? host.password : null;
     var username = host.username;
@@ -91,7 +95,9 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
     // 服务器是否要求 macOS 账户认证（需要用户名 + 密码）
     var needUsername = false;
     for (var attempt = 0; attempt < 5; attempt++) {
+      if (generation != _connectionGeneration) return;
       final c = RfbIsolateClient();
+      _connectingClient = c;
       try {
         await c.connect(
           host.address,
@@ -99,6 +105,11 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
           username: username,
           password: password,
         );
+        if (generation != _connectionGeneration) {
+          c.close();
+          return;
+        }
+        _connectingClient = null;
         client = c;
         _sessionPassword = password;
         _bind(c);
@@ -116,15 +127,18 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
         AppLog.w('vnc', '认证失败：${e.message}');
       } catch (e, st) {
         c.close();
+        if (generation != _connectionGeneration) return;
         AppLog.e('vnc', '连接失败', e, st);
         setState(SessionState.failed, error: '$e');
         return;
       }
+      if (generation != _connectionGeneration) return;
       final input = await _vncUi.askDesktopPassword(
         host,
         error: err,
         askUsername: needUsername,
       );
+      if (generation != _connectionGeneration) return;
       if (input == null) {
         AppLog.i('vnc', '用户取消输入凭据');
         setState(SessionState.failed, error: 'cancelled');
@@ -149,6 +163,7 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
     setState(SessionState.failed, error: err);
   }
 
+  /// 绑定当前客户端的画面、剪贴板和断开事件。
   void _bind(RfbIsolateClient c) {
     cursor = null;
     clipboard.start();
@@ -180,6 +195,7 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
     };
     c.onClipboard = clipboard.onRemoteText;
     c.onClosed = (e) {
+      if (client != c) return;
       _clipTimer?.cancel();
       _lockTimer?.cancel();
       clipboard.stop();
@@ -457,6 +473,9 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
 
   @override
   Future<void> reconnect() async {
+    ++_connectionGeneration;
+    _connectingClient?.close();
+    _connectingClient = null;
     _clipTimer?.cancel();
     _lockTimer?.cancel();
     clipboard.stop();
@@ -468,6 +487,9 @@ class VncSession extends WorkspaceTab implements RemoteDisplay {
 
   @override
   Future<void> close() async {
+    ++_connectionGeneration;
+    _connectingClient?.close();
+    _connectingClient = null;
     state = SessionState.disconnected;
     _clipTimer?.cancel();
     _lockTimer?.cancel();

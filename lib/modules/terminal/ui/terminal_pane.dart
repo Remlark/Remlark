@@ -134,7 +134,7 @@ class _TerminalPaneState extends State<TerminalPane> {
     if (text != null && text.isNotEmpty) s.pasteText(text);
   }
 
-  /// 右键菜单：复制选区、粘贴（剪贴板为文件时显示为“粘贴并上传”）
+  /// 右键菜单：复制、粘贴及恢复后续输出的文字格式。
   Future<void> _contextMenu(Offset pos) async {
     // 先记下选区，避免弹出菜单期间选区变化
     final selected = s.selectedText();
@@ -163,6 +163,13 @@ class _TerminalPaneState extends State<TerminalPane> {
         shortcut: _isApple ? '⌘V' : 'Ctrl+Shift+V',
         enabled: connected && (files.isNotEmpty || hasText),
       ),
+      const AppMenuDivider(),
+      AppMenuItem(
+        value: 'reset_text_style',
+        label: context.tr('terminal.reset_text_style'),
+        icon: Icons.settings_backup_restore,
+        description: context.tr('terminal.reset_text_style.desc'),
+      ),
     ]);
     if (!mounted) return;
     switch (r) {
@@ -172,6 +179,8 @@ class _TerminalPaneState extends State<TerminalPane> {
         UiUtils.toast(context.tr('common.copied'));
       case 'paste':
         await _paste();
+      case 'reset_text_style':
+        s.resetTextStyle();
     }
     _focus.requestFocus();
   }

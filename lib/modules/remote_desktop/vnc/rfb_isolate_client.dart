@@ -21,6 +21,7 @@ class RfbIsolateClient {
   SendPort? _toWorker;
   ReceivePort? _fromWorker;
   Completer<void>? _connected;
+  Completer<void>? _ready;
   final List<FrameUpdate> _frames = [];
   bool _closed = false;
 
@@ -41,12 +42,22 @@ class RfbIsolateClient {
 
   /// 连接并完成握手（在后台 isolate 中进行）；异常与 [RfbClient.connect] 一致
   Future<void> connect(String host, int port, {String? username, String? password}) async {
+    if (_closed) throw StateError('VNC connection cancelled');
     final rp = ReceivePort();
     _fromWorker = rp;
     final ready = Completer<void>();
+    _ready = ready;
     _connected = Completer<void>();
+    // spawn 尚未返回也可能关闭标签；提前接住取消错误，后续 await 仍会抛出。
+    ready.future.ignore();
+    _connected!.future.ignore();
     rp.listen((m) => _onMessage(m as List<Object?>, ready));
-    _isolate = await Isolate.spawn(rfbWorkerMain, rp.sendPort, debugName: 'rfb-$host');
+    final isolate = await Isolate.spawn(rfbWorkerMain, rp.sendPort, debugName: 'rfb-$host');
+    if (_closed) {
+      isolate.kill(priority: Isolate.immediate);
+      throw StateError('VNC connection cancelled');
+    }
+    _isolate = isolate;
     await ready.future;
     _toWorker!.send(['connect', host, port, username, password]);
     await _connected!.future;
@@ -144,13 +155,19 @@ class RfbIsolateClient {
     _shutdown();
   }
 
+  /// 完成取消等待，通知后台释放网络资源，再兜底结束 isolate。
   void _shutdown() {
+    final connecting = _connected?.isCompleted == false;
+    final cancelled = StateError('VNC connection cancelled');
+    if (_ready?.isCompleted == false) _ready!.completeError(cancelled);
+    if (connecting) _connected!.completeError(cancelled);
     if (!_closed) _toWorker?.send(const ['close']);
     _closed = true;
     _fromWorker?.close();
     // 后台收到 close 后自行退出；兜底在稍后强制结束
     final iso = _isolate;
     _isolate = null;
+    // 先让后台关闭 socket；直接 kill isolate 不保证立即释放网络句柄。
     if (iso != null) Timer(const Duration(seconds: 2), iso.kill);
   }
 }
@@ -169,7 +186,12 @@ Future<void> rfbWorkerMain(SendPort toUi) async {
       worker.close();
       break;
     }
-    await worker.handle(msg);
+    // 建连不能阻塞消息循环，否则握手等待/退避期间无法处理关闭请求。
+    if (msg[0] == 'connect') {
+      unawaited(worker.handle(msg));
+    } else {
+      await worker.handle(msg);
+    }
   }
   fromUi.close();
 }

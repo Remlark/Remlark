@@ -9,6 +9,13 @@ import 'package:xterm/xterm.dart';
 class ReflowSafeTerminal extends Terminal {
   ReflowSafeTerminal({super.maxLines});
 
+  /// xterm 4.x 将 SGR 22 只映射到此方法；正常字重应同时关闭粗体和淡化。
+  @override
+  void unsetCursorFaint() {
+    super.unsetCursorFaint();
+    super.unsetCursorBold();
+  }
+
   /// 调整终端尺寸，并按锚点修正主缓冲区的光标位置
   @override
   void resize(int newWidth, int newHeight, [int? pixelWidth, int? pixelHeight]) {

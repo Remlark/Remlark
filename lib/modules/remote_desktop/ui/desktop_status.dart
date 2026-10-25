@@ -15,6 +15,7 @@ class DesktopStatus extends StatelessWidget {
     'cancelled' => context.tr('terminal.cancelled'),
     'wrong_password' => context.tr('ssh.error.wrong_password'),
     'rdp.lib_missing' => context.tr('rdp.lib_missing'),
+    'desktop.connect_timeout' => context.tr('desktop.connect_timeout'),
     null => context.tr('terminal.disconnected'),
     _ => error,
   };

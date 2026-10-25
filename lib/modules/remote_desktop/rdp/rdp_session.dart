@@ -8,12 +8,14 @@ import 'package:path/path.dart' as p;
 
 import '../../../utils/app_log.dart';
 import '../../../utils/platform_utils.dart';
+import '../../../utils/network/connect_retry.dart';
 import '../../hosts/host_model.dart';
 import '../../hosts/host_repository.dart';
 import '../../workspace/workspace_tab.dart';
 import '../remote_desktop_interaction.dart';
 import '../remote_display.dart';
 import 'rdp_client.dart';
+import 'rdp_connect_error.dart';
 import 'rdp_h264.dart';
 import 'rdp_scancode.dart';
 
@@ -28,7 +30,22 @@ enum RdpNotice { filesTooLarge }
 /// 负责登录流程（保存的密码 / 弹框输入 / 密码错误重试）、证书指纹校验、
 /// 键鼠输入、动态分辨率、剪贴板（文本与文件双向）与共享文件夹传输。
 class RdpSession extends WorkspaceTab implements RemoteDisplay {
-  RdpSession(super.host, this._hosts, this._ui);
+  RdpSession(
+    super.host,
+    this._hosts,
+    this._ui, {
+    this.createClient,
+    this.connectionTimeout = const Duration(seconds: 60),
+  });
+
+  /// 测试可注入客户端，生产环境使用原生实现。
+  final RdpClient Function()? createClient;
+
+  /// 每轮网络重试共用的预算，不包含用户输入凭据与确认的时间。
+  final Duration connectionTimeout;
+  int _connectionGeneration = 0;
+  int _attemptGeneration = 0;
+  void Function()? _cancelAttempt;
 
   final HostRepository _hosts;
   final RemoteDesktopInteraction _ui;
@@ -71,8 +88,10 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
 
   /// 连接
   Future<void> connect() async {
+    final generation = ++_connectionGeneration;
+    _cancelAttempt?.call();
     setState(SessionState.connecting);
-    if (!RdpClient.isAvailable) {
+    if (createClient == null && !RdpClient.isAvailable) {
       libraryMissing = true;
       setState(SessionState.failed, error: 'rdp.lib_missing');
       return;
@@ -89,8 +108,10 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
     );
 
     for (var attempt = 0; attempt < 5; attempt++) {
+      if (generation != _connectionGeneration) return;
       if (password == null || password.isEmpty) {
         final input = await _ui.askDesktopPassword(host, error: error);
+        if (generation != _connectionGeneration) return;
         if (input == null) {
           setState(SessionState.failed, error: 'cancelled');
           return;
@@ -102,7 +123,35 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
         'rdp',
         '连接「${host.name}」${host.endpoint}（第 ${attempt + 1} 次，${RdpH264Support.probe().describe(hardwareDecode: hardwareDecode)}）',
       );
-      final (result, detail) = await _attempt(password);
+      late final (_Attempt, String?) outcome;
+      try {
+        outcome = await ConnectRetry.run(
+          (remaining) => _attempt(password!, generation).timeout(
+            remaining,
+            onTimeout: () {
+              if (generation == _connectionGeneration) {
+                _cancelAttempt?.call();
+                _disposeClient();
+              }
+              throw TimeoutException('RDP connection timed out');
+            },
+          ),
+          timeout: connectionTimeout,
+          retryIf: (error) => error is RdpConnectError && error.retryable,
+          isCancelled: () => generation != _connectionGeneration,
+        );
+      } catch (e, st) {
+        if (generation != _connectionGeneration) return;
+        _disposeClient();
+        AppLog.e('rdp', '连接「${host.name}」失败', e, st);
+        setState(
+          SessionState.failed,
+          error: e is TimeoutException ? 'desktop.connect_timeout' : '$e',
+        );
+        return;
+      }
+      if (generation != _connectionGeneration) return;
+      final (result, detail) = outcome;
       AppLog.i('rdp', '连接结果 ${result.name}${detail == null ? '' : '：$detail'}');
       switch (result) {
         case _Attempt.connected:
@@ -114,6 +163,7 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
               protocol: host.protocol,
             );
           }
+          if (generation != _connectionGeneration) return;
           unawaited(_hosts.touchConnected(host.uuid));
           _startClipboardSync();
           return;
@@ -126,6 +176,7 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
             _fingerprint ?? '',
             detail ?? '',
           );
+          if (generation != _connectionGeneration) return;
           if (!ok) {
             setState(SessionState.failed, error: 'cancelled');
             return;
@@ -145,8 +196,9 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
   }
 
   /// 进行一次连接，返回结果与附加信息（错误描述或新证书指纹）
-  Future<(_Attempt, String?)> _attempt(String password) async {
+  Future<(_Attempt, String?)> _attempt(String password, int generation) async {
     _disposeClient();
+    final attemptGeneration = _attemptGeneration;
     // 重连时读取共享配置；解析失败显示错误，不静默直连或停留在连接中。
     late final ProxyConfig proxy;
     try {
@@ -156,13 +208,23 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
     } catch (_) {
       return (_Attempt.failed, 'proxy.load_failed');
     }
-    final c = RdpClient();
+    if (generation != _connectionGeneration ||
+        attemptGeneration != _attemptGeneration) {
+      throw const ConnectRetryCancelled();
+    }
+    final c = createClient?.call() ?? RdpClient();
     _client = c;
     final done = Completer<(_Attempt, String?)>();
+    done.future.ignore();
+    // 关闭时完成等待中的尝试；旧客户端回调不能污染后续连接。
+    _cancelAttempt = () {
+      if (!done.isCompleted) done.completeError(const ConnectRetryCancelled());
+    };
     String? changedFp;
     var authFailed = false;
 
     c.onCertificate = (changed, fp) {
+      if (_client != c) return;
       if (changed) {
         changedFp = fp;
       } else {
@@ -175,19 +237,21 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
     };
     c.onAuthFailed = (_) => authFailed = true;
     c.onConnected = (w, h) {
+      if (_client != c || done.isCompleted) return;
       setState(SessionState.connected);
       if (!done.isCompleted) done.complete((_Attempt.connected, null));
     };
     c.onFrame = notifyListeners;
     c.onResize = (_, _) => notifyListeners();
     c.onDisconnected = (code, msg) {
+      if (_client != c) return;
       if (!done.isCompleted) {
         if (changedFp != null) {
           done.complete((_Attempt.certChanged, changedFp));
         } else if (authFailed) {
           done.complete((_Attempt.authFailed, null));
         } else {
-          done.complete((_Attempt.failed, msg ?? 'error $code'));
+          done.completeError(RdpConnectError(code, msg ?? 'error $code'));
         }
         return;
       }
@@ -223,6 +287,8 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
     final size = _viewSize;
     final fixedW = (host.extra['width'] as num?)?.toInt();
     final fixedH = (host.extra['height'] as num?)?.toInt();
+    final tempDir = (await PlatformUtils.dataDir()).path;
+    if (_client != c || done.isCompleted) return done.future;
     c.connect(
       RdpConnectOptions(
         host: host.address,
@@ -235,7 +301,7 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
         sharedDir: sharedDir,
         clipboard: host.extra['clipboard'] != false,
         knownFingerprint: _fingerprint,
-        tempDir: (await PlatformUtils.dataDir()).path,
+        tempDir: tempDir,
         proxyType: proxy.enabled ? (proxy.type == ProxyType.http ? 1 : 2) : 0,
         proxyHost: proxy.host,
         proxyPort: proxy.port,
@@ -501,9 +567,12 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
 
   // ---------- 生命周期 ----------
 
+  /// 使未完成的异步准备失效，并释放当前原生客户端。
   void _disposeClient() {
+    ++_attemptGeneration;
     final c = _client;
     _client = null;
+    _cancelAttempt = null;
     if (c == null) return;
     c.disconnect();
     c.dispose();
@@ -511,6 +580,8 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
 
   @override
   Future<void> reconnect() async {
+    ++_connectionGeneration;
+    _cancelAttempt?.call();
     _clipTimer?.cancel();
     _disposeClient();
     await connect();
@@ -518,6 +589,8 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
 
   @override
   Future<void> close() async {
+    ++_connectionGeneration;
+    _cancelAttempt?.call();
     state = SessionState.disconnected;
     _clipTimer?.cancel();
     _resizeTimer?.cancel();

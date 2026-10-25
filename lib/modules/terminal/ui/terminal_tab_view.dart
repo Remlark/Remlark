@@ -95,6 +95,20 @@ class _TerminalTabViewState extends State<TerminalTabView> {
                     onPressed: _toggleAi,
                   ),
                   const SizedBox(width: 8),
+                  Semantics(
+                    label: context.tr('terminal.reset_text_style'),
+                    button: true,
+                    child: ToolButton(
+                      key: const ValueKey('terminal-reset-text-style'),
+                      compact: true,
+                      icon: Icons.settings_backup_restore,
+                      label: context.tr('terminal.reset_text_style'),
+                      tooltip: '${context.tr('terminal.reset_text_style')}\n'
+                          '${context.tr('terminal.reset_text_style.desc')}',
+                      onPressed: s.resetTextStyle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   ToolButton(
                     compact: true,
                     icon: Icons.refresh,

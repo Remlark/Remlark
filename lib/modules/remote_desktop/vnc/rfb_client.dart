@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import '../../../utils/app_log.dart';
 import '../../../utils/async_byte_reader.dart';
 import '../../../utils/des.dart';
+import '../../../utils/network/connect_retry.dart';
 import 'ard_auth.dart';
 import '../remote_display.dart';
 import 'rfb_cursor.dart';
@@ -130,7 +131,16 @@ class RfbClient {
   /// [username] 仅用于 Apple Remote Desktop 认证（macOS 系统账户）
   Future<void> connect(String host, int port, {String? username, String? password}) async {
     AppLog.i('vnc', '连接 $host:$port');
-    final socket = await Socket.connect(host, port, timeout: const Duration(seconds: 15));
+    final socket = await ConnectRetry.run(
+      (remaining) => Socket.connect(host, port, timeout: remaining),
+      timeout: const Duration(seconds: 15),
+      isCancelled: () => _closed,
+    );
+    // TCP 返回前可能已关闭会话，及时释放刚建立的套接字。
+    if (_closed) {
+      socket.destroy();
+      throw const ConnectRetryCancelled();
+    }
     socket.setOption(SocketOption.tcpNoDelay, true);
     _socket = socket;
     final r = AsyncByteReader(socket);

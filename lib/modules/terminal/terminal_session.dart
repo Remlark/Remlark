@@ -206,6 +206,12 @@ class TerminalSession extends WorkspaceTab {
   /// 通知 UI 刷新
   void refresh() => notifyListeners();
 
+  /// 恢复后续输出的默认文字格式，保留历史、光标和正在接收的控制序列。
+  void resetTextStyle() {
+    // 直接重置本地模型，避免插入 ANSI 字节破坏分包序列或向远端发送命令。
+    terminal.resetCursorStyle();
+  }
+
   @override
   Future<void> reconnect() async {
     _teardown();
