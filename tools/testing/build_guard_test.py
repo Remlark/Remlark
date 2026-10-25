@@ -49,11 +49,11 @@ class BuildGuardTests(unittest.TestCase):
         """匹配当前检出目录的全部架构/模式，排除已安装应用、独立副本和前缀碰撞。"""
         with tempfile.TemporaryDirectory(prefix='remlark guard 中文 ') as directory:
             root = Path(directory)
-            for platform, tail in [('macos', 'Build/Products/Debug/remlark.app/Contents/MacOS/remlark'),
-                                   ('linux', 'arm64/release/bundle/remlark')]:
+            for platform, tail in [('macos', 'Build/Products/Debug/Remlark.app/Contents/MacOS/Remlark'),
+                                   ('linux', 'arm64/release/bundle/Remlark')]:
                 running = str(root / 'build' / platform / tail)
                 independent = str(root / 'build/validation/copy' / 'remlark')
-                others = ['/Applications/remlark.app/Contents/MacOS/remlark', '/opt/remlark/remlark',
+                others = ['/Applications/Remlark.app/Contents/MacOS/Remlark', '/opt/remlark/Remlark',
                           str(root / 'build' / (platform + '-other') / 'remlark'), independent]
                 matches = guard.conflicting_processes(root, platform, [(99, running)] + list(enumerate(others)))
                 self.assertEqual(matches, [(99, running)])
@@ -61,8 +61,8 @@ class BuildGuardTests(unittest.TestCase):
                     guard.assert_safe(root, platform, FixedInspector([(99, running)]), root / 'build')
                 guard.assert_safe(root, platform, FixedInspector(list(enumerate(others))), root / 'build')
         rows = [(1, r'C:\工程\Remlark\build\WINDOWS\x64\runner\Debug\REMLARK.EXE'),
-                (2, r'C:\工程\Remlark\build\windows-other\remlark.exe'),
-                (3, r'C:\Program Files\Remlark\remlark.exe')]
+                (2, r'C:\工程\Remlark\build\windows-other\Remlark.exe'),
+                (3, r'C:\Program Files\Remlark\Remlark.exe')]
         self.assertEqual(guard.conflicting_processes(r'C:\工程\Remlark', 'windows', rows), rows[:1])
 
     def test_custom_build_and_symlink_paths(self):
@@ -119,7 +119,7 @@ class BuildGuardTests(unittest.TestCase):
 
     def test_windows_process_output(self):
         """Windows 单条、多条、空列表与无法读取路径的结果都有确定行为。"""
-        row = {'ProcessId': 42, 'ExecutablePath': r'C:\测试目录\remlark.exe'}
+        row = {'ProcessId': 42, 'ExecutablePath': r'C:\测试目录\Remlark.exe'}
         for data in [row, [row]]:
             with patch('tools.utils.build_guard.windows.run_query', return_value=json.dumps(data)) as query:
                 self.assertEqual(WindowsInspector().executables(), [(42, row['ExecutablePath'])])
@@ -178,7 +178,7 @@ class BuildGuardTests(unittest.TestCase):
         platform = guard.current_platform()
         with tempfile.TemporaryDirectory(prefix='remlark live 中文 ') as directory:
             root = Path(directory)
-            target = root / 'build' / platform / ('remlark.exe' if platform == 'windows' else 'remlark')
+            target = root / 'build' / platform / ('Remlark.exe' if platform == 'windows' else 'remlark')
             target.parent.mkdir(parents=True)
             ready = root / 'ready'
             env = os.environ.copy()

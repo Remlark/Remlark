@@ -65,6 +65,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 共享代理配置与重连 | `modules/proxies/`、`host_repository.dart`、`ssh_connector.dart`、`rdp_session.dart` | 共用 drift/加密存储；SSH 与内嵌 RDP 在新连接/重连时解析共享配置 | 同左，不新增系统代理或注册表设置 | 同左，不修改系统代理环境变量 | P-16 | M-21 |
 | SSH TCP 首次连接恢复 | `utils/network/`、`modules/ssh/proxy_socket.dart` | 独立策略识别 51/65 | 独立策略识别 10051/10065 | 独立策略识别 101/113 | P-20：有限重试、预算和非瞬态错误 | M-24 |
 | VNC / RDP 连接失败恢复 | `utils/network/connect_retry.dart`、`vnc/rfb_client.dart`、`vnc/rfb_isolate_client.dart`、`rdp/rdp_session.dart`、`rdp/rdp_connect_error.dart` | VNC 复用 51/65；RDP 共用 FreeRDP DNS/建连/传输错误码 | VNC 复用 10051/10065；RDP 同左 | VNC 复用 101/113；RDP 同左 | P-29：有限重试、关闭取消、原生回调隔离 | M-32 |
+| 应用名称大小写 | 三平台产品配置、packaging、tools/release、updates/platform | Remlark.app / Remlark | Remlark.exe / Remlark 产品属性 | Remlark 主程序、Exec 与命令入口；保留小写 Debian 包标识 | P-30；P-18/P-19 更新、P-22 构建保护 | M-33 |
 | 代理连通性检测 | `modules/proxies/proxy_connection_test.dart`、`modules/ssh/proxy_socket.dart`、`utils/network_endpoint.dart` | ProxyConnectionTest 接口，Dart Socket 的 HTTP CONNECT/SOCKS5 握手、认证、超时和取消；IPv6 目标 | 同左，不访问注册表或系统代理 | 同左，不调用系统网络命令 | P-17 | M-22 |
 | RDP 显示控制协商 | `native/rdp/src/remlark_rdp.c` | 共用 FreeRDP 能力回调，协商后发送布局 | 同 macOS | 同 macOS | P-21 | M-25 |
 | 运行中构建覆盖保护 | `tools/utils/build_guard/`、`tools/utils/app_version.py`、`Makefile`、`windows/run.ps1` | ps 子进程固定 UTF-8 locale，读取未转义的中文完整路径 | CIM 显式输出 UTF-8 JSON，按 Windows 路径规则比较；PowerShell 5.1 使用自身默认 PSModulePath，查询上限 60 秒 | procfs 读取 exe，识别 deleted 文件，comm 显式按 UTF-8 读取 | P-22 | M-26 |
@@ -106,6 +107,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-24 | [artifact_cleanup_test.dart](../test/platform/artifact_cleanup_test.dart)、[artifact_cleanup_test.py](../tools/testing/artifact_cleanup_test.py) | 三平台执行相同清理逻辑；仅构建不上传、正式中转保留 7 天且重跑覆盖、仅 publish 成功后清理（不使用 always()）；只查询当前运行的 artifacts 并分页先快照再删除，不访问仓库级列表，保护非托管文件及 API 失败上报 | Actions 存储、M-27 |
 | P-28 | [ci_retry_test.dart](../test/platform/ci_retry_test.dart)、[retry_command_test.py](../tools/testing/retry_command_test.py) | 6 项 Python 检查：指数退避、重试前清理半成品且首次不清理、最后退出码传递、命令不存在不重试、非法参数、真实子进程下 `--` 可省略且保留目标命令的 --选项/含空格参数；两个工作流所有网络安装都经过重试工具且无裸命令 | CI 网络安装、M-31 |
 | P-29 | [desktop_connect_retry_test.dart](../test/platform/desktop_connect_retry_test.dart) | 三平台 VNC 错误策略与 RDP 协议错误分类；真实 VNC TCP 入口不可达后恢复且协议错误不重试；isolate 建连立即取消；RDP 首次失败恢复、四次上限、认证/证书确认、总预算超时、关闭取消和旧回调隔离 | VNC / RDP 连接失败恢复、M-32 |
+| P-30 | [app_name_test.dart](../test/platform/app_name_test.dart) | 三平台产品名、可执行文件、桌面入口、打包与签名路径精确大小写；保留 bundle ID 与 Debian 包标识 | 应用名称大小写、M-33 |
 | P-25 | [platform_test_workflow_test.dart](../test/platform/platform_test_workflow_test.dart) | 独立 test* 触发及手动入口、三平台双架构六路矩阵、锁文件与每路仅一次平台专项、禁止客户端全量/dsh/服务端测试及服务端依赖；精确原生缓存及缺失摘要；禁止应用/原生产品构建、上传产物、签名凭据及发布 | 发布前测试、M-28 |
 | P-26 | [source_archive_test.dart](../test/platform/source_archive_test.dart)、[source_archive_test.py](../tools/testing/source_archive_test.py) | 20 项 Python 检查：实际 gzip/tar/SHA、tar 仅接收 ASCII 相对参数（Windows bsdtar 中文路径）、错误响应/截断/CRC、退避/镜像/慢速预算、本地磁盘失败不重试、有效包复用、源码原子发布/回滚、缺失关键文件、非 UTF-8 日志与 CLI；三平台下载入口及 Windows zlib 下载先于编译 | 原生源码下载、M-29 |
 | P-27 | [native_build_resilience_test.dart](../test/platform/native_build_resilience_test.dart)、`tools/testing/native_build_state_test.py`、`tools/testing/windows_build_checks.ps1` | 15 项 Python 检查：阶段完整性/摘要/旧配方/错架构/位置/工具链缓存身份、半安装不混旧产物、通用双架构及 CLI；实际 POSIX 缺工具/架构/语言前置失败；Windows 包装器、实际 Fetch 参数和无工具驱动拒绝；缓存恢复/保存路径集合一致及完整/阶段缓存区分 | 编译恢复、M-30 |
@@ -198,6 +200,7 @@ P-06 还检查 macOS / Linux 测试服务端与应用使用同一 OpenSSL 前缀
 | M-30 | 阶段完成与缓存恢复 | 三平台执行 make test-platform；在独立环境验证普通构建失败后，仅保存已完成阶段和有效源码包，重试应复用已完成 OpenSSL 等依赖，未完成阶段重建；胶水 C 改动不作废第三方阶段缓存；MSVC/工作区/校验器变化不误命中；macOS universal 缺任一架构或 SSH 库不得保存完整缓存；强制取消/runner 故障可能无法执行保存步骤 |
 | M-31 | CI 网络安装重试 | 在三平台 runner 查看日志，apt-get/brew/choco/pacman/flutter/git clone 均出现 `==> run (attempt 1/3)`；Windows pwsh 下 choco、MSYS2 bash 及 flutter.bat 能正常启动且失败仍被 `$LASTEXITCODE` 拦截；网络偶发失败时出现重试并继续 |
 | M-32 | VNC / RDP 连接失败自动重试 | 三平台分别执行 make test-platform。网络刚恢复或首次局域网授权时连接 VNC/RDP，应记录 500ms/1s/2s 重试并能恢复；持续失败最多四次。VNC TCP 共用 15s 预算，RDP 连接（含握手）共用 60s 预算；RDP 建连错误也包含连接拒绝。检查错误密码、变更证书、TLS/权限错误不自动重复认证/确认；关闭 Tab、退避期间手动重连不能产生旧连接或改写新状态。验证 RDP HTTP/SOCKS5 代理恢复及多次重试后的显示/剪贴板正常；成功连接后掉线仍使用手动重连。Windows/Linux 及三平台真实网络交互待实测 |
+| M-33 | 应用名称大小写与覆盖安装 | 三个平台分别执行 make test-platform；重新构建并手动覆盖安装，确认 Finder/Dock、Windows 属性/开始菜单/卸载、Linux 菜单与命令均为 Remlark。检查主机、凭据及设置保留，旧入口无残留；旧版更新器需手动安装本次新版本，新版再验证自动更新。macOS 大小写敏感卷、Windows/Linux 实机验证待执行 |
 
 M-20：下载新 CI 的 macOS zip / DMG，核对 `codesign -dv --verbose=4` 的 Authority 是固定自签名称、不是 `Signature=adhoc`，执行 `codesign --verify --deep --strict --all-architectures /Applications/remlark.app`。分别在 Intel / Apple Silicon 干净系统检查首次 Gatekeeper 放行，再覆盖安装同证书的新版本，记录是否再次放行及辅助功能等隐私权限是否保留；不以自签或单元测试保证系统免授权。检查 Actions 日志不含证书密码，缺失 Secret 应在构建前失败，失败构建不得上传可发布附件。
 
@@ -543,3 +546,9 @@ Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过�
 - 新增 P-29；VNC 复用三份现有系统错误码策略，RDP 使用三平台相同的 FreeRDP 错误码，不修改平台原生实现或 FFI 接口。
 - 本机 Intel macOS `make test-platform`：125 项通过、3 项条件跳过；相关静态检查通过。VNC 协议/isolate 11 项、本地 VNC 按键释放 1 项、使用本地 FreeRDP 示例服务端的 RDP 端到端 3 项均通过。Windows/Linux 当前无可执行环境，尚未运行；现有 CI 矩阵包含三平台 make test-platform，未将本机策略模拟视为其他系统实测。
 - 三平台真实网络切换、权限、代理、重试后画面与关闭交互按 M-32 验证。
+
+### 2026-10-25 应用名称大小写（Step 130）
+
+- 新增 P-30，对三平台产品属性、应用包/可执行文件、桌面入口和打包签名路径进行精确大小写检查；P-18/P-19、打包、发布及构建保护测试同步使用新名称。
+- 本机 macOS make test-platform 128 项通过、3 条件跳过（14 秒），包括真实隔离 App 的签名/解包/替换；相关 Dart 静态检查与 diff 检查通过。测试日志 `/tmp/remlark-name-platform.log`。
+- Windows/Linux 尚未执行本轮 make test-platform；三平台真实产品重新打包、旧应用覆盖安装和显示名称按 M-33 验证。旧版客户端需手动下载安装这次新版，后续新版更新器使用大写附件名。未提交、推送或触发远端 CI，未修改已安装应用。

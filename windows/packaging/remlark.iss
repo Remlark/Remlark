@@ -25,7 +25,7 @@ MinVersion=10.0
 OutputDir={#DistDir}
 OutputBaseFilename={#InstallerName}
 SetupIconFile=..\runner\resources\app_icon.ico
-UninstallDisplayIcon={app}\remlark.exe
+UninstallDisplayIcon={app}\Remlark.exe
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -44,10 +44,10 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 Source: "languages\LICENSE"; DestDir: "{app}\licenses"; DestName: "inno-chinese-translation.txt"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\Remlark"; Filename: "{app}\remlark.exe"; WorkingDir: "{app}"
-Name: "{autodesktop}\Remlark"; Filename: "{app}\remlark.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autoprograms}\Remlark"; Filename: "{app}\Remlark.exe"; WorkingDir: "{app}"
+Name: "{autodesktop}\Remlark"; Filename: "{app}\Remlark.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\remlark.exe"; Description: "{cm:LaunchProgram,Remlark}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Remlark.exe"; Description: "{cm:LaunchProgram,Remlark}"; Flags: nowait postinstall skipifsilent
 
 ; 仅卸载安装器管理的程序文件，用户数据库、凭据、日志不在安装目录内，不做额外删除。

@@ -15,7 +15,7 @@ def windows_powershell_environment():
 
 
 class WindowsInspector(ProcessInspector):
-    """PowerShell 只查询 remlark.exe 的路径与 PID，不读取命令行或凭据。"""
+    """PowerShell 只查询 Remlark.exe 的路径与 PID，不读取命令行或凭据。"""
 
     def executables(self):
         """统一单个和多个 CIM 结果，并在路径不可读时阻止覆盖。"""
@@ -23,7 +23,7 @@ class WindowsInspector(ProcessInspector):
         script = (
             "$ErrorActionPreference='Stop'; "
             "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); "
-            "@(Get-CimInstance Win32_Process -Filter \"Name='remlark.exe'\" | "
+            "@(Get-CimInstance Win32_Process -Filter \"Name='Remlark.exe'\" | "
             "Select-Object ProcessId,ExecutablePath) | ConvertTo-Json -Compress"
         )
         output = run_query(['powershell', '-NoProfile', '-NonInteractive', '-Command', script],

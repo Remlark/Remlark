@@ -87,7 +87,7 @@ class SigningChecks(unittest.TestCase):
 
     def test_nested_signing_order(self):
         """嵌套 Mach-O 先于框架和主 App，跳过资源和符号链接。"""
-        app = self.root / 'build/macos/Build/Products/Release/remlark.app'
+        app = self.root / 'build/macos/Build/Products/Release/Remlark.app'
         framework = app / 'Contents/Frameworks/Example.framework'
         binary = framework / 'Versions/A/Example'
         binary.parent.mkdir(parents=True)
@@ -141,13 +141,13 @@ class SigningChecks(unittest.TestCase):
                 '-nodes', '-days', '1', '-config', config, '-keyout', key, '-out', cert)
         command('/usr/bin/openssl', 'pkcs12', '-export', '-inkey', key, '-in', cert,
                 '-out', p12, '-passout', 'pass:fixture-password')
-        app = self.root / 'build/macos/Build/Products/Release/remlark.app'
-        executable = app / 'Contents/MacOS/remlark'
+        app = self.root / 'build/macos/Build/Products/Release/Remlark.app'
+        executable = app / 'Contents/MacOS/Remlark'
         executable.parent.mkdir(parents=True)
         shutil.copyfile('/usr/bin/true', executable)
         executable.chmod(0o755)
         with (app / 'Contents/Info.plist').open('wb') as stream:
-            plistlib.dump({'CFBundleExecutable': 'remlark', 'CFBundleIdentifier': 'com.remlark.p15',
+            plistlib.dump({'CFBundleExecutable': 'Remlark', 'CFBundleIdentifier': 'com.remlark.p15',
                            'CFBundlePackageType': 'APPL', 'CFBundleVersion': '1'}, stream)
         entitlements = self.root / 'macos/Runner/Release.entitlements'
         entitlements.parent.mkdir(parents=True)
@@ -166,14 +166,14 @@ class SigningChecks(unittest.TestCase):
                 self.assertEqual(command('codesign', '-d', '-r-', app), details)
                 dist = self.root / 'dist'
                 dist.mkdir()
-                archive = dist / 'remlark-macos.zip'
+                archive = dist / 'Remlark-macos.zip'
                 command('ditto', '-c', '-k', '--keepParent', app, archive)
                 unpacked = self.root / 'unpacked'
                 command('ditto', '-x', '-k', archive, unpacked)
                 command('codesign', '--verify', '--deep', '--strict',
-                        '--all-architectures', unpacked / 'remlark.app')
+                        '--all-architectures', unpacked / 'Remlark.app')
                 (self.root / 'VERSION').write_text('1.0.0+1\n')
-                dmg = dist / 'remlark-1.0.0-macos-universal.dmg'
+                dmg = dist / 'Remlark-1.0.0-macos-universal.dmg'
                 command('hdiutil', 'create', '-srcfolder', app, '-format', 'UDZO', dmg)
                 signing.sign_dmg()
 

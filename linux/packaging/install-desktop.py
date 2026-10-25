@@ -10,7 +10,7 @@ import subprocess
 def main():
     """按当前 bundle 的绝对位置安装桌面入口，移动 bundle 后需重新运行。"""
     bundle = Path(__file__).resolve().parent
-    if not (bundle / 'remlark').is_file():
+    if not (bundle / 'Remlark').is_file():
         raise SystemExit('Run this script from the built bundle / 请从打包后的 bundle 运行')
     data = Path(os.environ.get('XDG_DATA_HOME') or Path.home() / '.local/share')
     applications = data / 'applications'
@@ -23,12 +23,12 @@ def main():
         shutil.copy2(source, target)
     desktop = (bundle / 'share/applications/com.remlark.remlark.desktop').read_text()
     # Desktop Entry 的 Exec 使用独立转义规则，保护空格、引号与字段占位符。
-    executable = str(bundle / 'remlark').replace('%', '%%')
+    executable = str(bundle / 'Remlark').replace('%', '%%')
     for char in ('\\', '"', '`', '$'):
         executable = executable.replace(char, '\\' + char)
     executable = executable.replace('\\', '\\\\')
     # GIO 会先检查 Exec 的首个可执行文件，尚未展开 %%；使用 env 避免路径含 % 时被误判为不存在。
-    desktop = desktop.replace('Exec=remlark', f'Exec=/usr/bin/env "{executable}"')
+    desktop = desktop.replace('Exec=Remlark', f'Exec=/usr/bin/env "{executable}"')
     (applications / 'com.remlark.remlark.desktop').write_text(desktop)
     if shutil.which('gtk-update-icon-cache'):
         subprocess.run(['gtk-update-icon-cache', '-f', '-t', str(data / 'icons/hicolor')], check=False)

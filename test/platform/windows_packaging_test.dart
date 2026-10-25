@@ -69,7 +69,7 @@ void main() {
   late Directory release;
   late Directory runtime;
   const payload = [
-    'remlark.exe',
+    'Remlark.exe',
     'flutter_windows.dll',
     'remlark_rdp.dll',
     'remlark_crypto.dll',

@@ -256,7 +256,7 @@ jobs:
           dart pub get --enforce-lockfile
           dart analyze
           dart test
-          dart build cli -t bin/server.dart -o ../dist/remlark-sync-server
+          dart build cli -t bin/server.dart -o ../dist/Remlark-sync-server
       - name: Verify bundle and package sync server
         run: python3 tools/release/server_bundle.py ${{ matrix.platform }} ${{ matrix.arch }} --smoke
       - name: Upload server package
@@ -265,8 +265,8 @@ jobs:
         with:
           name: packages-server-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
-            dist/remlark-sync-server-*.zip
-            dist/remlark-sync-server-*.tar.gz
+            dist/Remlark-sync-server-*.zip
+            dist/Remlark-sync-server-*.tar.gz
           if-no-files-found: error
           # 失败后需要保留其他平台包以便 Re-run failed jobs；重跑同名包时覆盖。
           overwrite: true

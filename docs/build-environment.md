@@ -107,9 +107,9 @@ make server
 
 | 产物 | 说明 |
 | --- | --- |
-| `dist/remlark-1.0.0-windows-x64-setup.exe` | 安装向导；文件名版本来自 `VERSION`，不是固定写死 |
-| `dist/remlark-windows-x64.zip` | 便携包；解压整个目录后运行 `remlark.exe` |
-| `dist/remlark-sync-server/bundle/` | 同步服务端；需整体分发，`bin/server.exe` 依赖随包的 sqlite DLL |
+| `dist/Remlark-1.0.0-windows-x64-setup.exe` | 安装向导；文件名版本来自 `VERSION`，不是固定写死 |
+| `dist/Remlark-windows-x64.zip` | 便携包；解压整个目录后运行 `Remlark.exe` |
+| `dist/Remlark-sync-server/bundle/` | 同步服务端；需整体分发，`bin/server.exe` 依赖随包的 sqlite DLL |
 | `build/windows/x64/runner/Release/` | Flutter 原始 Release 输出 |
 | `build/native/windows-x86_64/` | 原生库、依赖与编译缓存 |
 | `build/packaging/windows-x64-<标识>/` | 每次打包的独立暂存目录 |
@@ -168,7 +168,7 @@ make mac
 make server
 ```
 
-`make mac` 为原生库分别构建 x86_64 / arm64，然后编译 Flutter macOS Release，并输出 `dist/remlark-macos.zip`。当前文档已有 macOS x86_64 验证记录，arm64 的实机功能及发布签名、公证需另行验证与配置。
+`make mac` 为原生库分别构建 x86_64 / arm64，然后编译 Flutter macOS Release，并输出 `dist/Remlark-macos.zip`。当前文档已有 macOS x86_64 验证记录，arm64 的实机功能及发布签名、公证需另行验证与配置。
 
 ## Linux（Ubuntu / Debian）
 
@@ -221,24 +221,24 @@ Flutter 测试与 Flutter 应用构建顺序执行，保留锁文件，不执行
 
 | 产物 | 说明 |
 | --- | --- |
-| `dist/remlark-1.0.0-linux-amd64.deb` | Ubuntu / Debian x64 安装包，版本从 VERSION 读取 |
-| `dist/remlark-linux-x64.tar.gz` | 便携包，必须解压并保留整个 bundle |
+| `dist/Remlark-1.0.0-linux-amd64.deb` | Ubuntu / Debian x64 安装包，版本从 VERSION 读取 |
+| `dist/Remlark-linux-x64.tar.gz` | 便携包，必须解压并保留整个 bundle |
 | `build/linux/x64/release/bundle/` | Flutter 原始 Release 输出 |
-| `dist/remlark-sync-server/bundle/` | 同步服务端，需整体分发 |
+| `dist/Remlark-sync-server/bundle/` | 同步服务端，需整体分发 |
 
 ```bash
-sudo apt install ./dist/remlark-1.0.0-linux-amd64.deb
-remlark
+sudo apt install ./dist/Remlark-1.0.0-linux-amd64.deb
+Remlark
 # 卸载程序；应用数据保存在用户目录，不由包管理器删除。
 sudo apt remove remlark
 
 # 或使用便携包：
-tar -xzf dist/remlark-linux-x64.tar.gz
-./bundle/remlark
+tar -xzf dist/Remlark-linux-x64.tar.gz
+./bundle/Remlark
 python3 bundle/install-desktop.py  # 可选：为当前用户安装菜单入口与图标
 ```
 
-Debian 包将程序安装到 `/opt/remlark`，命令入口为 `/usr/bin/remlark`，菜单与图标安装到 `/usr/share`。无需在用户机器安装 Flutter 或编译工具，但需要包中 Depends 声明的系统运行库。Depends 根据构建机器上的 ELF 库生成，因此应在支持的最旧发行版上构建；本轮 Ubuntu 26.04 产物不声明兼容更早的 Ubuntu。
+Debian 包将程序安装到 `/opt/remlark`，命令入口为 `/usr/bin/Remlark`，菜单与图标安装到 `/usr/share`。无需在用户机器安装 Flutter 或编译工具，但需要包中 Depends 声明的系统运行库。Depends 根据构建机器上的 ELF 库生成，因此应在支持的最旧发行版上构建；本轮 Ubuntu 26.04 产物不声明兼容更早的 Ubuntu。
 
 Linux CMake 关闭 Android 间接依赖带来的可选 JNI 插件，避免链接构建机的 Java 绝对路径。构建和运行 Linux 应用均不需要 JDK / JRE。
 
@@ -258,11 +258,11 @@ python3 linux/packaging/build.py --arch x64
 make server
 ```
 
-服务端产物位于 `dist/remlark-sync-server/bundle/`；Windows 使用 `bin/server.exe`，macOS / Linux 使用 `bin/server`。从该 bundle 运行 `--help` 查看参数。开发时可执行 `make server-run TOKEN=<本地令牌>`，数据写入 `server/data/`。
+服务端产物位于 `dist/Remlark-sync-server/bundle/`；Windows 使用 `bin/server.exe`，macOS / Linux 使用 `bin/server`。从该 bundle 运行 `--help` 查看参数。开发时可执行 `make server-run TOKEN=<本地令牌>`，数据写入 `server/data/`。
 
 Release CI 另有独立的服务端六路构建：macOS / Windows / Linux 各 x64、arm64，固定 Dart 3.13.5，仅安装 `server/pubspec.lock` 中的依赖，执行服务端静态检查和测试后用 `dart build cli` 编译。macOS x64 使用 `macos-15-intel`，arm64 使用 `macos-15`，分别输出，桌面客户端继续使用 universal。
 
-服务端附件为 `remlark-sync-server-<版本>-<系统>-<架构>.tar.gz`（macOS / Linux）或 `.zip`（Windows），压缩包内保留完整 `bundle/`。本地已有服务端构建时，可执行 `python3 tools/release/server_bundle.py macos x64 --smoke` 打包并在临时目录解压、启动、读写 SQLite；平台与架构必须匹配实际构建。六个 CI 任务均执行此验证，主程序或 SQLite 库缺失、架构不符、启动/读写失败时终止发布。
+服务端附件为 `Remlark-sync-server-<版本>-<系统>-<架构>.tar.gz`（macOS / Linux）或 `.zip`（Windows），压缩包内保留完整 `bundle/`。本地已有服务端构建时，可执行 `python3 tools/release/server_bundle.py macos x64 --smoke` 打包并在临时目录解压、启动、读写 SQLite；平台与架构必须匹配实际构建。六个 CI 任务均执行此验证，主程序或 SQLite 库缺失、架构不符、启动/读写失败时终止发布。
 
 截至 2026-10-21，Windows x64 验证：应用、RDP / SSH 原生库和同步服务端已编译通过；安装器编译、完整性验证与专项测试结果记录在 [multi-platform-testing.md](multi-platform-testing.md)。跨平台实机测试和安装、升级、卸载的交互检查按其中的手工清单执行。
 

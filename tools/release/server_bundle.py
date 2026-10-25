@@ -46,13 +46,13 @@ def binary_arch(path, target):
 def package(root, target, arch):
     """校验完整 bundle，按 VERSION、系统和架构命名，保留 bin/lib 相对布局。"""
     executable, library, archive_format = TARGETS[target]
-    bundle = root / 'dist/remlark-sync-server/bundle'
+    bundle = root / 'dist/Remlark-sync-server/bundle'
     for path in (bundle / 'bin' / executable, bundle / 'lib' / library):
         if not path.is_file() or path.stat().st_size < 64:
             raise ValueError(f'missing or empty server asset: {path}')
         if binary_arch(path, target) != arch:
             raise ValueError(f'wrong platform or architecture: {path}; expected {target}-{arch}')
-    base = root / 'dist' / f'remlark-sync-server-{read_version(root)["name"]}-{target}-{arch}'
+    base = root / 'dist' / f'Remlark-sync-server-{read_version(root)["name"]}-{target}-{arch}'
     return Path(shutil.make_archive(str(base), archive_format, root_dir=bundle.parent, base_dir='bundle'))
 
 

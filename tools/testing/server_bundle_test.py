@@ -44,7 +44,7 @@ class ServerBundleTests(unittest.TestCase):
 
     def fixture(self, target, arch):
         """创建目标主程序、SQLite 库和附属资源。"""
-        bundle = self.root / 'dist/remlark-sync-server/bundle'
+        bundle = self.root / 'dist/Remlark-sync-server/bundle'
         shutil.rmtree(bundle, ignore_errors=True)
         executable, library, _ = TARGETS[target]
         paths = [bundle / 'bin' / executable, bundle / 'lib' / library]
@@ -65,7 +65,7 @@ class ServerBundleTests(unittest.TestCase):
                     archive = package(self.root, target, arch)
                     archives.add(archive.name)
                     extension = 'zip' if target == 'windows' else 'tar.gz'
-                    self.assertEqual(archive.name, f'remlark-sync-server-1.2.3-{target}-{arch}.{extension}')
+                    self.assertEqual(archive.name, f'Remlark-sync-server-1.2.3-{target}-{arch}.{extension}')
                     if target != 'windows':
                         with tarfile.open(archive) as tar:
                             mode = tar.getmember(f'bundle/bin/{paths[0].name}').mode

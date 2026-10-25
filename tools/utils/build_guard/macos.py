@@ -18,6 +18,6 @@ class MacosInspector(ProcessInspector):
             fields = line.strip().split(None, 1)
             if len(fields) != 2 or not fields[0].isdigit():
                 raise GuardError('Unexpected process query output; build cancelled.')
-            if fields[1].endswith('/remlark'):
+            if fields[1].lower().endswith('/remlark'):
                 rows.append((int(fields[0]), fields[1]))
         return rows

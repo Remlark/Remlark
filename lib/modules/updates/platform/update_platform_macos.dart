@@ -17,14 +17,14 @@ class MacosUpdatePlatform implements UpdatePlatform {
   /// 使用发布工作流生成的通用应用归档，无需挂载 DMG。
   @override
   String? assetName(String version) =>
-      [Abi.macosX64, Abi.macosArm64].contains(abi) ? 'remlark-macos.zip' : null;
+      [Abi.macosX64, Abi.macosArm64].contains(abi) ? 'Remlark-macos.zip' : null;
 
   /// 检查应用结构、签名和内嵌版本，再生成可按需请求系统授权的安装助手。
   @override
   Future<InstallPlan> prepare(InstallContext context) async {
     final target = p.dirname(p.dirname(p.dirname(context.executable)));
     if (!target.endsWith('.app') ||
-        !context.executable.endsWith('/Contents/MacOS/remlark') ||
+        !context.executable.endsWith('/Contents/MacOS/Remlark') ||
         target.contains('/AppTranslocation/') ||
         target.startsWith('/Volumes/')) {
       throw const UpdateFailure('updates.error.location');
@@ -39,7 +39,7 @@ class MacosUpdatePlatform implements UpdatePlatform {
       context.archive.path,
       extracted.path,
     ]);
-    final source = p.join(extracted.path, 'remlark.app');
+    final source = p.join(extracted.path, 'Remlark.app');
     await InstallHelpers.run('/usr/bin/codesign', [
       '--verify',
       '--deep',
@@ -56,7 +56,7 @@ class MacosUpdatePlatform implements UpdatePlatform {
     ]);
     if (version.exitCode != 0 ||
         '${version.stdout}'.trim() != context.version ||
-        !File(p.join(source, 'Contents/MacOS/remlark')).existsSync()) {
+        !File(p.join(source, 'Contents/MacOS/Remlark')).existsSync()) {
       throw const UpdateFailure('updates.error.install');
     }
     final suffix = p.basename(context.directory.path);

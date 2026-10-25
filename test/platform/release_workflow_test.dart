@@ -77,13 +77,13 @@ void main() {
     addTearDown(() => root.deleteSync(recursive: true));
     final script = File('${root.path}/tools/release/prepare.py');
     final dist = Directory('${root.path}/dist')..createSync();
-    final names = ['remlark-1.2.3-macos-universal.dmg', 'remlark-macos.zip'];
+    final names = ['Remlark-1.2.3-macos-universal.dmg', 'Remlark-macos.zip'];
     for (final arch in ['x64', 'arm64']) {
       names.addAll([
-        'remlark-1.2.3-windows-$arch-setup.exe',
-        'remlark-windows-$arch.zip',
-        'remlark-1.2.3-linux-${arch == 'x64' ? 'amd64' : 'arm64'}.deb',
-        'remlark-linux-$arch.tar.gz',
+        'Remlark-1.2.3-windows-$arch-setup.exe',
+        'Remlark-windows-$arch.zip',
+        'Remlark-1.2.3-linux-${arch == 'x64' ? 'amd64' : 'arm64'}.deb',
+        'Remlark-linux-$arch.tar.gz',
       ]);
     }
     for (final name in names) {
@@ -96,12 +96,12 @@ void main() {
       environment: {'RELEASE_TAG': 'v1.2.3'},
     );
     expect(incomplete.exitCode, isNot(0));
-    expect(incomplete.stderr, contains('remlark-sync-server-'));
+    expect(incomplete.stderr, contains('Remlark-sync-server-'));
     expect(File('${dist.path}/SHA256SUMS').existsSync(), isFalse);
     for (final platform in ['macos', 'windows', 'linux']) {
       for (final arch in ['x64', 'arm64']) {
         final extension = platform == 'windows' ? 'zip' : 'tar.gz';
-        final name = 'remlark-sync-server-1.2.3-$platform-$arch.$extension';
+        final name = 'Remlark-sync-server-1.2.3-$platform-$arch.$extension';
         names.add(name);
         File('${dist.path}/$name').writeAsStringSync('abc');
       }

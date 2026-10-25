@@ -246,7 +246,7 @@
 ## Linux 分发（2026-10-21）
 
 - `make linux`（Linux 上默认 `make`）生成 Debian 系统安装包与完整 bundle 的便携 tar.gz，版本取自根目录 `VERSION`，按当前 x64 / arm64 架构命名；本轮实机验证 x64。
-- Debian 包使用 `/opt/remlark` 保存完整应用、`/usr/bin/remlark` 提供命令入口，复用已有中英文桌面入口与 hicolor 图标。应用数据继续写入用户数据目录，升级与卸载仅管理程序文件。
+- Debian 包使用 `/opt/remlark` 保存完整应用、`/usr/bin/Remlark` 提供命令入口，复用已有中英文桌面入口与 hicolor 图标。应用数据继续写入用户数据目录，升级与卸载仅管理程序文件。
 - 发布前必须包含 Flutter 引擎、AOT、sqlite、RDP 与 SSH 加密库及桌面资源；缺失时终止打包。系统运行库依赖由 ELF 自动计算，发行兼容性以实际构建系统为基线。
 - 构建环境与安装命令见 `docs/build-environment.md`，验证结果和待手工项目见 `docs/multi-platform-testing.md`。
 
@@ -319,7 +319,7 @@
 - 每次请求先匿名访问，API 返回 401/403/404 时才调用独立的 `GitCredentials.githubToken()`：执行非交互 `git credential fill`，让 Git 按系统/全局/当前工作目录仓库配置访问 HTTPS 凭据助手。凭据只在当前请求内存中使用，不持久化、不输出到日志、不带往 CDN。仅有 SSH 密钥不能授权 REST API；无凭据时显示访问失败。启动时通过 ORM 主键删除旧方案的 `updates.github_token`。仓库公开后不调用 Git；后续可单独移除该凭据提供器。
 - 点击升级后创建应用数据目录下独立暂存目录，按平台下载并用 GitHub digest 或同 Release 的 SHA256SUMS 校验 SHA-256 和大小；失败不启动安装、不退出当前应用。GitHub 下载仅允许固定仓库 API/Release 和 GitHub 附件 HTTPS 主机，重定向不继承 Authorization。
 - 安装由 `UpdatePlatform` 的三个实现生成独立助手。助手完成权限获取后写 ready，控制器写 commit，再复用 `AppServices.shutdown()` 关闭连接、子进程及数据库后退出。助手等原进程消失且存在 commit、没有 abort 才安装；等待超时和取消系统授权不能修改运行中的应用。退出流程幂等，防止系统退出和更新退出重复关闭数据库。
-- macOS：下载通用 `remlark-macos.zip`，ditto 解包，验证签名与内嵌版本；拒绝磁盘镜像和 AppTranslocation 内的运行位置。在目标同级复制完整新 App，再备份旧 App、原位替换，提交失败回滚；不可写目录通过 AppleScript 系统管理员授权。非提权监督进程使用 open 重启应用。
+- macOS：下载通用 `Remlark-macos.zip`，ditto 解包，验证签名与内嵌版本；拒绝磁盘镜像和 AppTranslocation 内的运行位置。在目标同级复制完整新 App，再备份旧 App、原位替换，提交失败回滚；不可写目录通过 AppleScript 系统管理员授权。非提权监督进程使用 open 重启应用。
 - Windows：选择 x64/arm64 setup.exe；助手等待进程退出，完整备份应用目录，再以 `/VERYSILENT /SUPPRESSMSGBOXES /SP- /NORESTART /NOCLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /DIR=原目录` 调用 Inno Setup。备份完整后才允许失败恢复，禁止用不完整备份覆盖原目录。不可写目录请求 UAC；监督进程以原用户重新启动应用。便携版通过安装器升级后会成为原目录下的安装版。
 - Linux：`/opt/remlark` 中经 dpkg-query 确认的系统安装使用对应 amd64/arm64 deb，并验证包名、版本，通过 polkit 授权后 dpkg 安装；包管理失败需按 dpkg 状态恢复，不声称可事务回滚包数据库。其他有效 bundle 使用便携 tar.gz，解压校验目录后同级复制、备份与交换，提交失败回滚；不可写父目录使用 polkit。应用以原用户、原安装目录为工作目录重启。
 - 安装结果及预期版本记录在本机更新状态；下一次启动必须确认实际版本一致才显示成功，失败保留恢复材料。成功启动后尽力清理暂存及对应备份；受保护目录中无法由普通用户删除的备份可能保留，需管理员回收。不自动回滚已经启动但随后崩溃的应用，不把该机制描述为完整启动健康监测。
@@ -405,3 +405,10 @@ macOS、Windows、Linux 共用的 FreeRDP 显示控制通道，必须先收到 `
 
 - 终端提供手动“重置文字格式”：右键菜单在复制/粘贴组之后加入独立条目，普通终端工具栏在重新连接之前提供“恢复默认”回转箭头图标 + “重置文字格式”文字按钮，右键菜单使用相同图标，提供中英文说明与无障碍名称。网格紧凑视图沿用隐藏工具栏规则，可通过右键使用；远端接管鼠标时继续遵循原有鼠标上报行为。
 - 两个入口统一调用 `TerminalSession.resetTextStyle`，直接清除本地终端当前前景、背景及文字属性，仅影响后续输出；保留历史文本及其颜色、光标位置、连接和远端程序。不向 SSH 发送命令、不插入 ANSI 字符，避免干扰正在分包接收的控制序列；远端随后显式设置的新格式仍正常生效。
+
+### 应用名称大小写（Step 130）
+
+- 三平台显示名称统一为 `Remlark`；macOS 产品为 `Remlark.app`、主程序为 `Remlark`，Windows 主程序及产品属性为 `Remlark.exe` / `Remlark`，Linux 主程序与桌面 Exec 为 `Remlark`。
+- 桌面安装包、便携包、同步服务端分发目录和附件统一使用 `Remlark-` 前缀；签名、公证、发布清单及更新附件映射同步修改。用户导出的 JSON 默认文件名前缀同样为 `Remlark-`。
+- Dart/npm 包名、应用 ID、Debian 包名 `remlark`、`/opt/remlark` 安装根目录、数据库/日志、FFI 库名、MethodChannel 和数据格式标识保持兼容。构建保护同时识别新旧大小写的进程。
+- 旧版更新器按小写附件和主程序名查找，此次切换需手动下载新版覆盖安装；新版之后使用大写名称更新。不自动改名用户已安装或正在运行的应用。安装后应确认旧入口移除，数据保留；历史步骤和测试记录中的旧产物名称保留原样。

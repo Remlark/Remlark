@@ -102,7 +102,7 @@ def sign(path, entitlements=None):
 
 def sign_app():
     """由内到外重签所有 Mach-O 和嵌套包，最后保留主 App 的发布权限。"""
-    app = ROOT / 'build/macos/Build/Products/Release/remlark.app'
+    app = ROOT / 'build/macos/Build/Products/Release/Remlark.app'
     if not app.is_dir():
         raise ValueError('Build macOS app before signing')
     targets = []
@@ -133,7 +133,7 @@ def sign_dmg():
     """只签本次 VERSION 对应的镜像，避免把 dist 中的旧附件混入发布。"""
     sys.path.insert(0, str(ROOT))
     from tools.utils.app_version import read_version
-    dmg = ROOT / 'dist' / f"remlark-{read_version(ROOT)['name']}-macos-universal.dmg"
+    dmg = ROOT / 'dist' / f"Remlark-{read_version(ROOT)['name']}-macos-universal.dmg"
     if not dmg.is_file():
         raise ValueError('Build macOS DMG before signing')
     sign(dmg)

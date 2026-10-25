@@ -18,8 +18,8 @@ class WindowsUpdatePlatform implements UpdatePlatform {
   /// setup 按 ABI 选择，便携用户点击升级后也安装到当前目录。
   @override
   String? assetName(String version) => switch (abi) {
-    Abi.windowsX64 => 'remlark-$version-windows-x64-setup.exe',
-    Abi.windowsArm64 => 'remlark-$version-windows-arm64-setup.exe',
+    Abi.windowsX64 => 'Remlark-$version-windows-x64-setup.exe',
+    Abi.windowsArm64 => 'Remlark-$version-windows-arm64-setup.exe',
     _ => null,
   };
 

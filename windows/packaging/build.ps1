@@ -49,7 +49,7 @@ $ReleaseDir = Resolve-RepoPath $ReleaseDir
 $OutputDir = Resolve-RepoPath $OutputDir
 # 每次使用独立暂存目录，避免把旧版本残留文件带入安装包，也不删除已有产物。
 $StageDir = Join-Path $Root ("build\packaging\windows-$Arch-" + [Guid]::NewGuid().ToString('N'))
-$required = @('remlark.exe', 'flutter_windows.dll', 'remlark_rdp.dll', 'remlark_crypto.dll',
+$required = @('Remlark.exe', 'flutter_windows.dll', 'remlark_rdp.dll', 'remlark_crypto.dll',
   'sqlite3.dll', 'data\app.so', 'data\icudtl.dat', 'data\flutter_assets')
 foreach ($file in $required) {
   if (-not (Test-Path -LiteralPath (Join-Path $ReleaseDir $file))) {
@@ -77,12 +77,12 @@ $version = $versionJson | ConvertFrom-Json
 $appVersion = $version.name
 $resourceVersion = $version.resource
 # 防止更改 VERSION 后直接给旧 exe 换名打包，四段资源版本必须匹配。
-$exeVersion = (Get-Item -LiteralPath (Join-Path $ReleaseDir 'remlark.exe')).VersionInfo
+$exeVersion = (Get-Item -LiteralPath (Join-Path $ReleaseDir 'Remlark.exe')).VersionInfo
 $actualVersion = @($exeVersion.FileMajorPart, $exeVersion.FileMinorPart, $exeVersion.FileBuildPart, $exeVersion.FilePrivatePart) -join '.'
 if ($actualVersion -ne $resourceVersion) { throw 'Release version does not match VERSION; run make windows first.' }
-$installerName = "remlark-$appVersion-windows-$Arch-setup"
+$installerName = "Remlark-$appVersion-windows-$Arch-setup"
 Invoke-BuildCommand $compiler "/DSourceDir=$StageDir" "/DDistDir=$OutputDir" "/DAppVersion=$appVersion" `
   "/DInstallerArch=$Arch" "/DResourceVersion=$resourceVersion" "/DInstallerName=$installerName" "$PSScriptRoot\remlark.iss"
-Compress-Archive -Force -Path "$StageDir\*" -DestinationPath (Join-Path $OutputDir "remlark-windows-$Arch.zip")
+Compress-Archive -Force -Path "$StageDir\*" -DestinationPath (Join-Path $OutputDir "Remlark-windows-$Arch.zip")
 Write-Host "Installer: $(Join-Path $OutputDir ($installerName + '.exe'))"
-Write-Host "Portable: $(Join-Path $OutputDir "remlark-windows-$Arch.zip")"
+Write-Host "Portable: $(Join-Path $OutputDir "Remlark-windows-$Arch.zip")"

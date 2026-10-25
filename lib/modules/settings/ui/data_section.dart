@@ -61,7 +61,7 @@ class DataSection extends StatelessWidget {
       final go = await UiUtils.confirm(context, title: context.tr('data.export.plain_warning'));
       if (!go) return;
     }
-    final loc = await getSaveLocation(suggestedName: 'remlark-${FormatUtils.dayKey(DateTime.now())}.json');
+    final loc = await getSaveLocation(suggestedName: 'Remlark-${FormatUtils.dayKey(DateTime.now())}.json');
     if (loc == null) return;
     try {
       await services.importExport.export(loc.path, withSecrets: withSecrets, passphrase: pass.text);

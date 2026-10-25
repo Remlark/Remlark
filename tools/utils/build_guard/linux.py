@@ -34,11 +34,11 @@ class LinuxInspector(ProcessInspector):
                     continue
                 except OSError as error:
                     raise GuardError('Cannot identify a running process; build cancelled.') from error
-                if name == 'remlark':
+                if name.lower() == 'remlark':
                     raise GuardError('Cannot inspect a running Remlark; build cancelled.')
                 continue
             except OSError as error:
                 raise GuardError('Cannot inspect a running executable; build cancelled.') from error
-            if Path(path).name == 'remlark':
+            if Path(path).name.lower() == 'remlark':
                 rows.append((int(entry.name), path))
         return rows

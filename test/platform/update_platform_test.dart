@@ -11,37 +11,37 @@ import 'package:remlark/modules/updates/platform/update_platform_windows.dart';
 void main() {
   test('P-18 三平台两种架构的附件与 Release 清单一致', () {
     for (final abi in [Abi.macosArm64, Abi.macosX64]) {
-      expect(MacosUpdatePlatform(abi).assetName('1.2.0'), 'remlark-macos.zip');
+      expect(MacosUpdatePlatform(abi).assetName('1.2.0'), 'Remlark-macos.zip');
     }
     expect(
       WindowsUpdatePlatform(Abi.windowsX64).assetName('1.2.0'),
-      'remlark-1.2.0-windows-x64-setup.exe',
+      'Remlark-1.2.0-windows-x64-setup.exe',
     );
     expect(
       WindowsUpdatePlatform(Abi.windowsArm64).assetName('1.2.0'),
-      'remlark-1.2.0-windows-arm64-setup.exe',
+      'Remlark-1.2.0-windows-arm64-setup.exe',
     );
     expect(
       LinuxUpdatePlatform(Abi.linuxX64).assetName('1.2.0'),
-      'remlark-linux-x64.tar.gz',
+      'Remlark-linux-x64.tar.gz',
     );
     expect(
       LinuxUpdatePlatform(Abi.linuxArm64).assetName('1.2.0'),
-      'remlark-linux-arm64.tar.gz',
+      'Remlark-linux-arm64.tar.gz',
     );
     expect(
       LinuxUpdatePlatform(
         Abi.linuxX64,
-        executable: '/opt/remlark/remlark',
+        executable: '/opt/remlark/Remlark',
       ).assetName('1.2.0'),
-      'remlark-1.2.0-linux-amd64.deb',
+      'Remlark-1.2.0-linux-amd64.deb',
     );
     expect(
       LinuxUpdatePlatform(
         Abi.linuxArm64,
-        executable: '/opt/remlark/remlark',
+        executable: '/opt/remlark/Remlark',
       ).assetName('1.2.0'),
-      'remlark-1.2.0-linux-arm64.deb',
+      'Remlark-1.2.0-linux-arm64.deb',
     );
     expect(MacosUpdatePlatform(Abi.linuxIA32).assetName('1.2.0'), isNull);
     expect(WindowsUpdatePlatform(Abi.windowsIA32).assetName('1.2.0'), isNull);

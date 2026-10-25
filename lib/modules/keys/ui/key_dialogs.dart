@@ -25,7 +25,7 @@ class KeyDialogs {
       context,
       title: context.tr('key.generate'),
       label: context.tr('key.name'),
-      initial: 'remlark-${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
+      initial: 'Remlark-${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
     );
     if (name == null || name.trim().isEmpty || !context.mounted) return null;
     final repo = context.read<AppServices>().keyRepo;

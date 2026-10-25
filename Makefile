@@ -1,7 +1,7 @@
 # Remlark 构建脚本
 # 注意：Flutter 不支持桌面端交叉编译，mac / linux / windows 目标需在对应系统上执行。
 
-APP_NAME   := remlark
+APP_NAME   := Remlark
 DIST_DIR   := dist
 SERVER_DIR := server
 WINDOWS_ARCH = $(if $(filter ARM64 arm64,$(PROCESSOR_ARCHITECTURE)),arm64,x64)
@@ -118,8 +118,8 @@ test-platform:
 # 同步服务端：编译为可执行文件包（含 sqlite 动态库）
 server: deps
 	mkdir -p $(DIST_DIR)
-	cd $(SERVER_DIR) && dart build cli -t bin/server.dart -o ../$(DIST_DIR)/remlark-sync-server
-	@echo "输出：$(DIST_DIR)/remlark-sync-server/bundle/bin/server（用法：--port 8443 --token <令牌> [--cert cert.pem --key key.pem]）"
+	cd $(SERVER_DIR) && dart build cli -t bin/server.dart -o ../$(DIST_DIR)/Remlark-sync-server
+	@echo "输出：$(DIST_DIR)/Remlark-sync-server/bundle/bin/server（用法：--port 8443 --token <令牌> [--cert cert.pem --key key.pem]）"
 
 # 本地运行同步服务端（开发用），令牌通过 TOKEN 变量传入：make server-run TOKEN=xxx
 server-run:

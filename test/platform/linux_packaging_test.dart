@@ -27,7 +27,7 @@ void main() {
     }
     final root = Directory.systemTemp.createTempSync(r'rmk desktop 中文 % $ ` " \ ');
     addTearDown(() => root.deleteSync(recursive: true));
-    final executable = File('${root.path}/remlark');
+    final executable = File('${root.path}/Remlark');
     executable.writeAsStringSync(r'''#!/bin/sh
 printf launched > "$(dirname "$0")/launched"
 ''');
@@ -63,7 +63,7 @@ printf launched > "$(dirname "$0")/launched"
     final root = Directory.systemTemp.createTempSync('rmk Linux 打包 ');
     addTearDown(() => root.deleteSync(recursive: true));
     final bundle = Directory('${root.path}/bundle')..createSync();
-    for (final file in ['remlark', 'lib/libflutter_linux_gtk.so', 'lib/libapp.so']) {
+    for (final file in ['Remlark', 'lib/libflutter_linux_gtk.so', 'lib/libapp.so']) {
       final target = File('${bundle.path}/$file');
       target.parent.createSync(recursive: true);
       target.writeAsStringSync('fixture');

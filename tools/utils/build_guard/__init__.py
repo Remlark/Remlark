@@ -65,7 +65,7 @@ def conflicting_processes(root, target, processes, build_directory=None):
                 prefix = (base / platform).resolve()
                 path = Path(executable).resolve()
                 inside = path.is_relative_to(prefix)
-                application = path.name == 'remlark'
+                application = path.name.lower() == 'remlark'
             if inside and application:
                 result.append((pid, executable))
                 break

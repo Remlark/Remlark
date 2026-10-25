@@ -38,7 +38,7 @@ void main() {
           directory: stage,
           archive: File(p.join(root.path, 'installer.exe')),
           version: '1.2.0',
-          executable: p.join(target.path, 'remlark.exe'),
+          executable: p.join(target.path, 'Remlark.exe'),
           processId: 2147483647,
         ),
       );
@@ -283,12 +283,12 @@ exec /bin/mv "$@"
 
   test('P-19 macOS 真正验证 zip 签名/版本，工作脚本替换隔离 App', () async {
     final source = await Directory(
-      p.join(root.path, 'source/remlark.app/Contents/MacOS'),
+      p.join(root.path, 'source/Remlark.app/Contents/MacOS'),
     ).create(recursive: true);
     final bundle = p.dirname(p.dirname(source.path));
-    await File('/bin/echo').copy(p.join(source.path, 'remlark'));
+    await File('/bin/echo').copy(p.join(source.path, 'Remlark'));
     await File(p.join(bundle, 'Contents/Info.plist')).writeAsString(
-      '''<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.remlark.upgrade-test</string><key>CFBundleExecutable</key><string>remlark</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleShortVersionString</key><string>1.2.0</string></dict></plist>''',
+      '''<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.remlark.upgrade-test</string><key>CFBundleExecutable</key><string>Remlark</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleShortVersionString</key><string>1.2.0</string></dict></plist>''',
     );
     await InstallHelpers.run('/usr/bin/codesign', [
       '--force',
@@ -308,7 +308,7 @@ exec /bin/mv "$@"
     final target = await Directory(
       p.join(root.path, 'Installed.app/Contents/MacOS'),
     ).create(recursive: true);
-    final executable = p.join(target.path, 'remlark');
+    final executable = p.join(target.path, 'Remlark');
     await File(executable).writeAsString('old');
     final plan = await MacosUpdatePlatform(Abi.macosX64).prepare(
       InstallContext(
@@ -347,12 +347,12 @@ exec /bin/mv "$@"
     for (final directory in ['lib', 'data']) {
       await Directory(p.join(bundle.path, directory)).create();
     }
-    await File(p.join(bundle.path, 'remlark')).writeAsString('new');
+    await File(p.join(bundle.path, 'Remlark')).writeAsString('new');
     final target = await Directory(p.join(root.path, 'installed')).create();
     for (final directory in ['lib', 'data']) {
       await Directory(p.join(target.path, directory)).create();
     }
-    final executable = p.join(target.path, 'remlark');
+    final executable = p.join(target.path, 'Remlark');
     await File(executable).writeAsString('old');
     final archive = File(p.join(root.path, 'package.tar.gz'));
     await InstallHelpers.run('tar', [
@@ -383,7 +383,7 @@ exec /bin/mv "$@"
   for (final fail in [false, true]) {
     test('P-19 Windows 实际执行安装助手，安装失败回滚=$fail', () async {
       final target = await Directory(p.join(root.path, 'app')).create();
-      final executable = p.join(target.path, 'remlark.exe');
+      final executable = p.join(target.path, 'Remlark.exe');
       await File(executable).writeAsString('placeholder');
       await File(p.join(target.path, 'version')).writeAsString('old');
       final archive = File(p.join(root.path, 'installer.cmd'));

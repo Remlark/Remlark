@@ -85,7 +85,7 @@ void main() {
       contains('Version arguments are managed by VERSION'),
     );
     final plist = File(
-      '${root.path}/build/macos/Build/Products/Release/remlark.app/Contents/Info.plist',
+      '${root.path}/build/macos/Build/Products/Release/Remlark.app/Contents/Info.plist',
     );
     plist.parent.createSync(recursive: true);
     plist.writeAsStringSync('''<?xml version="1.0" encoding="UTF-8"?>

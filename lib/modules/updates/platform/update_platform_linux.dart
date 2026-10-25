@@ -21,9 +21,9 @@ class LinuxUpdatePlatform implements UpdatePlatform {
   @override
   String? assetName(String version) => switch (abi) {
     Abi.linuxX64 =>
-      deb ? 'remlark-$version-linux-amd64.deb' : 'remlark-linux-x64.tar.gz',
+      deb ? 'Remlark-$version-linux-amd64.deb' : 'Remlark-linux-x64.tar.gz',
     Abi.linuxArm64 =>
-      deb ? 'remlark-$version-linux-arm64.deb' : 'remlark-linux-arm64.tar.gz',
+      deb ? 'Remlark-$version-linux-arm64.deb' : 'Remlark-linux-arm64.tar.gz',
     _ => null,
   };
 
@@ -32,7 +32,7 @@ class LinuxUpdatePlatform implements UpdatePlatform {
   Future<InstallPlan> prepare(InstallContext context) async {
     final target = p.dirname(context.executable);
     InstallHelpers.validateTarget(target);
-    if (p.basename(context.executable) != 'remlark') {
+    if (p.basename(context.executable) != 'Remlark') {
       throw const UpdateFailure('updates.error.location');
     }
     final q = ShellUtils.quote;
@@ -72,7 +72,7 @@ class LinuxUpdatePlatform implements UpdatePlatform {
         extracted.path,
       ]);
       final source = p.join(extracted.path, 'bundle');
-      if (!File(p.join(source, 'remlark')).existsSync() ||
+      if (!File(p.join(source, 'Remlark')).existsSync() ||
           !Directory(p.join(source, 'lib')).existsSync() ||
           !Directory(p.join(source, 'data')).existsSync()) {
         throw const UpdateFailure('updates.error.install');
