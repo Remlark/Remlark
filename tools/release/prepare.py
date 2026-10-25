@@ -26,6 +26,13 @@ def validate_tag():
         raise SystemExit(f'RELEASE_TAG must equal {expected}')
 
 
+def verify_universal(binary, run=subprocess.run):
+    """逐个架构校验通用二进制：Xcode 27 的 lipo -verify_arch 一次只接受一个架构，旧版同样支持单架构写法。"""
+    for arch in ('x86_64', 'arm64'):
+        if run(['lipo', str(binary), '-verify_arch', arch]).returncode != 0:
+            raise SystemExit(f'{binary} is missing architecture {arch}')
+
+
 def macos():
     """检查主程序与两项 FFI 库均包含双架构，再生成拖入 Applications 的 DMG。"""
     app = ROOT / 'build/macos/Build/Products/Release/Remlark.app'
@@ -43,7 +50,7 @@ def macos():
         if not matches:
             raise SystemExit(f'missing native library: {name}')
     for binary in binaries:
-        subprocess.run(['lipo', str(binary), '-verify_arch', 'x86_64', 'arm64'], check=True)
+        verify_universal(binary)
     # CI 在 make mac 后重签 App，重新生成 zip，确保两个附件包含同一份签名。
     dist = ROOT / 'dist'
     dist.mkdir(exist_ok=True)

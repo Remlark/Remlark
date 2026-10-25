@@ -56,6 +56,41 @@ void main() {
     );
   });
 
+  test('macOS 逐个架构校验通用二进制，缺少架构时报出具体架构', () async {
+    final root = Directory.systemTemp.createTempSync('remlark lipo 中文 ');
+    addTearDown(() => root.deleteSync(recursive: true));
+    final source = File('${root.path}/main.c')
+      ..writeAsStringSync('int main(void) { return 0; }\n');
+    Future<String> compile(String name, List<String> arches) async {
+      final output = '${root.path}/$name';
+      final result = await Process.run('xcrun', [
+        'clang',
+        for (final arch in arches) ...['-arch', arch],
+        source.path,
+        '-o',
+        output,
+      ]);
+      expect(result.exitCode, 0, reason: '${result.stderr}');
+      return output;
+    }
+
+    // 直接调用发布脚本中的校验函数，使用本机真实 lipo（Xcode 27 不接受一次多个架构）。
+    Future<ProcessResult> verify(String binary) => Process.run('python3', [
+      '-c',
+      'import sys; sys.path.insert(0, "."); '
+          'from tools.release.prepare import verify_universal; '
+          'verify_universal(sys.argv[1])',
+      binary,
+    ]);
+    final universal = await compile('universal', ['x86_64', 'arm64']);
+    final passed = await verify(universal);
+    expect(passed.exitCode, 0, reason: '${passed.stderr}');
+    final thin = await compile('arm64 only', ['arm64']);
+    final failed = await verify(thin);
+    expect(failed.exitCode, isNot(0));
+    expect(failed.stderr, contains('missing architecture x86_64'));
+  }, skip: !Platform.isMacOS);
+
   test('版本标签不匹配时拒绝发布', () async {
     final result = await Process.run(
       'python3',

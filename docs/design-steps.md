@@ -949,3 +949,6 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 新增 P-31 与 M-34，build-environment.md 补充 Mac mini runner 配置、令牌权限与公开仓库安全限制。
   - Flutter SDK 缓存：自托管 runner 每个任务清空 RUNNER_TEMP，导致每次重新下载 Flutter / Dart / 引擎；新增 `tools/utils/flutter_sdk.py`（复用 run_with_retry），自托管时安装到 RUNNER_TOOL_CACHE/flutter/<版本> 并以完成标记复用、半成品重装、升级删除旧版本，托管 runner 行为不变（RUNNER_TEMP 每次克隆）。P-28 新增 flutter_sdk_test.py 4 项。
   - 验证：本机 Intel macOS make test-platform 132 项通过、3 项条件跳过，P-31 / P-24 Python 检查通过，工作流 YAML 解析通过。尚未在 Actions 真实运行；自托管与回退路径按 M-34 验证，Windows / Linux 待执行 make test-platform。
+- [已完成] Step 138：兼容 Xcode 27 的 lipo 架构校验
+  - Xcode 27 的 `lipo -verify_arch` 一次只接受一个架构，Mac mini 发布时 `prepare.py macos` 失败；改为 `verify_universal` 逐个架构校验，新旧 Xcode 均兼容（GitHub macos-15 行为不变）。
+  - 验证：P-10 新增真实 clang 编译 universal / 仅 arm64 二进制的 macOS 用例，本机 Xcode 26.4 通过，Mac mini Xcode 27.1 实测通过；本机 make test-platform 通过。
