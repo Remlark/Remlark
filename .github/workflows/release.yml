@@ -148,6 +148,8 @@ jobs:
           python3 tools/utils/retry_command.py -- flutter config --no-analytics --enable-linux-desktop --enable-macos-desktop --enable-windows-desktop
           python3 tools/utils/retry_command.py -- flutter --version
           make deps
+          # sqlite3 构建钩子下载预编译库，GitHub 5xx 会表现为哈希不符；有限重试预热，后续测试与构建复用。
+          python3 tools/utils/retry_command.py -- make native-assets
       - name: Platform tests
         if: runner.os != 'Windows'
         run: make test-platform
@@ -161,6 +163,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Flutter bootstrap failed' }
           make deps
           if ($LASTEXITCODE -ne 0) { throw 'Flutter dependencies failed' }
+          python3 tools/utils/retry_command.py -- make native-assets
+          if ($LASTEXITCODE -ne 0) { throw 'Native asset hooks failed' }
       - name: Windows platform tests
         if: runner.os == 'Windows'
         shell: pwsh
@@ -274,6 +278,8 @@ jobs:
         working-directory: server
         run: |
           dart pub get --enforce-lockfile
+          # 先用最小测试有限重试触发 sqlite3 构建钩子下载，避免 GitHub 5xx 被误报为哈希不符。
+          python3 ../tools/utils/retry_command.py -- dart test test/serial_executor_test.dart
           dart analyze
           dart test
           dart build cli -t bin/server.dart -o ../dist/Remlark-sync-server

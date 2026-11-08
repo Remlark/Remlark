@@ -17,7 +17,7 @@ else
   endif
 endif
 
-.PHONY: guard-mac guard-linux guard-windows guard-run all build mac linux windows run deps gen test analyze server server-run clean rdp-lib crypto-lib native-lib rdp-test-server test-platform readme-shots
+.PHONY: guard-mac guard-linux guard-windows guard-run all build mac linux windows run deps gen test analyze server server-run clean rdp-lib crypto-lib native-lib rdp-test-server test-platform native-assets readme-shots
 
 # 默认：按当前平台打包
 all: build
@@ -117,6 +117,11 @@ test:
 # 多平台单元测试（见 docs/multi-platform-testing.md），在 macOS / Linux / Windows 上分别执行
 test-platform:
 	flutter test test/platform
+
+# 预热 Dart 构建钩子：sqlite3 从 GitHub Release 下载预编译库，网关超时会被误报为哈希不符；
+# CI 经 retry_command.py 调用，校验通过的库缓存在钩子共享输出目录，后续测试与构建直接复用
+native-assets:
+	flutter test test/platform/app_name_test.dart
 
 # README 界面图：用模拟数据渲染中英文界面图到 docs/images/<语言>/
 readme-shots:

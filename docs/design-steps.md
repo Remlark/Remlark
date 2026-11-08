@@ -981,3 +981,9 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - Inno Setup 生成 dist/Remlark-1.0.4-windows-x64-setup.exe（19,200,892 字节）及 dist/Remlark-windows-x64.zip；安装包解包后关键 DLL 齐全，exe 版本 1.0.4+1，启动 10 秒存活后结束本次测试进程。
   - 本机环境：PATH 需使用已有 Python，初始化 VS x64 工具链；旧 CMake 缓存引用小写 remlark，备份后重新生成。插件链接出现不受信任挂载点错误，本次使用插件源码缓存副本及临时生成 CMake 路径完成 Release 构建；已恢复仓库跟踪的生成文件。不能将本次分阶段成功等同于普通终端直接 make windows 成功。
   - 未执行真实安装/升级/卸载及远程 SFTP 系统拖动；macOS/Linux 本轮未执行 make test-platform，需在对应系统补测。
+
+- [已完成] Step 143：CI 预热 sqlite3 构建钩子下载并有限重试
+  - 现象：Linux x64 Actions 报 `Hash of downloaded file libsqlite3.x64.linux.so is bef140a1…, expected b1772918…`。实测 bef140a1… 正是 GitHub 返回的 92 字节 `504 Gateway Time-out` 页面的 SHA-256：sqlite3 3.5.2 钩子不检查 HTTP 状态，把错误页当作库文件；上游附件未变化。
+  - 新增 `make native-assets`（运行轻量的 P-30 测试触发钩子）；test.yml 与 release.yml 桌面两个入口在首次 `make test-platform` 前经 retry_command.py 预热，Release 服务端在 `dart test` 前以最小测试重试预热。钩子把校验通过的库缓存在共享输出目录，后续测试与构建复用；失败只留下 .tmp，不影响重试。
+  - macOS universal 构建只能预热宿主架构，另一架构仍在 `make mac` 中下载。
+  - P-28 增加检查：预热命令经重试且早于首次平台测试。
