@@ -604,3 +604,14 @@ Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过�
 - 安装器 SHA-256：30CBE4075BC5E7D2CAC89DC8677EB658FDBC127FCD11EF1F158113E2E1343F30。
 - 便携包 SHA-256：947BDC4F88DCA538D433D030DCF6B695251A66284AC75726BE7FAC673F0BB799。
 - 手工待测：M-34 真实远程文件拖到资源管理器/桌面、M-14/M-33 实际安装/覆盖升级/卸载与入口，以及真实远程连接；不能将启动存活检查视为这些项目通过。
+
+### 2026-11-08 Linux x64 专项与安装包验证
+
+- 环境：Ubuntu 26.04 x86_64，Flutter 3.47.7 / Dart 3.13.5，版本 1.0.4+1。日志保存在 build/linux-qa/。
+- flutter analyze 无问题；RMK_REQUIRE_RDP_NATIVE=1 make test-platform：139 项通过、5 项条件跳过；服务端 dart test：43 项通过。真实远程 RDP 未指定授权配置，未执行；VAAPI 不可用，实际验证 H.264 软件解码与回退，不能视为 GPU 硬解通过。
+- 首轮旧 RDP 库缺少 rmk_rdp_h264_stream_check 符号。使用当前 native/rdp 源码重新编译胶水库、更新两个本地原生输出目录后复测通过。
+- make linux 首次因缺少 nasm / libva 开发文件失败；通过 apt download 与 dpkg-deb -x 在 build/linux-qa/deps/ 暂存依赖（未修改系统安装）。完整原生重建又因 OpenSSL GitHub 下载连续三次 HTTP 504 中断。最终复用本机现有静态依赖，以 CMake 重编当前 RDP 胶水库，再运行版本包装入口 flutter build linux --release 和 linux/packaging/build.py，均成功。本轮不能证明从零执行 make linux 成功。
+- 产物：dist/Remlark-1.0.4-linux-amd64.deb 与 dist/Remlark-linux-x64.tar.gz；SHA-256 见 build/linux-qa/SHA256SUMS。Debian 包已解包检查，主程序 ldd 无缺失依赖；使用隔离 XDG 数据/配置目录，在 Xvfb 启动解包应用，15 秒后由 timeout 结束（124），未提前退出。存在 Mesa/EGL 警告，不能替代界面交互验证。
+- 包自动计算 Depends 包含 libc6 >= 2.43，当前产物面向本机构建环境；Ubuntu 24.04 等旧系统需在对应最低支持系统重新构建。未验证 Linux arm64、干净机器实际安装/升级/卸载、真实 SSH/SFTP/RDP/VNC 和桌面交互。
+
+- 最终全量回归：flutter test 620 项通过、14 项条件跳过（tests-final.log）；Python 构建工具测试 67 项通过；desktop-file-validate 返回 0。首轮全量测试的旧库符号失败已由最终全量回归覆盖。
