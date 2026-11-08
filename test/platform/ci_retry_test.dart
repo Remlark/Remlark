@@ -53,9 +53,9 @@ void main() {
       '$retry -- flutter config',
       '$retry -- gh release upload',
       '$retry -- gh release edit',
-      // sqlite3 构建钩子下载预编译库：桌面两个入口与服务端都先有限重试预热。
-      '$retry -- make native-assets',
-      'python3 ../tools/utils/retry_command.py -- dart test test/serial_executor_test.dart',
+      // sqlite3 预编译库预取：桌面两个入口与服务端都经重试工具。
+      '$retry -- python3 tools/utils/sqlite_assets.py',
+      'python3 ../tools/utils/retry_command.py -- python3 ../tools/utils/sqlite_assets.py',
     ]) {
       expect(release, contains(command), reason: command);
     }
@@ -63,20 +63,10 @@ void main() {
       '$retry -- sudo apt-get update',
       '$retry -- choco install make',
       '$retry -- flutter pub get --enforce-lockfile',
-      '$retry -- make native-assets',
+      '$retry -- python3 tools/utils/sqlite_assets.py',
     ]) {
       expect(tests, contains(command), reason: command);
     }
-    expect('$retry -- make native-assets'.allMatches(release).length, 2);
-    // 预热必须早于首次平台测试，否则钩子下载仍发生在未重试的测试命令中。
-    expect(
-      tests.indexOf('make native-assets'),
-      lessThan(tests.indexOf('run: make test-platform')),
-    );
-    expect(
-      release.indexOf('make native-assets'),
-      lessThan(release.indexOf('make test-platform')),
-    );
     // 不允许遗漏未包装的网络安装命令。
     for (final line in '$release\n$tests'.split('\n')) {
       final trimmed = line.trim();

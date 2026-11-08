@@ -982,8 +982,9 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 本机环境：PATH 需使用已有 Python，初始化 VS x64 工具链；旧 CMake 缓存引用小写 remlark，备份后重新生成。插件链接出现不受信任挂载点错误，本次使用插件源码缓存副本及临时生成 CMake 路径完成 Release 构建；已恢复仓库跟踪的生成文件。不能将本次分阶段成功等同于普通终端直接 make windows 成功。
   - 未执行真实安装/升级/卸载及远程 SFTP 系统拖动；macOS/Linux 本轮未执行 make test-platform，需在对应系统补测。
 
-- [已完成] Step 143：CI 预热 sqlite3 构建钩子下载并有限重试
-  - 现象：Linux x64 Actions 报 `Hash of downloaded file libsqlite3.x64.linux.so is bef140a1…, expected b1772918…`。实测 bef140a1… 正是 GitHub 返回的 92 字节 `504 Gateway Time-out` 页面的 SHA-256：sqlite3 3.5.2 钩子不检查 HTTP 状态，把错误页当作库文件；上游附件未变化。
-  - 新增 `make native-assets`（运行轻量的 P-30 测试触发钩子）；test.yml 与 release.yml 桌面两个入口在首次 `make test-platform` 前经 retry_command.py 预热，Release 服务端在 `dart test` 前以最小测试重试预热。钩子把校验通过的库缓存在共享输出目录，后续测试与构建复用；失败只留下 .tmp，不影响重试。
-  - macOS universal 构建只能预热宿主架构，另一架构仍在 `make mac` 中下载。
-  - P-28 增加检查：预热命令经重试且早于首次平台测试。
+- [已完成] Step 143：CI 预取 sqlite3 预编译库，绕过故障的 releases/download 入口
+  - 现象：Linux x64 Actions 报 `Hash of downloaded file libsqlite3.x64.linux.so is bef140a1…, expected b1772918…`。实测 bef140a1… 正是 github.com 返回的 92 字节 `504 Gateway Time-out` 页面的 SHA-256：sqlite3 钩子不检查 HTTP 状态，把错误页当作库文件。上游附件未变化（API 报告的 digest 即 b1772918…）。
+  - 第一版（2bfb9d0）只用 retry_command.py 重试预热钩子，但 `github.com/<任意仓库>/releases/download/` 持续返回 504（cli/cli 等其他仓库同样），重试无效；API 资产接口正常并返回正确文件。
+  - 改为新增 `tools/utils/sqlite_assets.py`：从 package_config 定位锁定的 sqlite3 包，读取其 asset_hashes.dart 的 releaseTag 与哈希；经 GitHub API 按名称找到附件下载（令牌只发给 api.github.com，跳转后不携带），失败回退普通下载地址；校验 sha256 后原子写入钩子共享输出目录 `download-<哈希前 8 位>/`。钩子 3.5.2 与 3.7.1 都在该文件哈希一致时直接复用，不再访问故障入口。
+  - test.yml、release.yml 桌面两个依赖入口与服务端六路在 pub get 后、首次测试前经 retry_command.py 调用，按矩阵 `--os/--arch` 预取（macOS universal 为双架构），传入 `GH_TOKEN: ${{ github.token }}` 避免匿名限流；移除上一版的 `make native-assets`。
+  - 测试：新增 P-33（10 项 Python 检查 + 工作流顺序检查）、M-36，P-28 改为检查预取命令经重试。本机删除钩子缓存后复现同一错误，执行预取后 flutter test 通过；本机为 Linux x64/arm64、Windows arm64（服务端）实际预取成功。

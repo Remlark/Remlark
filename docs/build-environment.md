@@ -331,7 +331,9 @@ git push origin test-20261025-01
 
 正式发布所需的压缩包仅作为任务间中转上传，保留 7 天，重跑同名包时覆盖。只有 `publish` 成功（附件已全部进入 Release）后，`cleanup` 任务才删除**本次运行**的 `packages-*`、`logs-*`；任一构建或发布失败都不删除，已成功平台的包保留，可直接 Re-run failed jobs。历史运行的中转包不自动清理，由 7 天保留期过期或手动删除。Release 附件和原生缓存不受影响。清理使用 `actions: write`，API 失败会明确报错。
 
-CI 中的网络安装（Flutter 克隆和首次初始化、apt-get、brew、choco、MSYS2 pacman、pub get、gh release upload/edit，以及 sqlite3 构建钩子下载预编译库的 `make native-assets` 预热）统一通过 `python3 tools/utils/retry_command.py [--clean 路径] -- 命令...` 有限重试，默认 3 次、间隔 10/20 秒，最终返回最后一次退出码。
+CI 中的网络安装（Flutter 克隆和首次初始化、apt-get、brew、choco、MSYS2 pacman、pub get、gh release upload/edit）统一通过 `python3 tools/utils/retry_command.py [--clean 路径] -- 命令...` 有限重试，默认 3 次、间隔 10/20 秒，最终返回最后一次退出码。
+
+sqlite3 构建钩子从 `github.com/.../releases/download` 下载预编译库且不检查 HTTP 状态，该入口返回 5xx 时会报“Hash of downloaded file … is bef140a1…”（即 504 错误页的哈希），重试无法绕过持续故障。CI 在 pub get 后、首次测试前执行 `python3 tools/utils/sqlite_assets.py <项目> --os <系统> --arch <架构|universal>`：经 GitHub API 资产接口（失败回退普通下载地址）取得文件、校验 sha256 后放入 `.dart_tool/hooks_runner/shared/sqlite3/build/download-<哈希前 8 位>/`，钩子发现哈希一致便直接复用。本地遇到同样错误也可手动执行该命令。
 
 2026-10-21 已用此模式完成硬件加速版本五路验证：[Desktop Build #11](https://github.com/Remlark/Remlark/actions/runs/39615318096)，macOS universal、Windows / Linux x64 与 arm64 编译、打包、构建后平台测试全部通过。具体解码结果和实机验证范围见 [multi-platform-testing.md](multi-platform-testing.md#2026-10-21-硬件加速版本-github-actions-全矩阵验证step-84)。
 
