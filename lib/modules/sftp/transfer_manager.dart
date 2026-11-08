@@ -35,7 +35,7 @@ class TransferTask extends ChangeNotifier {
   /// 下载任务的远程文件信息
   final FileEntry? remote;
 
-  /// 上传到目标目录后使用的名称（重名时改名，如“文件 2.txt”）；为空保持原名
+  /// 在目标目录中使用的名称（上传重名时改名，如“文件 2.txt”；拖出下载时由系统给定）；为空保持原名
   final String? targetName;
 
   TransferStatus status = TransferStatus.queued;
@@ -120,14 +120,15 @@ class TransferManager extends ChangeNotifier {
     return task;
   }
 
-  /// 下载远程文件或目录到本地目录
-  TransferTask download(FileEntry file, String localDir) {
+  /// 下载远程文件或目录到本地目录；[asName] 指定本地名称（为空保持原名，如拖到 Finder 时由系统给定名称）
+  TransferTask download(FileEntry file, String localDir, {String? asName}) {
     final task = TransferTask(
       direction: TransferDirection.download,
-      name: file.name,
+      name: asName ?? file.name,
       source: file.path,
       target: localDir,
       remote: file,
+      targetName: asName,
     );
     _enqueue(task);
     return task;
@@ -185,7 +186,9 @@ class TransferManager extends ChangeNotifier {
     if (!t.isFailed) return null;
     tasks.remove(t);
     final remote = t.remote;
-    if (t.direction == TransferDirection.download && remote != null) return download(remote, t.target);
+    if (t.direction == TransferDirection.download && remote != null) {
+      return download(remote, t.target, asName: t.targetName);
+    }
     return upload(t.source, t.target, asName: t.targetName);
   }
 
@@ -266,10 +269,15 @@ class TransferManager extends ChangeNotifier {
     t.fileCount = files.length;
     t.total = files.fold(0, (s, f) => s + f.$3);
     t._update();
+    // 先建好顶层目录：空目录也要在本地出现（拖到 Finder 时系统等待该目录）
+    if (remote.isDir) Directory(p.join(t.target, t.targetName ?? remote.name)).createSync(recursive: true);
     var base = 0;
     for (final (remotePath, rel, size) in files) {
       if (t.cancelToken.isCancelled) throw TransferCancelled();
-      final localPath = p.joinAll([t.target, ...rel.split('/')]);
+      final parts = rel.split('/');
+      // 指定了目标名称时替换最外层名称（文件名或目录名）
+      if (t.targetName != null) parts[0] = t.targetName!;
+      final localPath = p.joinAll([t.target, ...parts]);
       Directory(p.dirname(localPath)).createSync(recursive: true);
       final start = base;
       await _sftp.downloadFile(remotePath, localPath, cancel: t.cancelToken, onProgress: (n) => t._progress(start + n));

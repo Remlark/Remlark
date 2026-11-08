@@ -15,12 +15,14 @@ import '../sftp_service.dart';
 import '../../../ui_kit/app_menu.dart';
 import 'file_type_icon.dart';
 
-/// 栏间拖动的数据：来源栏是否远程 + 拖动的文件
+/// 栏间拖动的数据：来源栏是否远程、拖动的文件，以及来源栏的传输方法。
+/// 放下时由目标栏调用 [transfer]：本地栏拖来的是上传，远程栏拖来的是下载
 class FilePaneDrag {
-  const FilePaneDrag({required this.fromRemote, required this.files});
+  const FilePaneDrag({required this.fromRemote, required this.files, required this.transfer});
 
   final bool fromRemote;
   final List<FileEntry> files;
+  final void Function(List<FileEntry> files) transfer;
 }
 
 /// 排序字段
@@ -42,6 +44,7 @@ class FilePane extends StatefulWidget {
     this.initialPath,
     this.status,
     this.onExternalDrop,
+    this.onDragOut,
     this.extraMenu,
   });
 
@@ -66,6 +69,9 @@ class FilePane extends StatefulWidget {
   /// 系统文件拖入（仅远程栏）
   final void Function(List<String> paths)? onExternalDrop;
 
+  /// 拖动的文件离开窗口时交给系统拖动（仅远程栏，拖到文件管理器即下载），返回是否已开始
+  final Future<bool> Function(List<FileEntry> files)? onDragOut;
+
   /// 额外的右键菜单项（如远程目录“在终端中进入”）：(文本, 是否可用, 执行)
   final List<(String, bool Function(FileEntry), void Function(FileEntry))> Function(BuildContext)? extraMenu;
 
@@ -87,6 +93,9 @@ class FilePaneState extends State<FilePane> {
   bool _asc = true;
   bool _dropHover = false;
 
+  /// 当前拖动已交给系统拖动：隐藏应用内的拖动提示，同一次拖动不再重复开始
+  final ValueNotifier<bool> _draggedOut = ValueNotifier(false);
+
   FileSource get _src => widget.source;
 
   /// 当前目录
@@ -104,6 +113,7 @@ class FilePaneState extends State<FilePane> {
   @override
   void dispose() {
     _pathCtrl.dispose();
+    _draggedOut.dispose();
     super.dispose();
   }
 
@@ -305,7 +315,8 @@ class FilePaneState extends State<FilePane> {
     Widget body = DragTarget<FilePaneDrag>(
       // 只接受另一栏拖来的文件，避免同栏拖动被当作传输
       onWillAcceptWithDetails: (d) => d.data.fromRemote != _src.isRemote,
-      onAcceptWithDetails: (d) => widget.onTransfer(d.data.files),
+      // 由来源栏执行传输：本地文件放到远程栏是上传，远程文件放到本地栏是下载
+      onAcceptWithDetails: (d) => d.data.transfer(d.data.files),
       builder: (context, candidates, _) => Container(
         decoration: BoxDecoration(
           color: p.panel,
@@ -542,9 +553,18 @@ class FilePaneState extends State<FilePane> {
                 ],
               );
               // 拖动到另一栏即传输；拖动选中项时带上全部选中文件
+              final files = selected ? selection : [f];
               return Draggable<FilePaneDrag>(
-                data: FilePaneDrag(fromRemote: _src.isRemote, files: selected ? selection : [f]),
-                feedback: _DragFeedback(count: selected ? _selected.length : 1, entry: f),
+                data: FilePaneDrag(fromRemote: _src.isRemote, files: files, transfer: widget.onTransfer),
+                feedback: ValueListenableBuilder(
+                  valueListenable: _draggedOut,
+                  builder: (_, out, child) => Opacity(opacity: out ? 0 : 1, child: child),
+                  child: _DragFeedback(count: files.length, entry: f),
+                ),
+                // 提示框左上角锚定在指针处：无论从行内哪个位置开始拖动，提示都紧跟鼠标
+                dragAnchorStrategy: pointerDragAnchorStrategy,
+                onDragStarted: () => _draggedOut.value = false,
+                onDragUpdate: (d) => _maybeDragOut(d.globalPosition, files),
                 child: row,
               );
             },
@@ -561,6 +581,18 @@ class FilePaneState extends State<FilePane> {
     );
   }
 
+  /// 拖动中指针离开窗口时交给系统拖动（同一次拖动只开始一次）
+  void _maybeDragOut(Offset pos, List<FileEntry> files) {
+    final out = widget.onDragOut;
+    if (out == null || _draggedOut.value) return;
+    if (!isOutsideWindow(pos, MediaQuery.sizeOf(context))) return;
+    _draggedOut.value = true;
+    out(files).then((started) {
+      // 未能开始（平台不支持或失败）时恢复应用内拖动提示
+      if (!started && mounted) _draggedOut.value = false;
+    });
+  }
+
   Widget _nameCell(BuildContext context, String name, Widget icon) {
     return Row(
       children: [
@@ -574,6 +606,11 @@ class FilePaneState extends State<FilePane> {
   }
 }
 
+/// 指针是否已到窗口边缘或之外（鼠标按下时离开窗口仍会收到移动事件，坐标超出窗口范围）
+@visibleForTesting
+bool isOutsideWindow(Offset pos, Size window) =>
+    pos.dx <= 0 || pos.dy <= 0 || pos.dx >= window.width - 1 || pos.dy >= window.height - 1;
+
 /// 拖动时跟随指针的提示
 class _DragFeedback extends StatelessWidget {
   const _DragFeedback({required this.count, required this.entry});
@@ -586,27 +623,31 @@ class _DragFeedback extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: p.panelRaised,
-          borderRadius: BorderRadius.circular(AppSizes.radius),
-          border: Border.all(color: p.accent),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            count > 1
-                ? Icon(Icons.file_copy_outlined, size: 18, color: p.accent)
-                : FileTypeIcon.entry(entry, size: 18),
-            const SizedBox(width: 8),
-            Text(
-              count > 1 ? context.tr('sftp.items', {'n': count}) : entry.name,
-              style: TextStyle(fontSize: 13, color: p.text),
-            ),
-          ],
+    // 相对指针向右下偏移，避免光标遮住图标和文件名
+    return Transform.translate(
+      offset: const Offset(12, 10),
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: p.panelRaised,
+            borderRadius: BorderRadius.circular(AppSizes.radius),
+            border: Border.all(color: p.accent),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              count > 1
+                  ? Icon(Icons.file_copy_outlined, size: 18, color: p.accent)
+                  : FileTypeIcon.entry(entry, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                count > 1 ? context.tr('sftp.items', {'n': count}) : entry.name,
+                style: TextStyle(fontSize: 13, color: p.text),
+              ),
+            ],
+          ),
         ),
       ),
     );

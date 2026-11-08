@@ -23,6 +23,7 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
     LazyFilePasteboard.shared.attach(messenger: flutterViewController.engine.binaryMessenger)
+    FileDragSource.shared.attach(controller: flutterViewController)
 
     // 启动完成后主动激活应用并设为 key window：
     // 从终端直接运行可执行文件（flutter run / make run）时不经过 LaunchServices，

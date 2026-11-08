@@ -958,3 +958,13 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 新增 lib/modules/sftp/file_kind.dart：FileKind 共 22 类（普通、符号链接、文本、Markdown、代码、脚本、网页、配置、数据库、表格、文档、演示、PDF、图片、音频、视频、压缩包、安装包、磁盘镜像、可执行、密钥证书、字体），按惯用文件名（Makefile、.bashrc、authorized_keys、id_rsa 等）→ 扩展名判断；末尾数字段（app.log.2、libssl.so.3）去掉后再判断；无法识别但带执行位的文件归为可执行。.key 在服务器上多为私钥，归入密钥而非演示文稿。
   - 图标位于 assets/file_icons/{kind}.svg：统一折角页面轮廓 + 分类颜色 + 白色符号，深浅色主题下均可辨认；目录仍用主题色文件夹图标。引入 flutter_svg 渲染，组件为 sftp/ui/file_type_icon.dart，用于文件列表、拖动提示（单个文件）与传输队列（目录 / 多文件任务显示文件夹）。
   - 测试 test/sftp_file_kind_test.dart：分类、惯用文件名、数字段、执行位、扩展名不重复，以及每个分类的 SVG 存在且可被 flutter_svg 解析。共用 Dart UI，无平台分支，无新增界面文案。
+
+- [已完成] Step 141：SFTP 拖动传输（双栏互拖修复、拖出到系统文件管理器、拖动提示跟随指针）
+  - 修复双栏互拖：放下时目标栏调用了自己的传输方法（本地文件放到远程栏执行的是“下载”，传输失败）；FilePaneDrag 带上来源栏的传输方法，放下时由来源栏执行，本地 → 远程上传、远程 → 本地下载。选中多个文件时一起拖动。
+  - 拖动提示改用 pointerDragAnchorStrategy 并向右下偏移，无论从行内哪个位置开始拖动都紧跟鼠标（原先保持按下点与行左上角的距离）。
+  - 拖出到系统：新增跨平台接口 lib/utils/file_drag_out/（通道 remlark/file_drag：start / write / ended），远程栏拖动离开窗口时开始系统拖动并隐藏应用内提示，放下后经传输队列下载到系统给定的路径；TransferManager.download 增加 asName，目录先创建顶层（空目录也会出现）。
+    - macOS：FileDragSource.swift，每个顶层项一个 NSFilePromiseProvider，只允许拖到其他应用；开始后补发 mouseUp 结束 Flutter 拖动手势。
+    - Windows：file_drag_source.cpp，OLE 虚拟文件 + IDataObjectAsyncCapability，开始前递归列出目录；资源管理器在后台线程请求文件内容时投递到平台线程调用 Dart，下载到 %TEMP%\Remlark-drag 后以流返回；SHDoDragDrop 结束后补发 WM_LBUTTONUP。
+    - Linux：不支持（XDS 只能单文件且 Wayland 不可用），保持应用内拖动。
+  - 测试：test/sftp_drag_test.dart 9 项（方向、同栏不传输、多选、指针锚定、拖出触发一次与失败恢复、本地栏不拖出），还原修复后方向与锚定用例失败；P-31 平台测试 7 项；多平台文档新增总览行、P-31、M-34。
+  - 验证：macOS Debug 构建通过（Swift 编译）；Windows C++ 无本机编译环境，待 Windows 上 make test-platform 与 M-34；实际拖到 Finder / 资源管理器尚未手工验证。

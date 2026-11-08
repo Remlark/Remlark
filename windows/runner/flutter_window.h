@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "file_drag_source.h"
 #include "win32_window.h"
 
 // A window that does nothing but host a Flutter view.
@@ -28,6 +29,9 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  // SFTP 远程文件拖出到资源管理器
+  std::unique_ptr<FileDragSource> file_drag_source_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

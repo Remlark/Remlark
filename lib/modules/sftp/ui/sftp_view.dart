@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../../../app/theme/app_palette.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../ui_kit/buttons.dart';
 import '../../../ui_kit/panel.dart';
+import '../../../utils/file_drag_out/file_drag_out.dart';
 import '../../../utils/shell_utils.dart';
 import '../../../utils/ui_utils.dart';
 import '../../workspace/workspace_controller.dart';
@@ -82,6 +84,25 @@ class _SftpViewState extends State<SftpView> {
     }
   }
 
+  /// 远程文件拖到系统文件管理器：放下后经传输队列下载到系统给定的路径
+  Future<bool> _dragOut(SftpService sftp, List<FileEntry> files) {
+    return FileDragOut.instance.start(
+      DragOutSource(
+        items: files,
+        walk: (dir) async => [
+          for (final (path, rel, size) in await sftp.walkRemote(dir))
+            (FileEntry(name: p.basename(rel), path: path, isDir: false, isLink: false, size: size), rel),
+        ],
+        fetch: (entry, localPath) async {
+          final tm = t.session.transfers;
+          if (tm == null) throw StateError(context.tr('terminal.not_connected'));
+          final task = tm.download(entry, p.dirname(localPath), asName: p.basename(localPath));
+          if (!await TransferManager.waitAll([task])) throw StateError(task.error ?? task.status.name);
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     _bind();
@@ -136,6 +157,7 @@ class _SftpViewState extends State<SftpView> {
                           transferIcon: Icons.download_rounded,
                           onTransfer: _download,
                           onExternalDrop: _upload,
+                          onDragOut: FileDragOut.instance.supported ? (files) => _dragOut(sftp, files) : null,
                           extraMenu: (ctx) => [
                             (
                               ctx.tr('sftp.cd_terminal'),

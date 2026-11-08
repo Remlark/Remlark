@@ -25,6 +25,9 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  file_drag_source_ = std::make_unique<FileDragSource>(
+      flutter_controller_->engine()->messenger(),
+      flutter_controller_->view()->GetNativeWindow());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -40,6 +43,8 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  // 先于引擎释放：拖出通道依赖引擎的 messenger
+  file_drag_source_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
