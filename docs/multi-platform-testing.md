@@ -76,7 +76,8 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 构建保护真实进程测试夹具 | `tools/testing/build_guard_test.py`、`test/platform/fixtures/build_guard_probe.c` | xcrun clang 从源码编译本机架构的普通进程，避免复制系统二进制的 SIGKILL；等待就绪标记，验证默认/C locale | 复制 Python 为隔离应用，设置 PYTHONHOME / PATH；仓库文本显式 UTF-8；等待就绪标记，验证默认/C locale | 复制 Python 为隔离应用，设置 PYTHONHOME，兼容多入口 coreutils；等待就绪标记，验证默认/C locale | P-22 | — |
 | 发布前平台专项测试工作流 | `.github/workflows/test.yml` | Intel / ARM64 独立 runner；ARM64 复用精确匹配的 universal 原生缓存；Xcode 测试夹具 | 仅 x64 runner（不再运行 Windows ARM64）；PowerShell、Make、MSVC 测试夹具 | x64 / ARM64 独立 runner；安装运行库及桌面入口测试依赖 | P-25 | M-28 |
 | Actions 临时产物清理 | `release.yml`、`tools/release/cleanup_artifacts.py` | 仅构建不上传，正式发布中转保留 7 天，publish 成功后只清理当前运行；失败保留供重跑 | 同左 | 同左；清理在独立 Ubuntu 任务运行 | P-24 | M-27 |
-| CI 网络安装重试 | `release.yml`、`test.yml`、[retry_command.py](../tools/utils/retry_command.py) | git clone Flutter、brew、flutter 初始化在 bash 中经 python3 重试 | choco、MSYS2 pacman、flutter 初始化在 pwsh 中经 python3 重试，失败仍由 `$LASTEXITCODE` 判断；`.bat`/`.cmd` 按 PATH 解析 | apt-get、flutter 初始化重试；publish 的 gh release upload/edit 同样重试 | P-28 | M-31 |
+| CI 网络安装重试 | `release.yml`、`test.yml`、[retry_command.py](../tools/utils/retry_command.py)、[flutter_sdk.py](../tools/utils/flutter_sdk.py) | release.yml 经 flutter_sdk.py 安装 Flutter（自托管 Mac mini 缓存到 RUNNER_TOOL_CACHE 复用），test.yml git clone Flutter、brew、flutter 初始化在 bash 中经 python3 重试 | choco、MSYS2 pacman、flutter 初始化在 pwsh 中经 python3 重试，失败仍由 `$LASTEXITCODE` 判断；`.bat`/`.cmd` 按 PATH 解析 | apt-get、flutter 初始化重试；publish 的 gh release upload/edit 同样重试 | P-28 | M-31 |
+| Release 自托管 macOS runner | `release.yml`、[pick_runner.py](../tools/release/pick_runner.py)、[actions_api.py](../tools/utils/actions_api.py) | 带 `remlark-macmini` 标签的自托管 Mac mini 在线时承担桌面 universal 包与服务端 arm64；离线、未配置 `RUNNER_STATUS_TOKEN` 或查询失败回退 `macos-15`；服务端 x64 固定 `macos-15-intel` | 不受影响，固定 GitHub 托管 | 不受影响，固定 GitHub 托管 | P-32 | M-35 |
 
 ## 2. 单元测试（test/platform）
 
@@ -109,10 +110,11 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-22 | [build_guard_test.dart](../test/platform/build_guard_test.dart) | 调用 12 项 Python 检查：三个桌面目标、路径边界/中文空格/大小写、独立副本放行、自定义输出和符号链接、三平台进程解析（Windows 校验 5.1 模块路径）、查询环境透传及失败保护、默认/C locale 的真实进程存活时拒绝/退出后放行；包装入口失败时不启动 Flutter；仓库文本显式按 UTF-8 读取 | 构建覆盖保护、M-26 |
 | P-23 | [server_bundle_test.dart](../test/platform/server_bundle_test.dart)、[server_bundle_test.py](../tools/testing/server_bundle_test.py) | 六路服务端矩阵、发布依赖、macOS 双架构独立 runner；六种原生文件头与错误平台/架构、缺少/空主程序和 SQLite 库拒绝打包；压缩包布局与 POSIX 执行权限、额外资源保留；P-10 检查缺少服务端附件时禁止发布 | 同步服务端独立发布、M-13 |
 | P-24 | [artifact_cleanup_test.dart](../test/platform/artifact_cleanup_test.dart)、[artifact_cleanup_test.py](../tools/testing/artifact_cleanup_test.py) | 三平台执行相同清理逻辑；仅构建不上传、正式中转保留 7 天且重跑覆盖、仅 publish 成功后清理（不使用 always()）；只查询当前运行的 artifacts 并分页先快照再删除，不访问仓库级列表，保护非托管文件及 API 失败上报 | Actions 存储、M-27 |
-| P-28 | [ci_retry_test.dart](../test/platform/ci_retry_test.dart)、[retry_command_test.py](../tools/testing/retry_command_test.py) | 6 项 Python 检查：指数退避、重试前清理半成品且首次不清理、最后退出码传递、命令不存在不重试、非法参数、真实子进程下 `--` 可省略且保留目标命令的 --选项/含空格参数；两个工作流所有网络安装都经过重试工具且无裸命令 | CI 网络安装、M-31 |
+| P-28 | [ci_retry_test.dart](../test/platform/ci_retry_test.dart)、[retry_command_test.py](../tools/testing/retry_command_test.py)、[flutter_sdk_test.py](../tools/testing/flutter_sdk_test.py) | flutter_sdk 4 项：托管 runner 每次克隆到 RUNNER_TEMP、自托管缓存到 RUNNER_TOOL_CACHE 并复用、无标记半成品重装且升级时删除旧版本、克隆失败不写标记；retry 6 项 Python 检查：指数退避、重试前清理半成品且首次不清理、最后退出码传递、命令不存在不重试、非法参数、真实子进程下 `--` 可省略且保留目标命令的 --选项/含空格参数；两个工作流所有网络安装都经过重试工具且无裸命令 | CI 网络安装、M-31 |
 | P-29 | [desktop_connect_retry_test.dart](../test/platform/desktop_connect_retry_test.dart) | 三平台 VNC 错误策略与 RDP 协议错误分类；真实 VNC TCP 入口不可达后恢复且协议错误不重试；isolate 建连立即取消；RDP 首次失败恢复、四次上限、认证/证书确认、总预算超时、关闭取消和旧回调隔离 | VNC / RDP 连接失败恢复、M-32 |
 | P-30 | [app_name_test.dart](../test/platform/app_name_test.dart) | 三平台产品名、可执行文件、桌面入口、打包与签名路径精确大小写；保留 bundle ID 与 Debian 包标识 | 应用名称大小写、M-33 |
 | P-31 | [file_drag_out_test.dart](../test/platform/file_drag_out_test.dart) | 当前平台选择（macOS / Windows 支持，Linux 不支持）；macOS 只交顶层项、Windows 展开目录且父目录在前；原生 write 按序号取回到给定路径，失败 / 越界 / 过期会话返回错误；原生拒绝或列目录失败不算开始；三平台原生文件注册同一通道并接入 Xcode / CMake | SFTP 拖出到系统文件管理器、M-34 |
+| P-32 | [pick_runner_test.dart](../test/platform/pick_runner_test.dart)、[pick_runner_test.py](../tools/testing/pick_runner_test.py) | 6 项 Python 检查：在线（含忙碌）选择自托管标签、离线/无标签/空列表回退、分页查找、仓库与组织接口均 403 及无令牌回退、仓库接口失败或无匹配时改查组织级 runner、命令行写入 GITHUB_OUTPUT；工作流检查选择任务、build/server 依赖与 runs-on 表达式，Intel 服务端固定托管 | Release 自托管 runner、M-35 |
 | P-25 | [platform_test_workflow_test.dart](../test/platform/platform_test_workflow_test.dart) | 独立 test* 触发及手动入口、三平台双架构六路矩阵、锁文件与每路仅一次平台专项、禁止客户端全量/dsh/服务端测试及服务端依赖；精确原生缓存及缺失摘要；禁止应用/原生产品构建、上传产物、签名凭据及发布 | 发布前测试、M-28 |
 | P-26 | [source_archive_test.dart](../test/platform/source_archive_test.dart)、[source_archive_test.py](../tools/testing/source_archive_test.py) | 20 项 Python 检查：实际 gzip/tar/SHA、tar 仅接收 ASCII 相对参数（Windows bsdtar 中文路径）、错误响应/截断/CRC、退避/镜像/慢速预算、本地磁盘失败不重试、有效包复用、源码原子发布/回滚、缺失关键文件、非 UTF-8 日志与 CLI；三平台下载入口及 Windows zlib 下载先于编译 | 原生源码下载、M-29 |
 | P-27 | [native_build_resilience_test.dart](../test/platform/native_build_resilience_test.dart)、`tools/testing/native_build_state_test.py`、`tools/testing/windows_build_checks.ps1` | 15 项 Python 检查：阶段完整性/摘要/旧配方/错架构/位置/工具链缓存身份、半安装不混旧产物、通用双架构及 CLI；实际 POSIX 缺工具/架构/语言前置失败；Windows 包装器、实际 Fetch 参数和无工具驱动拒绝；缓存恢复/保存路径集合一致及完整/阶段缓存区分 | 编译恢复、M-30 |
@@ -207,6 +209,7 @@ P-06 还检查 macOS / Linux 测试服务端与应用使用同一 OpenSSL 前缀
 | M-32 | VNC / RDP 连接失败自动重试 | 三平台分别执行 make test-platform。网络刚恢复或首次局域网授权时连接 VNC/RDP，应记录 500ms/1s/2s 重试并能恢复；持续失败最多四次。VNC TCP 共用 15s 预算，RDP 连接（含握手）共用 60s 预算；RDP 建连错误也包含连接拒绝。检查错误密码、变更证书、TLS/权限错误不自动重复认证/确认；关闭 Tab、退避期间手动重连不能产生旧连接或改写新状态。验证 RDP HTTP/SOCKS5 代理恢复及多次重试后的显示/剪贴板正常；成功连接后掉线仍使用手动重连。Windows/Linux 及三平台真实网络交互待实测 |
 | M-33 | 应用名称大小写与覆盖安装 | 三个平台分别执行 make test-platform；重新构建并手动覆盖安装，确认 Finder/Dock、Windows 属性/开始菜单/卸载、Linux 菜单与命令均为 Remlark。检查主机、凭据及设置保留，旧入口无残留；旧版更新器需手动安装本次新版本，新版再验证自动更新。macOS 大小写敏感卷、Windows/Linux 实机验证待执行 |
 | M-34 | SFTP 拖动传输 | 三个平台：本地栏文件拖到远程栏为上传、远程栏拖到本地栏为下载，同栏拖动不传输；Shift / Ctrl 多选后拖动一起传输，提示显示数量；从行内空白处开始拖动，提示仍紧跟鼠标。macOS：远程栏单个 / 多个文件和目录（含空目录）拖到 Finder 和桌面，放下后传输队列出现下载并在放下位置得到完整内容，重名时按 Finder 给出的名称保存；拖出后再次点击、拖动应用内文件正常。Windows：同样拖到资源管理器和桌面，资源管理器显示复制进度，目录结构完整，中文名正常；拖出后应用内点击正常，`%TEMP%\Remlark-drag` 下次拖出时被清理。Linux：拖到窗口外无反应、应用内拖动不受影响 |
+| M-35 | Release 自托管 macOS runner 切换 | Mac mini 注册带 `remlark-macmini` 标签的组织级或仓库级 runner 并配置 `RUNNER_STATUS_TOKEN`（组织 Self-hosted runners 只读或仓库 Administration 只读）。组织级时确认摘要为 organization runner，公开仓库已允许使用该 runner 组。在线时手工 build_only 运行，确认 Select macOS runner 摘要显示自托管、macos-universal 与 server-macos-arm64 在 Mac mini 执行，server-macos-x64 仍在 macos-15-intel；停止 runner 后重跑，确认回退 macos-15 且成功；删除令牌后同样回退。检查签名后临时钥匙串已删除、搜索列表还原，DMG 在 Intel / Apple Silicon 均可启动。选择后 runner 恰好掉线时任务会排队，需人工重跑 |
 
 M-20：下载新 CI 的 macOS zip / DMG，核对 `codesign -dv --verbose=4` 的 Authority 是固定自签名称、不是 `Signature=adhoc`，执行 `codesign --verify --deep --strict --all-architectures /Applications/remlark.app`。分别在 Intel / Apple Silicon 干净系统检查首次 Gatekeeper 放行，再覆盖安装同证书的新版本，记录是否再次放行及辅助功能等隐私权限是否保留；不以自签或单元测试保证系统免授权。检查 Actions 日志不含证书密码，缺失 Secret 应在构建前失败，失败构建不得上传可发布附件。
 
@@ -581,6 +584,10 @@ Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过�
 - 补充（同日）：windows_packaging_test.dart 的 3 项 Windows 专属打包测试仍传 `-Arch arm64`，macOS 本机因 `if (!Platform.isWindows) return;` 未注册而未发现，Windows x64 CI 失败；已改为 x64 并新增 ARM64 参数被拒绝检查，待 Windows CI 验证。教训：修改脚本参数后须检索全部调用处，并明确说明哪些 Windows 专属测试本机未执行。
 - Release 的 macOS 构建依赖增加 pkgconf，覆盖未预装 pkg-config 的自托管 Mac。
 
+### 2026-10-25 Release 自托管 macOS runner（Step 137）
+
+- 新增 P-32；选择逻辑只在 Ubuntu 选择任务中运行，桌面 macOS 与服务端 arm64 共用同一结果，服务端 x64 及 Windows / Linux 不变。抽出 `tools/utils/actions_api.py` 供清理与选择脚本共用，P-24 同步改用真实分页实现。
+- 本机 Intel macOS make test-platform 132 项通过、3 项条件跳过，P-32 / P-24 Python 检查通过，工作流 YAML 解析通过；尚未在 Actions 上真实运行，自托管与回退两种路径按 M-35 验证。Windows / Linux 待执行 make test-platform。
 ### 2026-10-26 Xcode 27 的 lipo 只接受单个 -verify_arch 架构（Step 138）
 
 - 现象：Mac mini（Xcode 27.1）上 Release 在 `prepare.py macos` 失败：`lipo <文件> -verify_arch x86_64 arm64` 报「-verify_arch requires exactly one input file」，多出的架构被当成输入文件；GitHub macos-15 的旧 Xcode 不受影响。

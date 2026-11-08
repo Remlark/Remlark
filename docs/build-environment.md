@@ -260,7 +260,7 @@ make server
 
 服务端产物位于 `dist/Remlark-sync-server/bundle/`；Windows 使用 `bin/server.exe`，macOS / Linux 使用 `bin/server`。从该 bundle 运行 `--help` 查看参数。开发时可执行 `make server-run TOKEN=<本地令牌>`，数据写入 `server/data/`。
 
-Release CI 另有独立的服务端六路构建：macOS / Windows / Linux 各 x64、arm64，固定 Dart 3.13.5，仅安装 `server/pubspec.lock` 中的依赖，执行服务端静态检查和测试后用 `dart build cli` 编译。macOS x64 使用 `macos-15-intel`，arm64 使用 `macos-15`，分别输出，桌面客户端继续使用 universal。
+Release CI 另有独立的服务端六路构建：macOS / Windows / Linux 各 x64、arm64，固定 Dart 3.13.5，仅安装 `server/pubspec.lock` 中的依赖，执行服务端静态检查和测试后用 `dart build cli` 编译。macOS x64 使用 `macos-15-intel`，arm64 优先使用自托管 Mac mini、离线时使用 `macos-15`，分别输出，桌面客户端继续使用 universal。
 
 服务端附件为 `Remlark-sync-server-<版本>-<系统>-<架构>.tar.gz`（macOS / Linux）或 `.zip`（Windows），压缩包内保留完整 `bundle/`。本地已有服务端构建时，可执行 `python3 tools/release/server_bundle.py macos x64 --smoke` 打包并在临时目录解压、启动、读写 SQLite；平台与架构必须匹配实际构建。六个 CI 任务均执行此验证，主程序或 SQLite 库缺失、架构不符、启动/读写失败时终止发布。
 
@@ -278,6 +278,19 @@ git push origin v1.0.0
 ```
 
 也可在 Actions → Desktop Release → Run workflow 中指定已有标签重试。手工运行仍按标签检出，不会将分支新代码混入旧版本。
+
+### 使用自托管 Mac mini 构建 macOS
+
+Release 的 macOS 桌面包（universal）与服务端 arm64 会优先使用自托管 Mac mini，离线时自动回退 GitHub 的 `macos-15`；服务端 x64 仍使用 `macos-15-intel`。配置步骤：
+
+1. Mac mini 安装完整 Xcode（`sudo xcode-select -s /Applications/Xcode.app` 并接受许可）、Homebrew 与 Python 3；cmake / ninja / nasm 及 Flutter 由工作流安装。
+2. 在测试仓库（当前为 zhy2006/remlark，仓库级）或组织的 Settings → Actions → Runners 新建 macOS ARM64 runner，配置时添加自定义标签 `remlark-macmini`。将要公开的 Remlark/Remlark 不注册自托管 runner、不配置令牌，始终使用托管 runner；组织级 runner 位于 Default 组时，公开仓库需勾选 Allow public repositories 才能使用，不要为 Remlark 开启。用 `./svc.sh install && ./svc.sh start` 安装为当前用户的 LaunchAgent（不要装成系统 LaunchDaemon，否则 codesign 无法访问用户钥匙串），并开启自动登录、关闭睡眠。runner 的 `.path` 需包含 Homebrew 路径（`/opt/homebrew/bin`）。
+3. 创建 fine-grained PAT 保存为仓库 Secret `RUNNER_STATUS_TOKEN`：组织级 runner 需组织权限 Self-hosted runners 只读（Resource owner 选组织）；仓库级 runner 需该仓库 Administration 只读。选择脚本先查仓库接口再查组织接口，任一处在线即使用；某个接口无权限或不存在（个人账号）只记警告。未配置时始终回退托管 runner。
+4. 公开仓库须限制自托管 runner：Settings → Actions → General 设为外部贡献者 PR 运行前需批准；组织仓库建议把 runner 放进只允许 `release.yml` 使用的 runner group，防止 fork PR 修改工作流在本机执行代码。
+
+自托管 runner 的 `RUNNER_TEMP` 和工作区每个任务都会清空，Release 改由 `tools/utils/flutter_sdk.py` 把 Flutter 安装到 `RUNNER_TOOL_CACHE/flutter/<版本>`（runner 目录下 `_work/_tool`），克隆完成写 `<版本>.complete` 标记，后续任务直接复用 SDK 与已下载的 Dart / 引擎缓存；无标记的半成品重新克隆，升级 Flutter 版本时删除旧版本。托管 runner 仍每次克隆到 `RUNNER_TEMP`。
+
+一台 Mac mini 默认只注册一个 runner，桌面包和服务端 arm64 会排队顺序执行。选择任务判定在线后 runner 恰好掉线时，任务会一直排队，需要取消后重跑以回退托管 runner。
 
 固定 Flutter 3.47.7，从官方源码标签启动 SDK，以便 ARM64 runner 下载原生 Dart SDK。Linux 使用 Ubuntu 24.04（x64 / arm64）及发行版配套 C++ 库，Windows 桌面使用 windows-2022（仅 x64）、MSVC、原生 Perl、NASM 和 Inno Setup，macOS 使用 macos-15，构建双架构原生库和通用 app。桌面四路任务运行 `make test-platform`；服务端独立六路构建（含 windows-11-arm）。所有构建通过后统一上传 8 个桌面附件、6 个服务端附件及 SHA256SUMS，并公开 Release。构建失败时发布任务不会执行，错误信息查看 Actions 执行日志，不额外上传日志压缩包。
 

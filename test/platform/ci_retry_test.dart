@@ -16,6 +16,14 @@ void main() {
     expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
   });
 
+  test('Flutter SDK 托管每次克隆，自托管缓存复用并清理半成品与旧版本', () async {
+    final result = await Process.run('python3', [
+      'tools/testing/flutter_sdk_test.py',
+      '-v',
+    ]);
+    expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
+  });
+
   test('发布与平台专项工作流的网络安装均经过重试工具', () {
     const retry = 'python3 tools/utils/retry_command.py';
     final release = File('.github/workflows/release.yml')
@@ -27,8 +35,14 @@ void main() {
     // Flutter 克隆失败必须先清理半成品目录，否则下一次 clone 会因目录非空失败。
     const clone =
         '$retry --clean "\$RUNNER_TEMP/flutter" -- git clone --depth 1';
-    expect(release, contains(clone));
     expect(tests, contains(clone));
+    // 发布工作流经 flutter_sdk.py 安装（内部同样调用 run_with_retry 并清理半成品）。
+    expect(
+      release,
+      contains(
+        'python3 tools/utils/flutter_sdk.py --version "\$FLUTTER_VERSION" --github-path "\$GITHUB_PATH"',
+      ),
+    );
     for (final command in [
       '$retry -- sudo apt-get update',
       '$retry -- sudo apt-get install -y',
