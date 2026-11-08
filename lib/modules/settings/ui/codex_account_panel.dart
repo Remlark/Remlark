@@ -280,8 +280,7 @@ class _CodexAccountPanelState extends State<CodexAccountPanel> {
       value: widget.model,
       items: [
         AppMenuItem(value: '', label: defaultLabel),
-        for (final m in _models)
-          AppMenuItem(value: m.id, label: m.displayName, description: m.id == m.displayName ? null : m.id),
+        for (final m in _models) AppMenuItem(value: m.id, label: m.displayName),
         if (widget.model.isNotEmpty && !_models.any((m) => m.id == widget.model))
           AppMenuItem(value: widget.model, label: widget.model),
       ],

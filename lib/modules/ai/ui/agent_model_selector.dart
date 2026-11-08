@@ -61,7 +61,7 @@ class AgentModelSelector extends StatelessWidget {
     );
   }
 
-  /// Agent：列出全部 Agent（附类型），底部“管理 Agent”跳到设置页
+  /// Agent：列出全部 Agent（只显示名称），底部“管理 Agent”跳到设置页
   Widget _agentChip(BuildContext context) {
     const manage = '\u0000manage';
     return AppMenuAnchor<String>(
@@ -72,13 +72,7 @@ class AgentModelSelector extends StatelessWidget {
           ? context.read<NavController>().goSettings(SettingsSection.agents)
           : onAgentChanged(v),
       items: (context) => [
-        for (final a in agents)
-          AppMenuItem(
-            value: a.uuid,
-            label: a.name,
-            // 名称与类型相同时不重复显示
-            description: a.name == a.kind.label ? null : a.kind.label,
-          ),
+        for (final a in agents) AppMenuItem(value: a.uuid, label: a.name),
         const AppMenuDivider(),
         AppMenuItem(value: manage, icon: Icons.settings_outlined, label: context.tr('ai.agent.manage')),
       ],
