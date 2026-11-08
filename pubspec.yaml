@@ -46,6 +46,8 @@ dependencies:
   code_assets: ^2.1.0
   ffi: ^2.2.0
   archive: ^4.5.2
+  # SFTP 文件类型图标
+  flutter_svg: ^2.3.0
 
 dev_dependencies:
   flutter_test:
@@ -75,6 +77,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/os_icons/
+    - assets/file_icons/
     - assets/branding/app_icon.png
 
   # To add assets to your application, add an assets section, like this:

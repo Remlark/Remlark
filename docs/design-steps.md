@@ -953,3 +953,8 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 界面图：新增 test/readme_screenshots_test.dart，README_SHOTS=1 时用模拟数据渲染中英文各 4 张图（主机列表、终端 + AI 助手、网格广播、浅色工作区开始页）到 docs/images/{en,zh}/，命令 make readme-shots。test/helpers/test_fonts.dart 的 loadTestFonts 增加 realMonospace 参数（默认关闭，其他布局测试的字宽基准不变），截图测试按 macOS 平台渲染（debugDefaultTargetPlatformOverride，结束时恢复），终端的 Menlo 字体族使用系统等宽字体，界面中其他 monospace 文字仍用中文字体，避免中文缺字。
   - 终端模拟输出按实际终端尺寸编写（单窗口约 93×44、网格窗格约 69×21，每行分别不超过 90 / 64 列），在布局确定后清屏写入，避免折行；网格四个窗格最后一条为相同的广播命令。
   - 验证：make readme-shots 两个用例通过，已逐张检查生成图片。本次无平台分支、原生代码或界面文案修改。
+
+- [已完成] Step 140：SFTP 按文件类型显示不同 SVG 图标
+  - 新增 lib/modules/sftp/file_kind.dart：FileKind 共 22 类（普通、符号链接、文本、Markdown、代码、脚本、网页、配置、数据库、表格、文档、演示、PDF、图片、音频、视频、压缩包、安装包、磁盘镜像、可执行、密钥证书、字体），按惯用文件名（Makefile、.bashrc、authorized_keys、id_rsa 等）→ 扩展名判断；末尾数字段（app.log.2、libssl.so.3）去掉后再判断；无法识别但带执行位的文件归为可执行。.key 在服务器上多为私钥，归入密钥而非演示文稿。
+  - 图标位于 assets/file_icons/{kind}.svg：统一折角页面轮廓 + 分类颜色 + 白色符号，深浅色主题下均可辨认；目录仍用主题色文件夹图标。引入 flutter_svg 渲染，组件为 sftp/ui/file_type_icon.dart，用于文件列表、拖动提示（单个文件）与传输队列（目录 / 多文件任务显示文件夹）。
+  - 测试 test/sftp_file_kind_test.dart：分类、惯用文件名、数字段、执行位、扩展名不重复，以及每个分类的 SVG 存在且可被 flutter_svg 解析。共用 Dart UI，无平台分支，无新增界面文案。

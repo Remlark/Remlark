@@ -7,6 +7,7 @@ import '../../../ui_kit/app_table.dart';
 import '../../../ui_kit/buttons.dart';
 import '../../../utils/format_utils.dart';
 import '../transfer_manager.dart';
+import 'file_type_icon.dart';
 
 /// 传输队列分类
 enum _QueueTab { active, done, failed }
@@ -186,7 +187,8 @@ class _TransferQueueState extends State<TransferQueue> {
       cells: [
         Row(
           children: [
-            Icon(Icons.description_outlined, size: 18, color: p.textMuted),
+            // 下载目录或多文件任务显示文件夹，其余按文件名显示类型图标
+            FileTypeIcon.name(t.name, isDir: (t.remote?.isDir ?? false) || t.fileCount > 1, size: 18),
             const SizedBox(width: 8),
             Flexible(
               child: Text(

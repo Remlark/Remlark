@@ -9,9 +9,11 @@ import '../../../ui_kit/app_table.dart';
 import '../../../ui_kit/buttons.dart';
 import '../../../utils/format_utils.dart';
 import '../../../utils/ui_utils.dart';
+import '../file_kind.dart';
 import '../file_source.dart';
 import '../sftp_service.dart';
 import '../../../ui_kit/app_menu.dart';
+import 'file_type_icon.dart';
 
 /// 栏间拖动的数据：来源栏是否远程 + 拖动的文件
 class FilePaneDrag {
@@ -506,7 +508,7 @@ class FilePaneState extends State<FilePane> {
                   columns: cols,
                   onDoubleTap: _goUp,
                   cells: [
-                    _nameCell(context, '..', Icons.folder, p.folder),
+                    _nameCell(context, '..', const FileTypeIcon(kind: FileKind.generic, isDir: true)),
                     Text('—', style: TextStyle(color: p.textFaint)),
                     if (showTime) Text('—', style: TextStyle(color: p.textFaint)),
                   ],
@@ -525,12 +527,7 @@ class FilePaneState extends State<FilePane> {
                 onDoubleTap: () => f.isDir ? _open(f.path) : widget.onTransfer([f]),
                 onSecondaryTapUp: (d) => _menu(f, d.globalPosition),
                 cells: [
-                  _nameCell(
-                    context,
-                    f.name,
-                    f.isDir ? Icons.folder : (f.isLink ? Icons.link : Icons.description_outlined),
-                    f.isDir ? p.folder : p.textMuted,
-                  ),
+                  _nameCell(context, f.name, FileTypeIcon.entry(f)),
                   Text(
                     f.isDir ? '—' : FormatUtils.bytes(f.size),
                     maxLines: 1,
@@ -547,7 +544,7 @@ class FilePaneState extends State<FilePane> {
               // 拖动到另一栏即传输；拖动选中项时带上全部选中文件
               return Draggable<FilePaneDrag>(
                 data: FilePaneDrag(fromRemote: _src.isRemote, files: selected ? selection : [f]),
-                feedback: _DragFeedback(count: selected ? _selected.length : 1, name: f.name),
+                feedback: _DragFeedback(count: selected ? _selected.length : 1, entry: f),
                 child: row,
               );
             },
@@ -564,10 +561,10 @@ class FilePaneState extends State<FilePane> {
     );
   }
 
-  Widget _nameCell(BuildContext context, String name, IconData icon, Color color) {
+  Widget _nameCell(BuildContext context, String name, Widget icon) {
     return Row(
       children: [
-        Icon(icon, size: 20, color: color),
+        icon,
         const SizedBox(width: 10),
         Flexible(
           child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14)),
@@ -579,10 +576,12 @@ class FilePaneState extends State<FilePane> {
 
 /// 拖动时跟随指针的提示
 class _DragFeedback extends StatelessWidget {
-  const _DragFeedback({required this.count, required this.name});
+  const _DragFeedback({required this.count, required this.entry});
 
   final int count;
-  final String name;
+
+  /// 指针下的文件；多选时只用于显示数量
+  final FileEntry entry;
 
   @override
   Widget build(BuildContext context) {
@@ -599,10 +598,12 @@ class _DragFeedback extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.description_outlined, size: 18, color: p.accent),
+            count > 1
+                ? Icon(Icons.file_copy_outlined, size: 18, color: p.accent)
+                : FileTypeIcon.entry(entry, size: 18),
             const SizedBox(width: 8),
             Text(
-              count > 1 ? context.tr('sftp.items', {'n': count}) : name,
+              count > 1 ? context.tr('sftp.items', {'n': count}) : entry.name,
               style: TextStyle(fontSize: 13, color: p.text),
             ),
           ],
