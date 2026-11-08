@@ -946,3 +946,10 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
 - [已完成] Step 138：兼容 Xcode 27 的 lipo 架构校验
   - Xcode 27 的 `lipo -verify_arch` 一次只接受一个架构，Mac mini 发布时 `prepare.py macos` 失败；改为 `verify_universal` 逐个架构校验，新旧 Xcode 均兼容（GitHub macos-15 行为不变）。
   - 验证：P-10 新增真实 clang 编译 universal / 仅 arm64 二进制的 macOS 用例，本机 Xcode 26.4 通过，Mac mini Xcode 27.1 实测通过；本机 make test-platform 通过。
+
+- [已完成] Step 139：重写 README 并补充许可证
+  - 根目录 README.md 改为英文：项目介绍、功能、下载、macOS 自签名放行说明（系统设置 → 隐私与安全性 → 仍要打开，或 xattr 移除隔离标记）、源码构建、同步服务端、文档与许可证；顶部链接到中文版 docs/README.zh-CN.md，中文版内容一致并链回英文版。
+  - 许可证：项目采用 MIT（新增 LICENSE）。核查第三方依赖：FreeRDP / OpenSSL 为 Apache-2.0；FFmpeg 未启用 --enable-gpl / --enable-nonfree，为 LGPL-2.1+，静态链接时由公开的完整源码与构建脚本满足重新链接要求；desktop_drop 间接依赖的 dbus 为 MPL-2.0（文件级、未修改）；其余 Dart 包均为 BSD / MIT / Apache-2.0；系统图标为 Apache-2.0 / CC0。均不强制项目改用其他协议，明细见 THIRD_PARTY_NOTICES.md。
+  - 界面图：新增 test/readme_screenshots_test.dart，README_SHOTS=1 时用模拟数据渲染中英文各 4 张图（主机列表、终端 + AI 助手、网格广播、浅色工作区开始页）到 docs/images/{en,zh}/，命令 make readme-shots。test/helpers/test_fonts.dart 的 loadTestFonts 增加 realMonospace 参数（默认关闭，其他布局测试的字宽基准不变），截图测试按 macOS 平台渲染（debugDefaultTargetPlatformOverride，结束时恢复），终端的 Menlo 字体族使用系统等宽字体，界面中其他 monospace 文字仍用中文字体，避免中文缺字。
+  - 终端模拟输出按实际终端尺寸编写（单窗口约 93×44、网格窗格约 69×21，每行分别不超过 90 / 64 列），在布局确定后清屏写入，避免折行；网格四个窗格最后一条为相同的广播命令。
+  - 验证：make readme-shots 两个用例通过，已逐张检查生成图片。本次无平台分支、原生代码或界面文案修改。
