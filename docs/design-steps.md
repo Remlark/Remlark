@@ -974,3 +974,10 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
     - Linux：不支持（XDS 只能单文件且 Wayland 不可用），保持应用内拖动。
   - 测试：test/sftp_drag_test.dart 9 项（方向、同栏不传输、多选、指针锚定、拖出触发一次与失败恢复、本地栏不拖出），还原修复后方向与锚定用例失败；P-31 平台测试 7 项；多平台文档新增总览行、P-31、M-34。
   - 验证：macOS Debug 构建通过（Swift 编译）；Windows C++ 无本机编译环境，待 Windows 上 make test-platform 与 M-34；实际拖到 Finder / 资源管理器尚未手工验证。
+
+- [已完成] Step 142：Windows x64 专项测试、Release 编译及安装包验证（2026-11-08）
+  - 修复 file_drag_source.cpp：FD_UNICODE 最高位引发 MSVC C4245，并被 /WX 当作错误；组合标志显式转换为 DWORD，标志值和跨平台通道协议不变，macOS/Linux 无对应 Win32 类型转换。
+  - Windows make test-platform 修复后再次通过：142 项通过、8 项条件跳过；flutter analyze 无问题。OpenSSL、zlib、FFmpeg、FreeRDP 与两个项目原生 DLL 实际编译通过；Flutter Windows Release 编译通过。
+  - Inno Setup 生成 dist/Remlark-1.0.4-windows-x64-setup.exe（19,200,892 字节）及 dist/Remlark-windows-x64.zip；安装包解包后关键 DLL 齐全，exe 版本 1.0.4+1，启动 10 秒存活后结束本次测试进程。
+  - 本机环境：PATH 需使用已有 Python，初始化 VS x64 工具链；旧 CMake 缓存引用小写 remlark，备份后重新生成。插件链接出现不受信任挂载点错误，本次使用插件源码缓存副本及临时生成 CMake 路径完成 Release 构建；已恢复仓库跟踪的生成文件。不能将本次分阶段成功等同于普通终端直接 make windows 成功。
+  - 未执行真实安装/升级/卸载及远程 SFTP 系统拖动；macOS/Linux 本轮未执行 make test-platform，需在对应系统补测。

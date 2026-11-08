@@ -148,7 +148,8 @@ class DragDataObject : public IDataObject, public IDataObjectAsyncCapability {
     for (size_t i = 0; i < count; i++) {
       const DragOutEntry& e = entries_[i];
       FILEDESCRIPTORW& d = group->fgd[i];
-      d.dwFlags = FD_ATTRIBUTES | FD_FILESIZE | FD_PROGRESSUI | FD_UNICODE;
+      // FD_UNICODE 使用最高位，显式转换为无符号 DWORD，避免 MSVC /WX 拒绝隐式转换。
+      d.dwFlags = static_cast<DWORD>(FD_ATTRIBUTES | FD_FILESIZE | FD_PROGRESSUI | FD_UNICODE);
       d.dwFileAttributes = e.is_dir ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_NORMAL;
       d.nFileSizeHigh = static_cast<DWORD>(e.size >> 32);
       d.nFileSizeLow = static_cast<DWORD>(e.size & 0xFFFFFFFF);

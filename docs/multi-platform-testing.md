@@ -45,7 +45,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 聊天发送快捷键 | [chat_panel.dart](../lib/modules/ai/ui/chat_panel.dart) | ⌘Enter | Ctrl+Enter | Ctrl+Enter | [chat_send_key_test.dart](../test/chat_send_key_test.dart) | M-07 |
 | 终端复制粘贴快捷键、字体 | [terminal_pane.dart](../lib/modules/terminal/ui/terminal_pane.dart) | ⌘C / ⌘V / ⌘A，Menlo | Ctrl+Shift+C / V，Ctrl+Insert，monospace | 同 Windows | — | M-03 |
 | SFTP 多选 | [file_pane.dart](../lib/modules/sftp/ui/file_pane.dart) | ⌘ 或 Ctrl 点击 | Ctrl 点击 | Ctrl 点击 | — | M-04 |
-| SFTP 拖出到系统文件管理器 | [lib/utils/file_drag_out/](../lib/utils/file_drag_out/) + [FileDragSource.swift](../macos/Runner/FileDragSource.swift)、[file_drag_source.cpp](../windows/runner/file_drag_source.cpp) | 应用内拖动离开窗口后转为系统拖动，每个顶层文件 / 目录一个 NSFilePromiseProvider，Finder 放下后给出路径再经传输队列下载；补发 mouseUp 结束应用内拖动 | OLE 虚拟文件（CFSTR_FILEDESCRIPTORW + CFSTR_FILECONTENTS），开始前递归列出目录；支持异步提取，放下后在后台线程逐个文件请求 Dart 下载到 `%TEMP%\Remlark-drag` 再以流返回；SHDoDragDrop 结束后补发 WM_LBUTTONUP | 不支持（XDS 只能拖单个文件且 Wayland 不可用），拖到窗口外无反应，使用双栏拖动或右键下载 | P-31 | M-34 |
+| SFTP 拖出到系统文件管理器 | [lib/utils/file_drag_out/](../lib/utils/file_drag_out/) + [FileDragSource.swift](../macos/Runner/FileDragSource.swift)、[file_drag_source.cpp](../windows/runner/file_drag_source.cpp) | 应用内拖动离开窗口后转为系统拖动，每个顶层文件 / 目录一个 NSFilePromiseProvider，Finder 放下后给出路径再经传输队列下载；补发 mouseUp 结束应用内拖动 | OLE 虚拟文件（CFSTR_FILEDESCRIPTORW + CFSTR_FILECONTENTS），描述标志显式转 DWORD 兼容 MSVC /WX；开始前递归列出目录；支持异步提取，放下后在后台线程逐个文件请求 Dart 下载到 `%TEMP%\Remlark-drag` 再以流返回；SHDoDragDrop 结束后补发 WM_LBUTTONUP | 不支持（XDS 只能拖单个文件且 Wayland 不可用），拖到窗口外无反应，使用双栏拖动或右键下载 | P-31 | M-34 |
 | 剪贴板文件读取、拖放 | `pasteboard`、`desktop_drop`、`file_selector` 插件 | 插件实现 | 插件实现 | 插件实现 | [file_drop_target_test.dart](../test/file_drop_target_test.dart)（只测分发逻辑） | M-03、M-04、M-06 |
 | 窗口默认尺寸 / 最小尺寸 | [window_config.dart](../lib/app/window_config.dart) + 三个平台的 runner | `MainFlutterWindow.swift` | `main.cpp`、`flutter_window.cpp`（按 DPI 换算） | `my_application.cc` | P-06 | M-02 |
 | 原生库（RDP、SSH AES-GCM） | [hook/build.dart](../hook/build.dart)、`native/*/scripts/` | `build.sh`，x86_64 + arm64，系统 zlib | `build.ps1 [-Arch x86_64\|arm64]`，按 VS 目标架构；显式 MSVC、静态 OpenSSL / zlib，关闭自动 ccache | `build.sh`（`aarch64` 命名），系统 zlib | P-06、[native_crypto_test.dart](../test/native_crypto_test.dart) | M-12 |
@@ -593,3 +593,14 @@ Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过�
 - 现象：Mac mini（Xcode 27.1）上 Release 在 `prepare.py macos` 失败：`lipo <文件> -verify_arch x86_64 arm64` 报「-verify_arch requires exactly one input file」，多出的架构被当成输入文件；GitHub macos-15 的旧 Xcode 不受影响。
 - 修复：`tools/release/prepare.py` 新增 `verify_universal`，对 x86_64、arm64 分别执行单架构校验，缺少时报出具体架构；主程序和两个 FFI 库都使用它。单架构写法新旧 lipo 均支持。
 - 测试：P-10 新增 macOS 专属用例，用 clang 编译真实 universal 与仅 arm64 的二进制调用 `verify_universal`。本机 Xcode 26.4 通过；同一函数已拷贝到 Mac mini 在 Xcode 27.1 实测，universal 返回 0、仅 arm64 报缺少 x86_64。
+
+### 2026-11-08 Windows x64 专项与安装包验证（Step 142）
+
+- 当前 Windows x64：修复后 make test-platform 142 项通过、8 项条件跳过；flutter analyze 无问题。日志：build-windows-platform-final.log、build-windows-analyze-verified.log。
+- 发现并修复 Windows SFTP 拖出原生编译错误：FD_UNICODE 的最高位使组合枚举隐式转 DWORD 触发 C4245，/WX 中止构建。显式转 DWORD 保留全部标志位；复用 P-31 测试及真实 MSVC Release 编译验证。macOS/Linux 接口和行为未变化，本轮未在这两个系统执行测试。
+- 原生依赖及 remlark_rdp.dll / remlark_crypto.dll 全部编译通过；Flutter Release 成功，日志 build-windows-release-final.log。此前插件链接无法穿过不受信任挂载点，本机临时改生成的 CMake 文件读取源码副本，另备份旧 build/windows/x64 清除小写目标缓存；完成后恢复跟踪的 generated_plugins.cmake。因此本轮证明分阶段编译/打包成功，普通终端直接 make windows 仍需先处理本机工具 PATH 和插件链接环境。
+- 安装器：dist/Remlark-1.0.4-windows-x64-setup.exe，19,200,892 字节；便携包：dist/Remlark-windows-x64.zip。打包日志 build-windows-installer-final.log，Inno Setup 成功。
+- 安装包解包成功，核对 Flutter、RDP、SSH crypto、SQLite、VC++（含 FH4）运行库与 data/app.so 齐全；exe 文件/产品版本均为 1.0.4+1。解包应用启动后 10 秒保持运行，随后结束本次测试进程；未验证窗口交互。
+- 安装器 SHA-256：30CBE4075BC5E7D2CAC89DC8677EB658FDBC127FCD11EF1F158113E2E1343F30。
+- 便携包 SHA-256：947BDC4F88DCA538D433D030DCF6B695251A66284AC75726BE7FAC673F0BB799。
+- 手工待测：M-34 真实远程文件拖到资源管理器/桌面、M-14/M-33 实际安装/覆盖升级/卸载与入口，以及真实远程连接；不能将启动存活检查视为这些项目通过。
