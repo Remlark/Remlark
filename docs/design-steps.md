@@ -989,6 +989,13 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - test.yml、release.yml 桌面两个依赖入口与服务端六路在 pub get 后、首次测试前经 retry_command.py 调用，按矩阵 `--os/--arch` 预取（macOS universal 为双架构），传入 `GH_TOKEN: ${{ github.token }}` 避免匿名限流；移除上一版的 `make native-assets`。
   - 测试：新增 P-33（10 项 Python 检查 + 工作流顺序检查）、M-36，P-28 改为检查预取命令经重试。本机删除钩子缓存后复现同一错误，执行预取后 flutter test 通过；本机为 Linux x64/arm64、Windows arm64（服务端）实际预取成功。
 
+- [已完成] Step 145：Windows RDP 声音专项与 1.0.5 安装包验证（2026-11-09）
+  - VS x64 环境下设置 RMK_REQUIRE_RDP_NATIVE=1 执行 make test-platform：149 项通过、7 项条件跳过；P-34 单独复跑 4 项通过，flutter analyze 无问题。
+  - 重新编译 RDP / SSH crypto 原生库、Flutter Windows Release；确认 FreeRDP 的 rdpsnd / winmm 开启，安装包中的 DLL 可加载并导出 rmk_rdp_set_audio。
+  - 生成 dist/Remlark-1.0.5-windows-x64-setup.exe 和便携 ZIP；解包核对依赖齐全，版本 1.0.5+1，解包应用启动 10 秒存活。
+  - 本机插件目录链接不可用，临时使用已有插件源码副本完成 Release，随后恢复 generated_plugins.cmake；首次并行测试改写生成文件导致构建失败，测试结束后重新构建成功。未修改业务代码。
+  - macOS / Linux 本轮未执行；M-37 真实远程出声、实际安装/升级/卸载仍待验证。详见多平台测试文档本轮记录。
+
 - [已完成] Step 144：RDP 播放远程声音
   - 现象：RDP 连接后听不到远程声音。原因不是 FreeRDP 的限制：rdpsnd 通道与 macOS AudioToolbox / Windows winmm 后端早已编进库里，但连接时没有设置 FreeRDP_AudioPlayback（默认 FALSE），登录信息带 INFO_NOAUDIOPLAYBACK，服务器不发送声音；Linux 编译时还关闭了 PulseAudio / ALSA，只有 fake 后端。
   - 原生：新增 rmk_rdp_set_audio（connect 前调用，默认开启），连接时 rmk_apply_audio 设置 AudioPlayback；rdpsnd 静态 / 动态通道及依赖的 rdpdr 由 freerdp_client_load_addins 按该设置加载，不写死后端，FreeRDP 按 mac → winmm → pulse → alsa 自动选择，都不可用时退回 fake（静音，连接不受影响）。关闭时 rdpdr 开启的情况下 FreeRDP 仍会加载 sys:fake 的 rdpsnd（协议要求），服务器因 INFO_NOAUDIOPLAYBACK 不发送声音。

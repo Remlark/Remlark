@@ -1,5 +1,14 @@
 # 多平台测试
 
+### 2026-11-09 Windows x64 RDP 声音与安装包验证（Step 145）
+
+- VS x64 开发环境、有效 Python PATH 下，`RMK_REQUIRE_RDP_NATIVE=1 make test-platform`：149 项通过、7 项条件跳过，日志 `build-rdp-audio-platform-vs.log`。实际加载原生库并执行 H.264 解码及显示控制 C 夹具；解码存在硬件失败后软件回退，不能据此认定 GPU 硬解通过。
+- P-34 单独执行 4 项全部通过（`build-rdp-audio-p34.log`）；当前 FreeRDP 缓存 `CHANNEL_RDPSND_CLIENT=ON`、`WITH_WINMM=ON`。`flutter analyze` 无问题（`build-rdp-audio-analyze.log`）。
+- RDP / SSH crypto 原生库重新编译、Flutter Release 与 Inno Setup 打包成功。日志 `build-rdp-audio-installer.log`、`build-rdp-audio-release-final.log`、`build-rdp-audio-installer-final.log`。本机插件目录链接不可用，临时通过已有源码副本构建，之后恢复跟踪的生成配置；不能视为普通终端直接 make windows 成功。
+- 产物：`dist/Remlark-1.0.5-windows-x64-setup.exe`、`dist/Remlark-windows-x64.zip`。解包确认 Flutter / RDP / crypto / SQLite / VC++（含 FH4）及 app.so 齐全；DLL 实际加载并找到 `rmk_rdp_set_audio`；应用版本 1.0.5+1，启动 10 秒保持运行后结束测试进程。
+- 安装器 SHA-256：`2CA7E623AB0A21C7AEC830E58013F93CBF2061C887C679DBC2DAA4ABC1DA35CF`；便携包 SHA-256：`DFF3951140F9F5C8E1E81ED8FC946F34328E1F1D551D254D1CB8D4F4232E7F6F`。
+- 未执行真实远程主机联调；M-37 实际出声/关闭声音、实际安装/升级/卸载和界面交互仍待手工验证。macOS / Linux 本轮未运行 make test-platform。
+
 Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台。Flutter 桌面不能交叉编译，各平台的构建和测试都要在对应系统上执行。macOS（x86_64）、Windows x64 和 Linux x64 已有自动化验证记录；真实远程主机、干净机器安装等项目仍需按本文逐项验证。
 
 本文列出：
