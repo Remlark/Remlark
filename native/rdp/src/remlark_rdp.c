@@ -13,6 +13,7 @@
 #include <freerdp/error.h>
 #include <freerdp/version.h>
 #include <freerdp/channels/cliprdr.h>
+#include <freerdp/channels/rdpsnd.h>
 #include <winpr/crt.h>
 #include <winpr/interlocked.h>
 
@@ -440,13 +441,24 @@ RmkRdp* rmk_rdp_new(int64_t id, RmkEventCallback callback)
 	return rdp;
 }
 
-/* 远程声音：开启时 freerdp_client_load_addins 按 AudioPlayback 加载 rdpsnd 静态与动态通道（并开启依赖的 rdpdr），
- * 不指定播放后端，由 FreeRDP 按编译进来的后端依次尝试：macOS mac（AudioToolbox）、Windows winmm、
- * Linux pulse → alsa，全部不可用时退回 fake（静音，连接不受影响）。
+/* 远程声音：开启时自行添加带参数的 rdpsnd 静态与动态通道，freerdp_client_load_addins 发现已存在就不再重复添加，
+ * 并据此开启依赖的 rdpdr。不指定播放后端，由 FreeRDP 按编译进来的后端依次尝试：macOS mac（AudioToolbox）、
+ * Windows winmm、Linux pulse → alsa，全部不可用时退回 fake（静音，连接不受影响）。
+ * latency 计入 FreeRDP 的溢出判断（允许缓冲 = 2 × 单包时长 + latency）：默认 0 时只能容纳约 46 ms，
+ * GNOME Remote Desktop 等按 23 ms 小包连续发送的服务端遇到网络抖动就会被丢包，听起来是咔哒声 / 杂音。
  * 关闭时登录信息带 INFO_NOAUDIOPLAYBACK，服务器不发送声音；rdpdr 开启时 FreeRDP 仍会加载 sys:fake 的 rdpsnd 满足协议要求 */
+#define RMK_AUDIO_LATENCY_ARG "latency:150"
+
 static BOOL rmk_apply_audio(rdpSettings* s, BOOL enabled)
 {
-	return freerdp_settings_set_bool(s, FreeRDP_AudioPlayback, enabled);
+	if (!freerdp_settings_set_bool(s, FreeRDP_AudioPlayback, enabled))
+		return FALSE;
+	if (!enabled)
+		return TRUE;
+	const char* params[] = { RDPSND_CHANNEL_NAME, RMK_AUDIO_LATENCY_ARG };
+	/* Windows 服务端多用静态通道，GNOME Remote Desktop / macOS 服务端使用动态通道 AUDIO_PLAYBACK_DVC */
+	return freerdp_client_add_static_channel(s, ARRAYSIZE(params), params) &&
+	       freerdp_client_add_dynamic_channel(s, ARRAYSIZE(params), params);
 }
 
 /* 设置字符串参数，空值跳过 */

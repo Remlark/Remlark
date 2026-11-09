@@ -16,19 +16,27 @@ void main() {
   // 源码断言含换行片段，统一 LF 以兼容 Windows CRLF 检出
   String src(String path) => readSourceText(path);
 
-  test('连接时按主机设置开启 AudioPlayback，由 FreeRDP 加载 rdpsnd 并自动选择后端', () {
+  test('连接时按主机设置开启 AudioPlayback，添加带缓冲余量的 rdpsnd 并由 FreeRDP 自动选择后端', () {
     final rdp = src('native/rdp/src/remlark_rdp.c');
     expect(rdp, contains('rmk_apply_audio(s, rdp->audio_enabled)'));
     expect(rdp, contains('rdp->audio_enabled = TRUE;'), reason: '原生默认开启，与 Dart 默认一致');
-    // 由 FreeRDP 按 AudioPlayback 加载 rdpsnd，不写死 sys:xxx，否则 Linux 上 PulseAudio 不可用时无法退回 ALSA
-    expect(rdp, contains('return freerdp_settings_set_bool(s, FreeRDP_AudioPlayback, enabled);'));
+    expect(rdp, contains('freerdp_settings_set_bool(s, FreeRDP_AudioPlayback, enabled)'));
+    // 自行添加带 latency 的静态与动态 rdpsnd（GNOME Remote Desktop / macOS 服务端走动态通道），
+    // 默认 0 时溢出判断只容纳约 46 ms，网络抖动就会丢包产生杂音
+    expect(rdp, contains('#define RMK_AUDIO_LATENCY_ARG "latency:150"'));
+    expect(rdp, contains('const char* params[] = { RDPSND_CHANNEL_NAME, RMK_AUDIO_LATENCY_ARG };'));
+    expect(rdp, contains('freerdp_client_add_static_channel(s, ARRAYSIZE(params), params) &&'));
+    expect(rdp, contains('freerdp_client_add_dynamic_channel(s, ARRAYSIZE(params), params);'));
+    // 不写死 sys:xxx，否则 Linux 上 PulseAudio 不可用时无法退回 ALSA
     expect(rdp, isNot(contains('"sys:')));
-    // FreeRDP 3.32.2：AudioPlayback 为 TRUE 时加载静态与动态 rdpsnd，并据此开启 rdpdr
-    final cmdline = File('native/rdp/.deps/FreeRDP-3.32.2/client/common/cmdline.c');
-    if (cmdline.existsSync()) {
-      final c = readSourceText(cmdline.path);
-      expect('{ FreeRDP_AudioPlayback, RDPSND_CHANNEL_NAME, nullptr },'.allMatches(c).length, 2);
+    // FreeRDP 3.32.2：已存在同名通道时 load_addins 不再重复添加，latency 计入溢出判断
+    final dir = 'native/rdp/.deps/FreeRDP-3.32.2';
+    if (File('$dir/client/common/cmdline.c').existsSync()) {
+      final c = readSourceText('$dir/client/common/cmdline.c');
+      expect(c, contains('if (freerdp_static_channel_collection_find(settings, params[0]))\n\t\treturn TRUE;'));
+      expect(c, contains('if (freerdp_dynamic_channel_collection_find(settings, params[0]))\n\t\treturn TRUE;'));
       expect(c, contains('/* rdpsnd requires rdpdr to be registered */'));
+      expect(readSourceText('$dir/channels/rdpsnd/client/rdpsnd_main.c'), contains('maxDuration = duration * 2 + rdpsnd->latency;'));
     }
     expect(src('native/rdp/src/remlark_rdp.h'), contains('RMK_API void rmk_rdp_set_audio(RmkRdp* rdp, int32_t enabled);'));
     expect(src('lib/modules/remote_desktop/rdp/rdp_bindings.dart'), contains('external void rmk_rdp_set_audio('));
