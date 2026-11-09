@@ -1004,3 +1004,15 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 限制：未开启 DSP_FFMPEG / opus / faad，只协商 PCM 等未压缩格式，带宽约 1.4 Mbps；未支持麦克风（audin 仍关闭）。
   - 测试：新增 P-34（test/platform/rdp_audio_test.dart，4 项）与 M-37；test/rdp_e2e_test.dart 新增用例，示例服务端 sample 标签 DEBUG 日志写入文件，开启声音时确认服务端出现 RDPSND Activated，开关两种连接都正常出画面。多平台文档平台差异总览新增“RDP 远程声音”；顺带把误放在总览表中的 M-36 移回手工测试清单。
   - 验证（Intel macOS）：build.sh x86_64 / universal 编译通过，库导出 rmk_rdp_set_audio；FreeRDP 日志确认开启时加载 mac 后端，关闭时为 fake 后端且登录标志含 INFO_NOAUDIOPLAYBACK；make test-platform 147 项通过、3 项条件跳过；rdp_e2e_test 3 项通过；全量 flutter test 632 项通过、8 项跳过，唯一失败为 master 上已存在的 ssh_e2e_test pbcopy 中文用例；flutter analyze 无问题。核对：FreeRDP 3.32.2 的 PulseAudio 后端只依赖 libpulse（不需要 mainloop-glib），WITH_PULSE / WITH_ALSA 写入 config.h 供 rdpsnd 自动选择；Windows 构建选项未变（WITH_WINMM 默认开启、胶水库已链接 winmm）。本机无 Linux / Windows 环境，真实 Windows 服务器出声（M-37）、Windows 与 Linux 的编译及 make test-platform 尚未执行。
+
+
+- [已完成] Step 146：Linux Debian 图标主题文件归属冲突修复（2026-11-09）
+  - GDebi 提权显示故障修复后，实际安装暴露 deb 把系统 `/usr/share/icons/hicolor/index.theme` 打入包的问题，该文件由 hicolor-icon-theme 管理。
+  - Debian 系统资源改为仅复制 Remlark 的 desktop 文件和品牌 PNG，便携包与 /opt 下私有主题索引保留；不覆盖系统主题索引。
+  - P-09 增加实际资源复制回归测试，验证保留系统索引、不创建系统索引、不复制其他应用图标；Linux make test-platform 146 项通过、5 项条件跳过，重新生成 1.0.5 deb。macOS / Windows 本轮无执行环境，打包入口未修改。
+
+
+- [已完成] Step 147：Actions 发布前实际安装 Linux deb（2026-11-09）
+  - Linux x64 / arm64 Release 均使用 make linux，与本地共用打包脚本，修复前同样会包含系统 hicolor 主题索引。
+  - release.yml 在 make linux 后、上传前使用 apt-get 安装本轮唯一 deb，并校验 dpkg 安装状态、可执行入口、desktop 格式和系统主题文件归属，失败即停止该路发布。
+  - 本地验证工作流 YAML 与步骤顺序；实际安装在隔离 dpkg 根目录验证修复包无主题覆盖冲突。本轮没有提交、推送或触发远端 Actions，macOS / Windows 未执行。

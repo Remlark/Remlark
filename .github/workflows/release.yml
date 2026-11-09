@@ -176,6 +176,17 @@ jobs:
       - name: Build Linux installers
         if: runner.os == 'Linux'
         run: make linux
+      # 实际安装本轮 deb，捕获仅解包检查发现不了的系统文件归属冲突。
+      - name: Verify Linux Debian installation
+        if: runner.os == 'Linux'
+        run: |
+          packages=(dist/*.deb)
+          test "${#packages[@]}" -eq 1
+          python3 tools/utils/retry_command.py -- sudo apt-get install -y "./${packages[0]}"
+          test "$(dpkg-query -W -f='${Status}' remlark)" = 'install ok installed'
+          test -x /usr/bin/Remlark
+          desktop-file-validate /usr/share/applications/com.remlark.remlark.desktop
+          test "$(dpkg-query -S /usr/share/icons/hicolor/index.theme)" = 'hicolor-icon-theme: /usr/share/icons/hicolor/index.theme'
       - name: Build Windows installers
         if: runner.os == 'Windows'
         shell: pwsh

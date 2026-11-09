@@ -14,6 +14,17 @@ sys.path.insert(0, str(ROOT))
 from tools.utils.app_version import read_version
 
 
+def install_system_assets(app, stage):
+    """只安装应用自有入口和图标，不能覆盖系统 hicolor 主题索引。"""
+    desktop = Path('applications/com.remlark.remlark.desktop')
+    assets = [desktop, *[p.relative_to(app / 'share') for p in
+                        (app / 'share/icons').rglob('com.remlark.remlark.png')]]
+    for relative in assets:
+        target = stage / 'usr/share' / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(app / 'share' / relative, target)
+
+
 def validate_bundle(bundle):
     """发布前确认引擎、AOT、原生库及桌面资源齐全，避免分发功能降级的包。"""
     required = [
@@ -46,7 +57,7 @@ def package(bundle, output, arch):
         shutil.copytree(bundle, app, symlinks=True)
         (stage / 'usr/bin').mkdir(parents=True)
         (stage / 'usr/bin/Remlark').symlink_to('/opt/remlark/Remlark')
-        shutil.copytree(app / 'share', stage / 'usr/share')
+        install_system_assets(app, stage)
         # dpkg-shlibdeps 读取源包元数据；只忽略随应用分发、没有系统包归属的私有库。
         debian = stage / 'debian'
         debian.mkdir()

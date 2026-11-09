@@ -8,6 +8,42 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// 多平台测试 P-09：Linux 打包入口、架构选择与缺失原生库时的分发保护。
 void main() {
+  test('Debian 系统资源保留已有主题索引，只复制应用自有文件', () async {
+    final result = await Process.run(Platform.isWindows ? 'python' : 'python3', ['-c', r'''
+import importlib.util
+from pathlib import Path
+from tempfile import TemporaryDirectory
+spec = importlib.util.spec_from_file_location('packaging', 'linux/packaging/build.py')
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+with TemporaryDirectory() as directory:
+    root = Path(directory)
+    app, stage = root / 'app', root / 'stage'
+    assets = {
+        'applications/com.remlark.remlark.desktop': 'desktop',
+        'icons/hicolor/256x256/apps/com.remlark.remlark.png': 'icon',
+        'icons/hicolor/index.theme': 'bundled theme',
+        'icons/hicolor/256x256/apps/other.png': 'other icon',
+    }
+    for relative, content in assets.items():
+        source = app / 'share' / relative
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text(content)
+    theme = stage / 'usr/share/icons/hicolor/index.theme'
+    theme.parent.mkdir(parents=True)
+    theme.write_text('system theme')
+    module.install_system_assets(app, stage)
+    assert theme.read_text() == 'system theme'
+    assert (stage / 'usr/share/applications/com.remlark.remlark.desktop').read_text() == 'desktop'
+    assert (stage / 'usr/share/icons/hicolor/256x256/apps/com.remlark.remlark.png').read_text() == 'icon'
+    assert not (stage / 'usr/share/icons/hicolor/256x256/apps/other.png').exists()
+    theme.unlink()
+    module.install_system_assets(app, stage)
+    assert not theme.exists()
+''']);
+    expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
+  });
+
   test('三个平台保留独立打包入口，Linux 生成 deb 与便携包', () {
     final makefile = File('Makefile').readAsStringSync();
     for (final target in ['mac:', 'linux:', 'windows:']) {

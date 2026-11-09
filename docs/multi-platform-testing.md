@@ -1,5 +1,21 @@
 # 多平台测试
 
+
+### 2026-11-09 Linux x64 RDP 声音专项与安装包验证
+
+- Actions 同源检查：release.yml 的 Linux x64 / arm64 均运行 make linux，因此受同一主题索引错误影响；补充上传前实际 apt-get 安装 deb、dpkg 状态、desktop 格式、可执行文件与系统主题归属检查。此前流程没有真实安装验证。尚未触发远端 Actions，旧标签重跑不会自动采用未提交的修复。
+
+- 后续实际安装暴露第二个问题：deb 含系统 `/usr/share/icons/hicolor/index.theme`，与 hicolor-icon-theme 文件归属冲突。已改为仅复制应用自有 desktop / PNG；P-09 增加复制资源保护系统索引的回归测试。修复后 Linux make test-platform 146 项通过、5 项跳过，安装包已重新生成。之前的显示故障诊断只覆盖打开窗口阶段，不能视为完整安装验证。
+
+- 双击 deb 故障定位：本机 GDebi 普通用户预览正常，提权后报 `Can't create a GtkStyleContext without a display connection` 并退出，尚未调用 dpkg。显式传递 DISPLAY / XAUTHORITY 并使用 X11 后，管理员预览窗口保持运行，用户确认正常。仅在本机当前用户建立 GDebi 桌面入口覆盖和 `~/.local/bin/gdebi-display-launch`，未修改 deb 或系统 GDebi；通过 Gio 确认默认 deb 处理器解析到修复入口。未执行 Remlark 安装，先前用户级补装已撤销。诊断日志 `build/linux-audio-qa/gdebi-interactive.log`。
+
+- `flutter analyze` 无问题；重编当前 FreeRDP / RDP 胶水库后，`RMK_REQUIRE_RDP_NATIVE=1 make test-platform`：145 项通过、5 项条件跳过，含 P-34 四项。日志位于 `build/linux-audio-qa/`。
+- 本地 RDP 端到端、剪贴板及硬解设置测试共 7 项通过，包含声音关闭/开启均正常出画面、开启时服务端 rdpsnd 激活协商；这不能替代 M-37 的实际出声与音质验证。
+- 首轮检测出旧 FreeRDP 未开启声音后端，旧 native_assets 副本也缺少 `rmk_rdp_set_audio`；重新构建并同步本地产物后通过。CMakeCache 确认 WITH_PULSE / WITH_ALSA 开启，动态库实际链接 libpulse.so.0 / libasound.so.2，导出声音设置接口。
+- 普通 `make linux` 因本机缺少 nasm 停止；复用已有 OpenSSL / FFmpeg 静态依赖，将声音开发包下载解压到构建目录，CMake 重编 FreeRDP 和胶水库，再通过版本包装入口完成 Flutter Release 与 Debian / tar.gz 打包。未修改系统安装，不能视为从零 make linux 通过。
+- 产物为 `dist/Remlark-1.0.5-linux-amd64.deb` 和 `dist/Remlark-linux-x64.tar.gz`；应用在隔离配置、Xvfb 下启动 10 秒保持运行后结束测试进程。
+- 本轮仅 Linux x64 实测；macOS / Windows 未执行。真实远程音频、PipeWire / PulseAudio / ALSA 各桌面的出声与音质、干净系统安装升级卸载仍按 M-37 手工验证。安装包面向本机构建环境，libc6 最低版本以 deb Depends 为准。
+
 ### 2026-11-09 Windows x64 RDP 声音与安装包验证（Step 145）
 
 - VS x64 开发环境、有效 Python PATH 下，`RMK_REQUIRE_RDP_NATIVE=1 make test-platform`：149 项通过、7 项条件跳过，日志 `build-rdp-audio-platform-vs.log`。实际加载原生库并执行 H.264 解码及显示控制 C 夹具；解码存在硬件失败后软件回退，不能据此认定 GPU 硬解通过。
