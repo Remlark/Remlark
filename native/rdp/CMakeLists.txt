@@ -69,6 +69,8 @@ else()
   else()
     # FFmpeg VAAPI 硬件解码（运行时需要 libva2 / libva-drm2，deb 依赖由 dpkg-shlibdeps 自动生成）
     target_link_libraries(remlark_rdp PRIVATE va va-drm)
+    # 远程声音 rdpsnd 播放后端 PulseAudio / ALSA（运行时依赖 libpulse0 / libasound2，同样由 dpkg-shlibdeps 生成）
+    target_link_libraries(remlark_rdp PRIVATE pulse asound)
     # 静态库符号不导出，并优先绑定自身符号，避免与系统 OpenSSL 等冲突
     target_link_options(remlark_rdp PRIVATE "-Wl,--exclude-libs,ALL" "-Wl,-Bsymbolic")
   endif()

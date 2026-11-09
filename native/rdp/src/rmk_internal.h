@@ -49,6 +49,7 @@ struct rmk_rdp
 	char* temp_dir;
 	BOOL clipboard_enabled;
 	BOOL hwdec_enabled; /* 是否允许 H.264 硬件解码（用户设置，默认允许） */
+	BOOL audio_enabled; /* 是否在本机播放远程声音（主机设置，默认开启） */
 
 	/* H.264 实际视频流校验（rmk_h264.c）：包装前的 GFX 表面命令处理函数，与已校验通过的表面尺寸 */
 	pcRdpgfxSurfaceCommand gfx_surface_command;

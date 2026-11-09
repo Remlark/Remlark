@@ -988,3 +988,12 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - 改为新增 `tools/utils/sqlite_assets.py`：从 package_config 定位锁定的 sqlite3 包，读取其 asset_hashes.dart 的 releaseTag 与哈希；经 GitHub API 按名称找到附件下载（令牌只发给 api.github.com，跳转后不携带），失败回退普通下载地址；校验 sha256 后原子写入钩子共享输出目录 `download-<哈希前 8 位>/`。钩子 3.5.2 与 3.7.1 都在该文件哈希一致时直接复用，不再访问故障入口。
   - test.yml、release.yml 桌面两个依赖入口与服务端六路在 pub get 后、首次测试前经 retry_command.py 调用，按矩阵 `--os/--arch` 预取（macOS universal 为双架构），传入 `GH_TOKEN: ${{ github.token }}` 避免匿名限流；移除上一版的 `make native-assets`。
   - 测试：新增 P-33（10 项 Python 检查 + 工作流顺序检查）、M-36，P-28 改为检查预取命令经重试。本机删除钩子缓存后复现同一错误，执行预取后 flutter test 通过；本机为 Linux x64/arm64、Windows arm64（服务端）实际预取成功。
+
+- [已完成] Step 144：RDP 播放远程声音
+  - 现象：RDP 连接后听不到远程声音。原因不是 FreeRDP 的限制：rdpsnd 通道与 macOS AudioToolbox / Windows winmm 后端早已编进库里，但连接时没有设置 FreeRDP_AudioPlayback（默认 FALSE），登录信息带 INFO_NOAUDIOPLAYBACK，服务器不发送声音；Linux 编译时还关闭了 PulseAudio / ALSA，只有 fake 后端。
+  - 原生：新增 rmk_rdp_set_audio（connect 前调用，默认开启），连接时 rmk_apply_audio 设置 AudioPlayback；rdpsnd 静态 / 动态通道及依赖的 rdpdr 由 freerdp_client_load_addins 按该设置加载，不写死后端，FreeRDP 按 mac → winmm → pulse → alsa 自动选择，都不可用时退回 fake（静音，连接不受影响）。关闭时 rdpdr 开启的情况下 FreeRDP 仍会加载 sys:fake 的 rdpsnd（协议要求），服务器因 INFO_NOAUDIOPLAYBACK 不发送声音。
+  - 构建：build.sh 在 Linux 开启 WITH_PULSE / WITH_ALSA，并提前检查 libpulse / alsa 开发包；FREERDP_FEATURES 改为 `h264-ffmpeg-hwaccel-1;audio-1`，已有缓存自动重编 FreeRDP；Linux 胶水库链接 pulse、asound，deb 依赖由 dpkg-shlibdeps 生成。macOS / Windows 构建选项不变。README、构建环境文档、release.yml 增加 libpulse-dev / libasound2-dev，test.yml 运行库增加 libpulse0 / libasound2t64。
+  - 界面：主机编辑 RDP 选项中，“共享剪贴板”下方新增“播放远程声音”开关（中英文），保存在主机 extra['audio']，默认开启，旧主机没有该字段时按开启处理，随主机同步。
+  - 限制：未开启 DSP_FFMPEG / opus / faad，只协商 PCM 等未压缩格式，带宽约 1.4 Mbps；未支持麦克风（audin 仍关闭）。
+  - 测试：新增 P-34（test/platform/rdp_audio_test.dart，4 项）与 M-37；test/rdp_e2e_test.dart 新增用例，示例服务端 sample 标签 DEBUG 日志写入文件，开启声音时确认服务端出现 RDPSND Activated，开关两种连接都正常出画面。多平台文档平台差异总览新增“RDP 远程声音”；顺带把误放在总览表中的 M-36 移回手工测试清单。
+  - 验证（Intel macOS）：build.sh x86_64 / universal 编译通过，库导出 rmk_rdp_set_audio；FreeRDP 日志确认开启时加载 mac 后端，关闭时为 fake 后端且登录标志含 INFO_NOAUDIOPLAYBACK；make test-platform 147 项通过、3 项条件跳过；rdp_e2e_test 3 项通过；全量 flutter test 632 项通过、8 项跳过，唯一失败为 master 上已存在的 ssh_e2e_test pbcopy 中文用例；flutter analyze 无问题。核对：FreeRDP 3.32.2 的 PulseAudio 后端只依赖 libpulse（不需要 mainloop-glib），WITH_PULSE / WITH_ALSA 写入 config.h 供 rdpsnd 自动选择；Windows 构建选项未变（WITH_WINMM 默认开启、胶水库已链接 winmm）。本机无 Linux / Windows 环境，真实 Windows 服务器出声（M-37）、Windows 与 Linux 的编译及 make test-platform 尚未执行。

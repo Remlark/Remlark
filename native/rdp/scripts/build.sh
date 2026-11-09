@@ -11,7 +11,7 @@ FREERDP_VERSION=3.32.2
 OPENSSL_VERSION=3.6.5
 FFMPEG_VERSION=8.1.3
 # FreeRDP 编译特性标识：修改 FreeRDP 编译选项时同步修改，已有缓存会自动重新编译
-FREERDP_FEATURES="h264-ffmpeg-hwaccel-1"
+FREERDP_FEATURES="h264-ffmpeg-hwaccel-1;audio-1"
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 NATIVE="$ROOT/native/rdp"
@@ -60,6 +60,8 @@ if [[ "$ARCH" == x86_64 ]]; then
 fi
 if [[ "$PLATFORM" == linux ]]; then
   pkg-config --exists zlib libva libva-drm || { echo 'Missing zlib/libva development packages' >&2; exit 1; }
+  # 远程声音播放后端（rdpsnd）：PulseAudio（PipeWire 桌面经 pipewire-pulse 兼容）优先，ALSA 兜底
+  pkg-config --exists libpulse alsa || { echo 'Missing libpulse/alsa development packages' >&2; exit 1; }
 else
   xcrun --find clang >/dev/null
 fi
@@ -141,11 +143,14 @@ if ! stage_ready freerdp; then
   rm -rf "$OUT/freerdp-build"
   CMAKE_ARCH=()
   [[ "$PLATFORM" == macos ]] && CMAKE_ARCH=(-DCMAKE_OSX_ARCHITECTURES="$ARCH")
+  # 远程声音播放后端：macOS 使用 FreeRDP 默认开启的 AudioToolbox（WITH_MACAUDIO），Linux 开启 PulseAudio + ALSA
+  AUDIO_OPTS=(-DWITH_PULSE=OFF -DWITH_ALSA=OFF)
+  [[ "$PLATFORM" == linux ]] && AUDIO_OPTS=(-DWITH_PULSE=ON -DWITH_ALSA=ON)
   # macOS 交叉编译（例如在 Intel Mac 上编译 arm64）时指定目标处理器，避免按主机架构选择 SIMD
   if [[ "$PLATFORM" == macos && "$ARCH" != "$(uname -m)" ]]; then
     CMAKE_ARCH+=(-DCMAKE_SYSTEM_NAME=Darwin -DCMAKE_SYSTEM_PROCESSOR="$ARCH" -DCMAKE_CROSSCOMPILING=ON)
   fi
-  cmake -G Ninja -S "$DEPS_SRC/FreeRDP-$FREERDP_VERSION" -B "$OUT/freerdp-build" "${CMAKE_ARCH[@]}" \
+  cmake -G Ninja -S "$DEPS_SRC/FreeRDP-$FREERDP_VERSION" -B "$OUT/freerdp-build" "${CMAKE_ARCH[@]}" "${AUDIO_OPTS[@]}" \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX" -DCMAKE_PREFIX_PATH="$PREFIX" \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DUSE_VERSION_FROM_GIT_TAG=OFF -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF \
     -DOPENSSL_ROOT_DIR="$PREFIX" -DOPENSSL_USE_STATIC_LIBS=ON \
@@ -154,7 +159,7 @@ if ! stage_ready freerdp; then
     -DWITH_FFMPEG=ON -DWITH_VIDEO_FFMPEG=ON -DWITH_DSP_FFMPEG=OFF -DWITH_FFMPEG_HWACCEL=ON -DWITH_SWSCALE=ON \
     -DWITH_CAIRO=OFF -DWITH_OPENH264=OFF \
     -DWITH_JSON_DISABLED=ON -DWITH_AAD=OFF -DWITH_KRB5=OFF -DWITH_FUSE=OFF -DWITH_PCSC=OFF \
-    -DWITH_SMARTCARD_EMULATE=OFF -DWITH_CUPS=OFF -DWITH_PULSE=OFF -DWITH_ALSA=OFF -DWITH_OSS=OFF \
+    -DWITH_SMARTCARD_EMULATE=OFF -DWITH_CUPS=OFF -DWITH_OSS=OFF \
     -DWITH_URIPARSER=OFF -DWITH_OPUS=OFF -DWITH_SOXR=OFF -DWITH_LAME=OFF -DWITH_FAAD2=OFF -DWITH_FAAC=OFF -DWITH_MANPAGES=OFF -DWITH_WINPR_TOOLS=OFF -DWITH_WEBVIEW=OFF \
     -DWITH_UNICODE_BUILTIN=ON -DWITH_INTERNAL_MD4=ON -DWITH_INTERNAL_MD5=ON -DWITH_INTERNAL_RC4=ON \
     -DCHANNEL_URBDRC=OFF -DCHANNEL_AUDIN=OFF -DCHANNEL_TSMF=OFF \

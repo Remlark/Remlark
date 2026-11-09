@@ -311,6 +311,7 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
         proxyUser: proxy.username,
         proxyPassword: proxy.password ?? '',
         hardwareDecode: hardwareDecode,
+        audio: host.extra['audio'] != false,
       ),
     );
     return done.future;

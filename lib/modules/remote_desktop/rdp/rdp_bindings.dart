@@ -59,6 +59,10 @@ external void rmk_rdp_set_proxy(
   Pointer<Utf8> password,
 );
 
+/// 是否在本机播放远程声音（connect 之前调用）
+@Native<Void Function(Pointer<RmkRdp>, Int32)>()
+external void rmk_rdp_set_audio(Pointer<RmkRdp> rdp, int enabled);
+
 /// 是否允许 H.264 硬件解码（connect 之前调用）
 @Native<Void Function(Pointer<RmkRdp>, Int32)>()
 external void rmk_rdp_set_hwdec(Pointer<RmkRdp> rdp, int enabled);

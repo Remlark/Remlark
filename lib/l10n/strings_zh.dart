@@ -441,6 +441,8 @@ const Map<String, String> stringsZh = {
   'rdp.height': '高',
   'rdp.clipboard': '共享剪贴板',
   'rdp.clipboard.helper': '本地与远程之间复制粘贴文本和文件',
+  'rdp.audio': '播放远程声音',
+  'rdp.audio.helper': '在本机播放远程电脑的声音',
   'rdp.lib_missing': 'RDP 原生库未编译：请先运行 make rdp-lib 后重新构建应用',
   'rdp.resolution.helper': '宽高留空时，远程分辨率自动跟随窗口大小',
   'rdp.drop_hint': '松开粘贴到鼠标所在的文件夹',

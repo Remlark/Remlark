@@ -42,6 +42,8 @@ void main() {
   late Directory dir;
   late Process proc;
   late int port;
+  // 服务端 sample 标签的 DEBUG 日志写入文件（控制台输出的 DEBUG 走 stdout，经管道会被缓冲），用于确认 rdpsnd 是否激活
+  const serverLogName = 'server.log';
 
   setUpAll(() async {
     if (!available) return;
@@ -69,7 +71,12 @@ void main() {
       '--cert=server.crt',
       '--key=server.key',
       '--port=$port',
-    ], workingDirectory: dir.path);
+    ], workingDirectory: dir.path, environment: {
+      'WLOG_FILTER': 'com.freerdp.server.sample:DEBUG',
+      'WLOG_APPENDER': 'FILE',
+      'WLOG_FILEAPPENDER_OUTPUT_FILE_PATH': dir.path,
+      'WLOG_FILEAPPENDER_OUTPUT_FILE_NAME': serverLogName,
+    });
     proc.stdout.listen((_) {});
     proc.stderr.listen((_) {});
     for (var i = 0; i < 50; i++) {
@@ -89,7 +96,7 @@ void main() {
   });
 
   /// 连接并等待第一帧，返回客户端与记录到的证书指纹
-  Future<(RdpClient, String?)> connect({String? known}) async {
+  Future<(RdpClient, String?)> connect({String? known, bool audio = true}) async {
     final c = RdpClient();
     final connected = Completer<void>();
     final frame = Completer<void>();
@@ -113,6 +120,7 @@ void main() {
         knownFingerprint: known,
         tempDir: dir.path,
         sharedDir: dir.path,
+        audio: audio,
       ),
     );
     await connected.future.timeout(const Duration(seconds: 20));
@@ -193,6 +201,29 @@ void main() {
     await rejected.future.timeout(const Duration(seconds: 20));
     expect(changed, fp);
     c3.dispose();
+  });
+
+  test('远程声音：开启时 rdpsnd 与服务端完成协商，开关两种连接都正常出画面', () async {
+    if (!available) return markTestSkipped('RDP test server or native library not built');
+    int activations() {
+      final log = File(p.join(dir.path, serverLogName));
+      return log.existsSync() ? 'RDPSND Activated'.allMatches(log.readAsStringSync()).length : 0;
+    }
+
+    // 关闭时登录信息带 INFO_NOAUDIOPLAYBACK；rdpdr 开启时 FreeRDP 仍加载 fake 后端的 rdpsnd，示例服务端无法区分，只验证连接正常
+    final (off, _) = await connect(audio: false);
+    off.disconnect();
+    off.dispose();
+
+    final before = activations();
+    final (on, _) = await connect();
+    // 客户端回复格式列表后服务端才激活，等待日志出现
+    for (var i = 0; i < 50 && activations() == before; i++) {
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    expect(activations(), greaterThan(before), reason: '开启声音时服务端应激活 rdpsnd');
+    on.disconnect();
+    on.dispose();
   });
 
   test('RdpSession：未保存密码时询问、记录证书指纹、画面与输入、关闭', () async {

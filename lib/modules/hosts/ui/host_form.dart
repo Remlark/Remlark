@@ -30,6 +30,7 @@ class HostForm extends ChangeNotifier {
       proxyType = e?.proxy.type ?? ProxyType.none,
       proxyUuid = e?.proxyUuid,
       clipboard = e?.extra['clipboard'] != false,
+      audio = e?.extra['audio'] != false,
       vncSsh = e == null ? const VncSshConfig() : (VncSshConfig.fromExtra(e.extra) ?? const VncSshConfig()),
       syncEnabled = e?.syncEnabled ?? false {
     sshPort = TextEditingController(text: '${vncSsh.port}');
@@ -59,6 +60,9 @@ class HostForm extends ChangeNotifier {
     notifyListeners();
   }
   bool clipboard;
+
+  /// RDP 是否在本机播放远程声音（默认开启）
+  bool audio;
   bool syncEnabled;
 
   /// VNC 主机内置的 SSH 配置（文件传输与剪贴板）
@@ -162,6 +166,7 @@ class HostForm extends ChangeNotifier {
       }
       extra.remove('fullscreen');
       extra['clipboard'] = clipboard;
+      extra['audio'] = audio;
     }
     if (protocol == HostProtocol.vnc) {
       if (!preserveLegacySsh || vncSsh.enabled) {

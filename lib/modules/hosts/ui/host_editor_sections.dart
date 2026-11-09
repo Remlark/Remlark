@@ -379,6 +379,13 @@ class RdpSection extends StatelessWidget {
           title: Text(context.tr('rdp.clipboard')),
           subtitle: Text(context.tr('rdp.clipboard.helper')),
         ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: f.audio,
+          onChanged: (v) => f.update(() => f.audio = v),
+          title: Text(context.tr('rdp.audio')),
+          subtitle: Text(context.tr('rdp.audio.helper')),
+        ),
       ],
     );
   }

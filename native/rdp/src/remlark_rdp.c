@@ -434,9 +434,19 @@ RmkRdp* rmk_rdp_new(int64_t id, RmkEventCallback callback)
 	rdp->id = id;
 	rdp->callback = callback;
 	rdp->hwdec_enabled = TRUE;
+	rdp->audio_enabled = TRUE;
 	InitializeCriticalSection(&rdp->frame_lock);
 	rdp->clip = rmk_clip_new(rdp);
 	return rdp;
+}
+
+/* 远程声音：开启时 freerdp_client_load_addins 按 AudioPlayback 加载 rdpsnd 静态与动态通道（并开启依赖的 rdpdr），
+ * 不指定播放后端，由 FreeRDP 按编译进来的后端依次尝试：macOS mac（AudioToolbox）、Windows winmm、
+ * Linux pulse → alsa，全部不可用时退回 fake（静音，连接不受影响）。
+ * 关闭时登录信息带 INFO_NOAUDIOPLAYBACK，服务器不发送声音；rdpdr 开启时 FreeRDP 仍会加载 sys:fake 的 rdpsnd 满足协议要求 */
+static BOOL rmk_apply_audio(rdpSettings* s, BOOL enabled)
+{
+	return freerdp_settings_set_bool(s, FreeRDP_AudioPlayback, enabled);
 }
 
 /* 设置字符串参数，空值跳过 */
@@ -490,7 +500,8 @@ int32_t rmk_rdp_connect(RmkRdp* rdp, const char* host, int32_t port, const char*
 	          freerdp_settings_set_bool(s, FreeRDP_DynamicResolutionUpdate, TRUE) &&
 	          freerdp_settings_set_bool(s, FreeRDP_NetworkAutoDetect, TRUE) &&
 	          freerdp_settings_set_bool(s, FreeRDP_ExternalCertificateManagement, TRUE) &&
-	          freerdp_settings_set_bool(s, FreeRDP_RedirectClipboard, clipboard != 0);
+	          freerdp_settings_set_bool(s, FreeRDP_RedirectClipboard, clipboard != 0) &&
+	          rmk_apply_audio(s, rdp->audio_enabled);
 	/* 出口代理：未配置时忽略 http_proxy 等环境变量，避免被系统代理影响 */
 	if (ok && rdp->proxy_type && rdp->proxy_host)
 	{
@@ -529,6 +540,13 @@ void rmk_rdp_set_proxy(RmkRdp* rdp, int32_t type, const char* host, int32_t port
 	rdp->proxy_port = (UINT16)port;
 	rmk_set_str(&rdp->proxy_user, username);
 	rmk_set_str(&rdp->proxy_pass, password);
+}
+
+/* 记录是否播放远程声音，连接时生效 */
+void rmk_rdp_set_audio(RmkRdp* rdp, int32_t enabled)
+{
+	if (rdp)
+		rdp->audio_enabled = enabled != 0;
 }
 
 /* 记录是否允许 H.264 硬件解码，连接时生效 */

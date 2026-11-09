@@ -131,6 +131,7 @@
   - 证书：首次连接记录 SHA-256 指纹，之后指纹变化时警告并由用户决定是否信任。
   - 显示：GDI 合成 BGRA 画面；图形管线支持 RemoteFX / Progressive / Planar 与 H.264（AVC420 / AVC444），H.264 经 FFmpeg 硬件解码（macOS VideoToolbox / Windows D3D11VA / Linux VAAPI，设备由 native/rdp/src/hwdec/ 的平台实现选择），硬件不可用时软件解码；连接中每个表面的首个 H.264 命令会用实际码流校验硬件解码，硬件不支持该码流时本次会话自动改用软件解码；设置 → 远程桌面中可关闭硬件解码（对新连接生效）；未设置固定分辨率时，远程分辨率随窗口大小动态调整（Display Control 通道）。
   - 剪贴板：文本双向；本地复制的文件 / 目录可在远程粘贴（远程按需读取内容）；远程复制的文件下载到本地后写入系统剪贴板，可在本地粘贴。
+  - 声音：远程声音经 rdpsnd 通道在本机播放（macOS AudioToolbox / Windows winmm / Linux PulseAudio，不可用时 ALSA），由 FreeRDP 自动选择后端；主机编辑的 RDP 选项中“播放远程声音”默认开启，关闭后服务器不发送声音。当前只协商 PCM 格式，未接入压缩音频解码。
   - 文件拖拽：拖入 RDP 画面的文件放入共享文件夹（远程 \\tsclient\Remlark）并写入远程剪贴板；服务端确认后在松手处单击激活窗口并发送 Ctrl+V，直接粘贴到松手处的文件夹或桌面。
   - 支持 HTTP / SOCKS5 出口代理；macOS 上 Command 键映射为 Ctrl，工具栏提供 Ctrl+Alt+Del 与 Windows 键。
 - VNC：内置 RFB 3.3/3.7/3.8 客户端（None / VNC / Apple Remote Desktop 认证，Raw、CopyRect、ZRLE 编码，DesktopSize 与 Cursor 伪编码），键鼠转发，剪贴板双向同步。

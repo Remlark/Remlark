@@ -92,7 +92,7 @@ platform.
 - **Linux** (Debian / Ubuntu):
   ```bash
   sudo apt-get install -y build-essential clang cmake ninja-build pkg-config \
-    libgtk-3-dev libsecret-1-dev perl zlib1g-dev nasm libva-dev python3 dpkg-dev
+    libgtk-3-dev libsecret-1-dev perl zlib1g-dev nasm libva-dev libpulse-dev libasound2-dev python3 dpkg-dev
   ```
 - **Windows**: Visual Studio 2022 with "Desktop development with C++" and the
   English language pack, Strawberry Perl, NASM, MSYS2 (`make diffutils`), and

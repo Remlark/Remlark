@@ -4,6 +4,7 @@
  * - 画面使用 FreeRDP GDI 合成为 BGRA32，Dart 通过 rmk_rdp_take_frame 只取走变化区域
  * - 图形管线支持 H.264（AVC420 / AVC444），经 FFmpeg 使用平台硬件解码，不可用时软件解码
  * - 剪贴板（文本 + 文件）通过 cliprdr 通道实现，文件夹共享通过 rdpdr/drive 通道实现
+ * - 远程声音通过 rdpsnd 通道在本机播放（macOS AudioToolbox / Windows winmm / Linux PulseAudio、ALSA）
  */
 #ifndef REMLARK_RDP_H
 #define REMLARK_RDP_H
@@ -60,6 +61,9 @@ RMK_API void rmk_rdp_set_proxy(RmkRdp* rdp, int32_t type, const char* host, int3
 
 /* 是否允许 H.264 硬件解码（在 connect 之前调用，默认允许）；关闭或硬件不可用时软件解码 */
 RMK_API void rmk_rdp_set_hwdec(RmkRdp* rdp, int32_t enabled);
+
+/* 是否在本机播放远程声音（在 connect 之前调用，默认开启）；关闭时服务器不发送声音 */
+RMK_API void rmk_rdp_set_audio(RmkRdp* rdp, int32_t enabled);
 
 /* 断开连接并等待连接线程退出 */
 RMK_API void rmk_rdp_disconnect(RmkRdp* rdp);

@@ -434,6 +434,8 @@ const Map<String, String> stringsEn = {
   'rdp.clipboard': 'Share clipboard',
   'rdp.clipboard.helper':
       'Copy & paste text and files between local and remote',
+  'rdp.audio': 'Play remote audio',
+  'rdp.audio.helper': 'Play sound from the remote computer on this device',
   'rdp.lib_missing':
       'RDP native library not built. Run make rdp-lib and rebuild the app.',
   'rdp.resolution.helper':

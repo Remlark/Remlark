@@ -179,7 +179,7 @@ make server
 ```bash
 sudo apt-get update
 sudo apt-get install -y build-essential clang cmake ninja-build pkg-config \
-  libgtk-3-dev libstdc++-15-dev libsecret-1-dev fonts-noto-cjk perl zlib1g-dev nasm libva-dev \
+  libgtk-3-dev libstdc++-15-dev libsecret-1-dev fonts-noto-cjk perl zlib1g-dev nasm libva-dev libpulse-dev libasound2-dev \
   curl ca-certificates tar zip unzip xdg-utils python3 dpkg-dev \
   openssh-server xvfb xdotool desktop-file-utils
 ```

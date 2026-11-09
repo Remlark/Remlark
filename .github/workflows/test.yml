@@ -44,7 +44,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           python3 tools/utils/retry_command.py -- sudo apt-get update
-          python3 tools/utils/retry_command.py -- sudo apt-get install -y build-essential libgtk-3-0 libsecret-1-0 libva2 libva-drm2 desktop-file-utils libglib2.0-bin zip unzip
+          python3 tools/utils/retry_command.py -- sudo apt-get install -y build-essential libgtk-3-0 libsecret-1-0 libva2 libva-drm2 libpulse0 libasound2t64 desktop-file-utils libglib2.0-bin zip unzip
       - name: Windows test dependencies
         if: runner.os == 'Windows'
         shell: pwsh
