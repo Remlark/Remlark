@@ -12,3 +12,9 @@ PRODUCT_BUNDLE_IDENTIFIER = com.remlark.remlark
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 com.remlark. All rights reserved.
+
+// 默认临时签名；签名方式放在这里而非工程文件，以便下方本地配置覆盖
+CODE_SIGN_STYLE = Automatic
+
+// 本地固定签名身份（make 自动生成，文件不存在时使用工程默认的临时签名）
+#include? "Signing.local.xcconfig"

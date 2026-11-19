@@ -106,6 +106,94 @@ class SigningChecks(unittest.TestCase):
         self.assertIn('--all-architectures', run.call_args.args)
         self.assertIn('--deep', run.call_args.args)
 
+    def test_local_identity_selection(self):
+        """本地按完整名称匹配，接受未信任自签、拒绝过期，重复行去重，同名多指纹拒绝。"""
+        first, second = 'A' * 40, 'B' * 40
+        name = signing.LOCAL_IDENTITY
+        line = f'  1) {first} "{name}" (CSSMERR_TP_NOT_TRUSTED)\n'.encode()
+        other = f'  2) {second} "{name} Old"\n'.encode()
+        expired = f'  3) {second} "{name}" (CSSMERR_TP_CERT_EXPIRED)\n'.encode()
+        with patch.object(signing, 'run', return_value=line + line + other + expired) as run:
+            self.assertEqual(signing.local_identity(name), first)
+        self.assertNotIn('-v', run.call_args.args)
+        with patch.object(signing, 'run', return_value=other + expired):
+            self.assertIsNone(signing.local_identity(name))
+        duplicate = line + f'  2) {second} "{name}"\n'.encode()
+        with patch.object(signing, 'run', return_value=duplicate):
+            with self.assertRaisesRegex(ValueError, 'Multiple'):
+                signing.local_identity(name)
+
+    def test_xcode_config_writes_and_falls_back(self):
+        """找到身份时写入手动签名配置且不重复写；缺失时自动生成，CI 或生成失败时退回临时签名。"""
+        config = self.root / 'Signing.local.xcconfig'
+        identity = 'C' * 40
+        with patch.dict(os.environ, {'CI': ''}), patch.object(signing, 'LOCAL_XCCONFIG', config), \
+                patch.object(signing, 'create_local_identity') as create, \
+                patch.object(signing, 'local_identity', return_value=identity) as find:
+            signing.xcode_config()
+            text = config.read_text(encoding='utf-8')
+            self.assertIn(f'CODE_SIGN_IDENTITY = {identity}\n', text)
+            self.assertIn('CODE_SIGN_STYLE = Manual\n', text)
+            self.assertIn('DEVELOPMENT_TEAM =\n', text)
+            mtime = config.stat().st_mtime_ns - 10**9
+            os.utime(config, ns=(mtime, mtime))
+            signing.xcode_config()
+            self.assertEqual(config.stat().st_mtime_ns, mtime)
+            find.assert_called_with(signing.LOCAL_IDENTITY)
+            with patch.dict(os.environ, {'MACOS_LOCAL_SIGN_IDENTITY': 'Other Identity'}):
+                signing.xcode_config()
+            find.assert_called_with('Other Identity')
+            create.assert_not_called()
+        # 首次缺失：生成到登录钥匙串后重新查找并写入配置。
+        config.unlink()
+        with patch.dict(os.environ, {'CI': ''}), patch.object(signing, 'LOCAL_XCCONFIG', config), \
+                patch.object(signing, 'create_local_identity') as create, \
+                patch.object(signing, 'local_identity', side_effect=[None, identity]):
+            signing.xcode_config()
+        create.assert_called_once_with(signing.LOCAL_IDENTITY, signing.LOGIN_KEYCHAIN)
+        self.assertIn(identity, config.read_text(encoding='utf-8'))
+        # CI 不在 runner 钥匙串生成证书；生成失败同样删除配置。
+        for env, error in (({'CI': 'true'}, None), ({'CI': ''}, RuntimeError('openssl failed'))):
+            with self.subTest(env=env), patch.dict(os.environ, env), \
+                    patch.object(signing, 'LOCAL_XCCONFIG', config), \
+                    patch.object(signing, 'create_local_identity', side_effect=error) as create, \
+                    patch.object(signing, 'local_identity', return_value=None):
+                config.write_text('stale')
+                signing.xcode_config()
+                self.assertFalse(config.exists())
+                self.assertEqual(create.called, error is not None)
+
+    @unittest.skipUnless(sys.platform == 'darwin', 'requires macOS security / codesign')
+    def test_real_local_identity(self):
+        """真实生成未信任的本地自签身份到临时钥匙串，能被找到并用于签名，不修改证书信任。"""
+        chain = self.root / 'local.keychain-db'
+        name = f'Remlark P15 Local {self.root.name}'
+        def command(*args):
+            """运行真实系统命令，失败时显示诊断。"""
+            result = subprocess.run([str(arg) for arg in args], capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr.decode(errors='replace'))
+            return result.stdout
+        command('security', 'create-keychain', '-p', 'fixture', chain)
+        original = command('security', 'list-keychains', '-d', 'user')
+        try:
+            command('security', 'unlock-keychain', '-p', 'fixture', chain)
+            signing.create_local_identity(name, chain)
+            identity = signing.local_identity(name, chain)
+            self.assertRegex(identity, r'^[0-9A-F]{40}$')
+            command('security', 'list-keychains', '-d', 'user', '-s', chain,
+                    *signing.shlex.split(original.decode()))
+            binary = self.root / 'probe'
+            shutil.copyfile('/usr/bin/true', binary)
+            command('codesign', '--force', '--sign', identity, '--keychain', chain,
+                    '--timestamp=none', binary)
+            self.assertIn(f'Authority={name}'.encode(),
+                          subprocess.run(['codesign', '-dvv', binary], capture_output=True).stderr)
+        finally:
+            subprocess.run(['security', 'list-keychains', '-d', 'user', '-s',
+                            *signing.shlex.split(original.decode())])
+            subprocess.run(['security', 'delete-keychain', chain])
+        self.assertEqual(command('security', 'list-keychains', '-d', 'user'), original)
+
     def test_other_platforms_reject_apple_tools(self):
         """Windows 与 Linux 调用入口时明确拒绝，不运行 security 或 codesign。"""
         for platform in ('win32', 'linux'):

@@ -17,7 +17,7 @@ else
   endif
 endif
 
-.PHONY: guard-mac guard-linux guard-windows guard-run all build mac linux windows run deps gen test analyze server server-run clean rdp-lib crypto-lib native-lib rdp-test-server test-platform readme-shots
+.PHONY: guard-mac guard-linux guard-windows guard-run mac-signing all build mac linux windows run deps gen test analyze server server-run clean rdp-lib crypto-lib native-lib rdp-test-server test-platform readme-shots
 
 # 默认：按当前平台打包
 all: build
@@ -78,8 +78,13 @@ endif
 
 guard-run: guard-$(CURRENT)
 
+# macOS 本地构建使用固定自签身份 Remlark Self-Signed Code Signing（首次自动生成到登录钥匙串），
+# 系统按证书识别应用，本地网络等授权不会因构建次数或路径不同而重复出现；生成失败时退回临时签名。
+mac-signing:
+	python3 tools/release/macos_signing.py xcode-config
+
 # macOS：生成 .app 并打包为 zip
-mac: guard-mac deps native-lib
+mac: guard-mac mac-signing deps native-lib
 	python3 tools/utils/app_version.py flutter build macos --release
 	mkdir -p $(DIST_DIR)
 	cd build/macos/Build/Products/Release && ditto -c -k --keepParent $(APP_NAME).app ../../../../../$(DIST_DIR)/$(APP_NAME)-macos.zip
@@ -97,7 +102,7 @@ windows: guard-windows deps native-lib
 	powershell -NoProfile -ExecutionPolicy Bypass -File windows/packaging/build.ps1 -Arch x64 -OutputDir "$(DIST_DIR)"
 
 # 运行当前程序（当前平台）
-run: guard-run deps native-lib
+run: guard-run $(if $(filter mac,$(CURRENT)),mac-signing) deps native-lib
 ifeq ($(CURRENT),mac)
 	python3 tools/utils/app_version.py flutter run -d macos
 else ifeq ($(CURRENT),linux)

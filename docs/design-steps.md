@@ -1016,3 +1016,11 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - Linux x64 / arm64 Release 均使用 make linux，与本地共用打包脚本，修复前同样会包含系统 hicolor 主题索引。
   - release.yml 在 make linux 后、上传前使用 apt-get 安装本轮唯一 deb，并校验 dpkg 安装状态、可执行入口、desktop 格式和系统主题文件归属，失败即停止该路发布。
   - 本地验证工作流 YAML 与步骤顺序；实际安装在隔离 dpkg 根目录验证修复包无主题覆盖冲突。本轮没有提交、推送或触发远端 Actions，macOS / Windows 未执行。
+
+
+- [已完成] Step 148：macOS 本地构建使用统一的 Remlark 自签身份（2026-11-19）
+  - 问题：本地 Debug / dist 构建为临时签名，系统只能按 CDHash 或路径识别，本地网络列表出现多个 Remlark。
+  - macos_signing.py 新增 xcode-config：查找名为 `Remlark Self-Signed Code Signing` 的身份（`MACOS_LOCAL_SIGN_IDENTITY` 可覆盖，接受未信任自签、过期视为缺失）；没有时用 /usr/bin/openssl 生成 10 年期代码签名证书，随机密码 P12 仅允许 codesign 访问，导入登录钥匙串，中间文件随临时目录删除，不修改证书信任；私钥不进仓库。随后生成 gitignore 的 `macos/Runner/Configs/Signing.local.xcconfig`（手动签名、指纹身份、无 Team），内容不变不重写。设置 `CI` 时不生成；生成失败或找不到身份时删除配置并提示，退回临时签名。
+  - AppInfo.xcconfig 设置默认 `CODE_SIGN_STYLE = Automatic` 并 `#include?` 本地配置；Runner 目标三个配置从工程文件移除 CODE_SIGN_STYLE，否则工程设置覆盖 xcconfig、Xcode 要求 Team。
+  - Makefile 新增 mac-signing，make mac 与 macOS 上的 make run 先执行；GitHub Actions 发布流程不变。
+  - 测试：P-15 增加本地身份匹配、xcconfig 生成 / 自动生成身份 / CI 与失败回退、真实生成本地身份并签名，以及 Makefile / xcconfig / 工程文件结构检查；详见多平台测试文档本轮记录。

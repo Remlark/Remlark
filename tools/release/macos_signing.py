@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""macOS 发布签名：临时钥匙串导入、自签 App / DMG 与凭据清理。"""
+"""macOS 签名：发布用临时钥匙串导入、自签 App / DMG 与凭据清理，本地构建自动生成并使用固定自签身份。"""
 
 import base64
 import binascii
@@ -12,11 +12,18 @@ import secrets
 import shlex
 import subprocess
 import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 MACHO_MAGIC = {bytes.fromhex(value) for value in (
     'feedface', 'cefaedfe', 'feedfacf', 'cffaedfe', 'cafebabe', 'bebafeca',
     'cafebabf', 'bfbafeca')}
+# 本地构建统一使用的自签身份名称，可用 MACOS_LOCAL_SIGN_IDENTITY 覆盖；
+# 私钥由每台机器首次 make 时自行生成，不放进仓库，避免他人冒用同一身份继承本机授权。
+LOCAL_IDENTITY = 'Remlark Self-Signed Code Signing'
+LOGIN_KEYCHAIN = Path.home() / 'Library/Keychains/login.keychain-db'
+# make 生成、Xcode 可选引入的本地签名配置，不提交到仓库。
+LOCAL_XCCONFIG = ROOT / 'macos/Runner/Configs/Signing.local.xcconfig'
 
 
 def run(*args):
@@ -140,6 +147,75 @@ def sign_dmg():
     run('codesign', '--verify', '--strict', dmg)
 
 
+def local_identity(name, chain=None):
+    """在钥匙串中查找同名代码签名身份，返回指纹；不存在时返回 None。"""
+    # 自签证书不受系统信任，不能用 -v；Xcode 按指纹签名不要求信任。过期等其他状态视为不存在。
+    args = ['security', 'find-identity', '-p', 'codesigning']
+    if chain:
+        args.append(chain)
+    output = run(*args).decode()
+    pattern = (rf'^\s*\d+\) ([0-9A-Fa-f]{{40}}) "{re.escape(name)}"'
+               r'(?: \(CSSMERR_TP_NOT_TRUSTED\))?\s*$')
+    identities = set(re.findall(pattern, output, re.MULTILINE))
+    if len(identities) > 1:
+        raise ValueError(f'Multiple code signing identities named "{name}"')
+    return identities.pop() if identities else None
+
+
+def create_local_identity(name, chain):
+    """生成本机专用的自签代码签名证书并导入钥匙串，私钥只保存在钥匙串中。"""
+    with tempfile.TemporaryDirectory() as temp:
+        # 临时目录权限为 0700，私钥与 P12 中间文件随目录一起删除。
+        temp = Path(temp)
+        config = temp / 'openssl.cnf'
+        config.write_text('[req]\ndistinguished_name=dn\nx509_extensions=ext\nprompt=no\n'
+                          f'[dn]\nCN={name}\n[ext]\nbasicConstraints=critical,CA:false\n'
+                          'keyUsage=critical,digitalSignature\n'
+                          'extendedKeyUsage=critical,codeSigning\n', encoding='utf-8')
+        key, cert, p12 = (temp / item for item in ('key.pem', 'cert.pem', 'cert.p12'))
+        password = secrets.token_urlsafe(16)
+        # 固定使用系统 LibreSSL：Homebrew OpenSSL 3 默认的 P12 加密算法 security 无法导入。
+        run('/usr/bin/openssl', 'req', '-new', '-x509', '-newkey', 'rsa:2048', '-nodes',
+            '-days', '3650', '-config', config, '-keyout', key, '-out', cert)
+        run('/usr/bin/openssl', 'pkcs12', '-export', '-inkey', key, '-in', cert,
+            '-out', p12, '-passout', f'pass:{password}')
+        # 只允许 codesign 无提示使用私钥，不修改系统证书信任设置。
+        run('security', 'import', p12, '-P', password, '-k', chain, '-T', '/usr/bin/codesign')
+
+
+def xcode_config():
+    """生成本地 Xcode 签名配置，使 make run / make mac 每次都使用同一固定身份。
+
+    固定身份让系统按签名 ID + 证书识别应用，本地网络、钥匙串等授权不会因每次构建
+    或构建路径不同而重复出现。本机没有该身份时自动生成；CI 不生成（发布另行重签），
+    生成失败时删除配置，退回 Xcode 默认的临时签名。
+    """
+    name = os.environ.get('MACOS_LOCAL_SIGN_IDENTITY', '').strip() or LOCAL_IDENTITY
+    identity = local_identity(name)
+    if identity is None and not os.environ.get('CI'):
+        print(f'Creating code signing identity "{name}" in login keychain')
+        try:
+            create_local_identity(name, LOGIN_KEYCHAIN)
+            identity = local_identity(name)
+        except RuntimeError as error:
+            print(f'warning: {error}', file=sys.stderr)
+    if identity is None:
+        LOCAL_XCCONFIG.unlink(missing_ok=True)
+        print(f'warning: code signing identity "{name}" not available, using ad-hoc signing',
+              file=sys.stderr)
+        return
+    content = ('// 由 tools/release/macos_signing.py xcode-config 自动生成，请勿提交。\n'
+               f'// {name}\n'
+               f'CODE_SIGN_IDENTITY = {identity}\n'
+               'CODE_SIGN_STYLE = Manual\n'
+               'DEVELOPMENT_TEAM =\n'
+               'PROVISIONING_PROFILE_SPECIFIER =\n')
+    # 内容未变时不重写，避免触发 Xcode 不必要的重新签名。
+    if not LOCAL_XCCONFIG.is_file() or LOCAL_XCCONFIG.read_text(encoding='utf-8') != content:
+        LOCAL_XCCONFIG.write_text(content, encoding='utf-8')
+    print(f'Signing with "{name}" ({identity})')
+
+
 def cleanup():
     """成功或失败都移除临时钥匙串和私钥文件。"""
     chain = keychain()
@@ -160,7 +236,7 @@ def main():
     if sys.platform != 'darwin':
         raise ValueError('macOS signing is only supported on macOS')
     commands = {'install': install, 'sign-app': sign_app,
-                'sign-dmg': sign_dmg, 'cleanup': cleanup}
+                'sign-dmg': sign_dmg, 'cleanup': cleanup, 'xcode-config': xcode_config}
     commands[sys.argv[1]]()
 
 

@@ -50,4 +50,41 @@ void main() {
     expect(build, contains("if: always() && runner.os == 'macOS'"));
     expect(build, contains('macos_signing.py cleanup'));
   });
+
+  test('make run / make mac 先生成本地签名配置，Xcode 可选引入且默认临时签名', () {
+    final makefile = File('Makefile').readAsStringSync();
+    expect(makefile, contains('macos_signing.py xcode-config'));
+    expect(
+      RegExp(r'^mac: .*mac-signing', multiLine: true).hasMatch(makefile),
+      isTrue,
+    );
+    expect(
+      RegExp(r'^run: .*mac-signing', multiLine: true).hasMatch(makefile),
+      isTrue,
+    );
+    final appInfo = File('macos/Runner/Configs/AppInfo.xcconfig')
+        .readAsStringSync();
+    expect(appInfo, contains('CODE_SIGN_STYLE = Automatic'));
+    expect(appInfo, contains('#include? "Signing.local.xcconfig"'));
+    expect(
+      appInfo.indexOf('CODE_SIGN_STYLE'),
+      lessThan(appInfo.indexOf('#include?')),
+    );
+    // Runner 目标的签名方式若写在工程文件里，会覆盖 xcconfig，本地身份无法生效。
+    final project = File('macos/Runner.xcodeproj/project.pbxproj')
+        .readAsStringSync();
+    final runner = RegExp(
+      r'baseConfigurationReference = \w+ /\* AppInfo\.xcconfig \*/;.*?\n\t\t\};',
+      dotAll: true,
+    ).allMatches(project).map((match) => match.group(0)!).toList();
+    expect(runner, hasLength(3));
+    for (final block in runner) {
+      expect(block, isNot(contains('CODE_SIGN_STYLE')));
+      expect(block, isNot(contains('CODE_SIGN_IDENTITY')));
+    }
+    expect(
+      File('macos/.gitignore').readAsStringSync(),
+      contains('Runner/Configs/Signing.local.xcconfig'),
+    );
+  });
 }

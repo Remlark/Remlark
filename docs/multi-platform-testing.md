@@ -90,7 +90,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 编译与发布版本 | `VERSION`、`tools/utils/app_version.py`、`lib/utils/app_version.dart`、各平台打包入口 | Flutter build 数字版本 / 构建号写入 Info.plist；DMG 打包校验系统元数据 | Flutter build 写入 exe 四段资源，安装器校验并复用；独立 run 复用 Python 工具 | deb control 从 VERSION 读取，预发布映射为 ~ | P-13、P-10 | M-18 |
 | Release CI | `.github/workflows/release.yml`、`tools/release/` | Intel / Apple Silicon 通用 zip + DMG，lipo 校验 | 仅 x64 安装 exe + zip（2026-10-26 起不再发布 ARM64 桌面，x64compatible 可在 ARM64 仿真安装）；服务端仍含 windows-11-arm | 原生 x64 / arm64 runner，deb + tar.gz | P-10、P-08、P-09、P-11（原生库编译后重新执行 make test-platform，实际解码）；手工 build_only 验证分支且不发布，构建后 RMK_REQUIRE_RDP_NATIVE=1 禁止跳过解码 | M-16 |
 | GitHub 软件更新 | `lib/modules/updates/`、`utils/git_credentials/`、`utils/script_utils.dart` | 通用 zip，签名/版本校验，App 交换、按需系统授权；共用 shell 助手为 UTF-8 无 BOM | x64/arm64 Inno 静默安装到原目录，备份与失败恢复、按需 UAC；两个 PowerShell 助手为 UTF-8 带 BOM | dpkg 管理的 deb 或便携 bundle 交换，按需 polkit；共用 shell 助手为 UTF-8 无 BOM | P-18/P-19；Git credential fill、助手握手、等待退出、非提权重启、脚本编码 | M-23 |
-| macOS 发布自签 | `tools/release/macos_signing.py`、Release CI | 两个 Secrets 导入临时钥匙串，重签嵌套代码 / App / DMG，重建 zip；始终清理凭据并还原钥匙串搜索列表 | 不调用 Apple 工具，保持原有打包 | 不调用 Apple 工具，保持原有打包 | P-15 | M-20 |
+| macOS 发布自签 / 本地固定签名 | `tools/release/macos_signing.py`、Release CI、Makefile `mac-signing`、`AppInfo.xcconfig` | 两个 Secrets 导入临时钥匙串，重签嵌套代码 / App / DMG，重建 zip；始终清理凭据并还原钥匙串搜索列表。本地 make run / make mac 统一使用 Remlark 自签身份（首次自动生成到登录钥匙串，不改信任），生成 Signing.local.xcconfig 由 Xcode 签名；CI 不生成，失败时退回临时签名 | 不调用 Apple 工具，保持原有打包 | 不调用 Apple 工具，保持原有打包 | P-15 | M-20 |
 | 共享代理配置与重连 | `modules/proxies/`、`host_repository.dart`、`ssh_connector.dart`、`rdp_session.dart` | 共用 drift/加密存储；SSH 与内嵌 RDP 在新连接/重连时解析共享配置 | 同左，不新增系统代理或注册表设置 | 同左，不修改系统代理环境变量 | P-16 | M-21 |
 | SSH TCP 首次连接恢复 | `utils/network/`、`modules/ssh/proxy_socket.dart` | 独立策略识别 51/65 | 独立策略识别 10051/10065 | 独立策略识别 101/113 | P-20：有限重试、预算和非瞬态错误 | M-24 |
 | VNC / RDP 连接失败恢复 | `utils/network/connect_retry.dart`、`vnc/rfb_client.dart`、`vnc/rfb_isolate_client.dart`、`rdp/rdp_session.dart`、`rdp/rdp_connect_error.dart` | VNC 复用 51/65；RDP 共用 FreeRDP DNS/建连/传输错误码 | VNC 复用 10051/10065；RDP 同左 | VNC 复用 101/113；RDP 同左 | P-29：有限重试、关闭取消、原生回调隔离 | M-32 |
@@ -127,7 +127,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 
 | P-13 | [app_version_test.dart](../test/platform/app_version_test.dart) | VERSION 是唯一来源，兼容 CRLF / 中文空格路径，拒绝无效 / 缺失 / 越界版本；构建号默认 1；预发布与 Windows 四段资源 / Debian ~ 映射；发布标签去掉构建号；实际子进程验证三平台编译参数与开发 run 参数、退出码；拒绝命令行覆盖和给旧 macOS 应用换名打包 | 编译与发布版本 |
 | P-14（已移除） | — | Step 118 按用户要求删除图标自动化测试及 Swift 夹具，编号保留不复用；历史测试记录仅供追溯 | 图标改用 M-12、M-19 手工检查 |
-| P-15 | [macos_signing_test.dart](../test/platform/macos_signing_test.dart)、`fixtures/macos_signing_checks.py` | 三平台检查仅两项凭据、自动识别唯一身份 / 拒绝缺失或多身份、自动生成钥匙串密码、缺失 / 损坏凭据、失败日志不泄密、嵌套签名顺序及部分失败清理；Windows / Linux 拒绝 Apple 工具；macOS 创建一次性证书，真实导入 / 重签 App / 严格验证 / 还原搜索列表并移除私钥 | macOS 发布自签 |
+| P-15 | [macos_signing_test.dart](../test/platform/macos_signing_test.dart)、`fixtures/macos_signing_checks.py` | 三平台检查仅两项凭据、自动识别唯一身份 / 拒绝缺失或多身份、自动生成钥匙串密码、缺失 / 损坏凭据、失败日志不泄密、嵌套签名顺序及部分失败清理；本地身份按完整名称匹配（接受未信任、拒绝过期）、同名多指纹拒绝，xcconfig 生成 / 不重写、缺失时自动生成、CI 与生成失败时删除；macOS 真实生成本地身份到临时钥匙串并签名；Makefile 依赖顺序、xcconfig 可选引入及 Runner 工程不写签名方式；Windows / Linux 拒绝 Apple 工具；macOS 创建一次性证书，真实导入 / 重签 App / 严格验证 / 还原搜索列表并移除私钥 | macOS 发布自签 |
 | P-16 | [proxy_profiles_test.dart](../test/platform/proxy_profiles_test.dart) | 真实 ORM 存储共享代理，SSH/RDP/VNC 内置 SSH 共用引用；变更后重连解析新参数、连接快照及目标端口保持、引用计数和删除保护；三平台执行相同实现 | 共享代理配置与重连 |
 | P-17 | [proxy_connection_test.dart](../test/platform/proxy_connection_test.dart) | 三平台真实本地 Socket 夹具；HTTP 认证/407、SOCKS5 认证/非法响应、总超时与慢速响应、取消断开、禁止无代理直连、目标格式与 IPv6 authority/地址类型 | 可选代理连通性检测 |
 | P-18 | [update_platform_test.dart](../test/platform/update_platform_test.dart) | 五种平台/架构附件映射（Windows ARM64 无安装包返回 null）、Linux deb/便携分流、不支持架构拒绝、current() 选择 | GitHub 升级、M-23 |
@@ -646,3 +646,10 @@ Windows x64 构建前 `make test-platform`：102 项通过、6 项条件跳过�
 - 包自动计算 Depends 包含 libc6 >= 2.43，当前产物面向本机构建环境；Ubuntu 24.04 等旧系统需在对应最低支持系统重新构建。未验证 Linux arm64、干净机器实际安装/升级/卸载、真实 SSH/SFTP/RDP/VNC 和桌面交互。
 
 - 最终全量回归：flutter test 620 项通过、14 项条件跳过（tests-final.log）；Python 构建工具测试 67 项通过；desktop-file-validate 返回 0。首轮全量测试的旧库符号失败已由最终全量回归覆盖。
+
+### 2026-11-19 macOS 本地构建固定签名（Step 148）
+
+- 现象：系统设置的本地网络列表出现多个 Remlark。`/Library/Preferences/com.apple.networkextension.plist` 中 com.remlark.remlark 有三条规则：/Applications 发布版按签名 ID + 证书记录，`dist/remlark.app` 与 Debug 构建为临时签名，只能按可执行文件路径记录。
+- 修改：make run / make mac 统一使用 `Remlark Self-Signed Code Signing`，本机首次自动生成到登录钥匙串，Xcode 按指纹签名；CI 托管 runner 不生成证书，继续临时签名后由 sign-app 重签，发布流程不变。
+- 验证（Intel macOS）：确认 Xcode 可用未信任的自签身份签名；导入时仅 `-T /usr/bin/codesign`、不设置分区列表，codesign 无授权弹窗。本机实际生成身份，`flutter build macos --debug` 与 `--release` 产物的 App 及 6 个嵌套 Framework（含 remlark_rdp / remlark_crypto）Authority 均为该身份，身份要求为 `identifier "com.remlark.remlark" and certificate leaf = H"…"`，`codesign --verify --deep --strict --all-architectures` 通过，Release 应用启动 6 秒存活；再次执行 mac-signing 复用已有身份。指定不存在的身份或生成失败时配置被删除，Xcode 设置恢复为 `-` / Automatic。P-15 Python 12 项检查全部通过，本机 `make test-platform` 149 项通过、3 项条件跳过。
+- 未执行：Windows / Linux 的 make test-platform（两平台不调用 Apple 工具，仅运行 P-15 的模拟检查）；系统中已有的路径规则不会自动删除。

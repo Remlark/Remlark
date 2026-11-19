@@ -262,6 +262,7 @@
 
 - macOS CI 必须从两个证书 Secrets 导入固定自签身份到临时钥匙串；签名身份从导入证书自动读取 SHA-1 指纹，临时钥匙串密码随机生成，无需额外配置；缺失配置、导入或签名失败即阻止发布，不退回临时签名。`tools/release/macos_signing.py` 封装 Apple 系统工具，仅 macOS 调用；Windows / Linux 保持各自打包入口，不导入 Apple 凭据。
 - 签名顺序为嵌套 Mach-O / Framework → 主 App（保留 Release.entitlements）→ 重新生成 zip / DMG → 签 DMG；严格校验 App 全部架构与嵌套代码。自签不使用可信时间戳、不公证；工作流成功或失败均删除临时钥匙串并还原钥匙串搜索列表。固定自签身份不等于 Gatekeeper 默认信任，安装放行及隐私权限延续须实机验证。
+- 本地 `make run` / `make mac` 先执行 `macos_signing.py xcode-config`：所有开发者统一使用名为 `Remlark Self-Signed Code Signing` 的自签身份（`MACOS_LOCAL_SIGN_IDENTITY` 可覆盖）。本机没有时用系统 LibreSSL 生成 10 年期代码签名证书，仅允许 codesign 访问并导入登录钥匙串，不修改系统证书信任；私钥不进仓库，避免他人用公开私钥签出同一身份的程序继承开发者本机授权。随后生成不提交的 `macos/Runner/Configs/Signing.local.xcconfig`，由 AppInfo.xcconfig 可选引入，Xcode 按指纹手动签名 App 及全部嵌套 Framework（未信任的自签身份可用）。同一台机器的所有本地构建签名要求一致（签名 ID + 证书），系统本地网络等授权不会因每次构建的 CDHash 或构建路径不同产生多个条目；本地构建与 CI 发布版证书不同，在授权列表中各占一条。CI（`CI` 环境变量）不生成证书，生成失败或找不到身份时删除该文件，退回原有临时签名；Runner 目标的 CODE_SIGN_STYLE 从工程文件移到 AppInfo.xcconfig，避免工程设置覆盖本地配置。
 - `.github/workflows/release.yml` 在推送与 VERSION 中版本号一致的 `v*` 标签或手工指定已有标签后运行。
 - 手工运行默认仅验证构建（`build_only=true`），tag 留空时使用所选分支；与正式发布共用完整桌面四路编译、安装包和构建后平台测试，跳过标签校验与发布任务。正式手工发布需指定版本标签并关闭 `build_only`。
 - 独立原生 runner 构建 Windows x64、Linux x64 / arm64（Windows ARM64 桌面自 2026-10-26 起不再构建，ARM 设备仿真运行 x64 版）；macOS 构建包含 Intel / Apple Silicon 的通用 app、zip 与 DMG，发布前用 lipo 检查主程序与 FFI 库。
