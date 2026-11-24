@@ -268,7 +268,7 @@ void main() {
     s.scrollEvent(110, 110, -1);
     expect(RdpScancode.fromKey(PhysicalKeyboardKey.keyA), 0x1E);
     expect(RdpScancode.fromKey(PhysicalKeyboardKey.arrowUp), 0x148);
-    expect(RdpScancode.fromKey(PhysicalKeyboardKey.metaLeft, metaAsCtrl: true), 0x1D);
+    expect(RdpScancode.fromKey(PhysicalKeyboardKey.metaLeft, map: RdpModifierMap.metaAsCtrl), 0x1D);
     await Future.delayed(const Duration(milliseconds: 500));
     expect(frames, greaterThan(0));
     await s.close();

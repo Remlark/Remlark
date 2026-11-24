@@ -38,25 +38,53 @@ class RdpScancode {
   static const delete = _ext | 0x53;
   static const keyV = 0x2F;
 
-  /// 本地 Command 键是否应映射为 Ctrl。
-  /// 本地为 macOS 且远程不是 macOS 时映射，让 ⌘C / ⌘V 在 Windows / Linux 远程中生效；
-  /// 远程是 macOS 时保持 Win 键，远程 Mac 的 RDP 服务会把 Win 键当作 Command，
-  /// 无需在服务端开启「Ctrl 映射为 Command」。
-  static bool mapMetaToCtrl({required bool localIsMac, String? remoteOsId}) =>
-      localIsMac && remoteOsId != 'macos';
+  /// 按本机与远程系统选择修饰键映射，让各平台都用本机习惯的复制 / 粘贴快捷键：
+  /// - 本机 macOS、远程非 macOS：⌘ 映射为 Ctrl（⌘C / ⌘V 生效，Ctrl 仍为 Ctrl）
+  /// - 本机 Windows / Linux、远程 macOS：Ctrl 与 Win 互换（Ctrl+C / V 成为远程 ⌘C / ⌘V，Win 键发送 Control）
+  /// - 两端同为 macOS 或同为非 macOS：不映射。远程 Mac 的 RDP 服务把 Win 键当作 Command，
+  ///   因此服务端无需（也不应）开启「Ctrl 映射为 Command」
+  static RdpModifierMap modifierMap({required bool localIsMac, String? remoteOsId}) {
+    final remoteIsMac = remoteOsId == 'macos';
+    if (localIsMac && !remoteIsMac) return RdpModifierMap.metaAsCtrl;
+    if (!localIsMac && remoteIsMac) return RdpModifierMap.swapCtrlMeta;
+    return RdpModifierMap.none;
+  }
 
   /// 远程系统的「粘贴」快捷键修饰键：远程为 macOS 时用 Command（Win 键），否则用 Ctrl
   static int pasteModifier(String? remoteOsId) =>
       remoteOsId == 'macos' ? winLeft : ctrlLeft;
 
-  /// 由物理按键得到扫描码，无法映射返回 null。
-  /// [metaAsCtrl] 为 true 时（macOS 习惯）Command 键映射为 Ctrl，使 ⌘C / ⌘V 在远程中生效
-  static int? fromKey(PhysicalKeyboardKey key, {bool metaAsCtrl = false}) {
+  /// 由物理按键得到扫描码，无法映射返回 null；[map] 决定 Ctrl / Command(Win) 键的改写方式
+  static int? fromKey(PhysicalKeyboardKey key, {RdpModifierMap map = RdpModifierMap.none}) {
     final usage = key.usbHidUsage;
     if ((usage >> 16) != 0x07) return null;
     final code = usage & 0xFFFF;
-    if (metaAsCtrl && code == 0xE3) return ctrlLeft;
-    if (metaAsCtrl && code == 0xE7) return _ext | 0x1D;
+    switch (map) {
+      case RdpModifierMap.metaAsCtrl:
+        // 左右 Command -> 左右 Ctrl
+        if (code == 0xE3) return _hid[0xE0];
+        if (code == 0xE7) return _hid[0xE4];
+      case RdpModifierMap.swapCtrlMeta:
+        // 左右 Ctrl <-> 左右 Win
+        if (code == 0xE0) return _hid[0xE3];
+        if (code == 0xE4) return _hid[0xE7];
+        if (code == 0xE3) return _hid[0xE0];
+        if (code == 0xE7) return _hid[0xE4];
+      case RdpModifierMap.none:
+        break;
+    }
     return _hid[code];
   }
+}
+
+/// RDP 修饰键映射方式（见 [RdpScancode.modifierMap]）
+enum RdpModifierMap {
+  /// 不改写
+  none,
+
+  /// Command(Win) 映射为 Ctrl：本机 macOS 连接 Windows / Linux
+  metaAsCtrl,
+
+  /// Ctrl 与 Win 互换：本机 Windows / Linux 连接 macOS
+  swapCtrlMeta,
 }

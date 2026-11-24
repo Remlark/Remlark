@@ -65,8 +65,8 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
   /// 提示回调（UI 显示 SnackBar）：类型与数量
   void Function(RdpNotice notice, int count)? onNotice;
 
-  /// 本地 macOS 连接非 macOS 远程时把 Command 映射为 Ctrl；远程是 macOS 时保持 Win 键（远程 Command）
-  late final bool metaAsCtrl = RdpScancode.mapMetaToCtrl(
+  /// 修饰键映射：按本机与远程系统决定 Command / Ctrl / Win 的改写，使复制粘贴快捷键符合本机习惯
+  late final RdpModifierMap modifierMap = RdpScancode.modifierMap(
     localIsMac: Platform.isMacOS,
     remoteOsId: host.resolvedOsId,
   );
@@ -520,7 +520,7 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
   KeyEventResult keyEvent(KeyEvent e) {
     final c = _client;
     if (c == null) return KeyEventResult.ignored;
-    final sc = RdpScancode.fromKey(e.physicalKey, metaAsCtrl: metaAsCtrl);
+    final sc = RdpScancode.fromKey(e.physicalKey, map: modifierMap);
     if (e is KeyDownEvent || e is KeyRepeatEvent) {
       if (sc != null) {
         _downKeys.add(e.physicalKey);
@@ -551,7 +551,7 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
     if (_downKeys.isNotEmpty) {
       AppLog.i('rdp', '失去焦点，释放 ${_downKeys.length} 个按键');
       for (final k in _downKeys) {
-        final sc = RdpScancode.fromKey(k, metaAsCtrl: metaAsCtrl);
+        final sc = RdpScancode.fromKey(k, map: modifierMap);
         if (sc != null) c.sendKey(sc, false);
       }
       _downKeys.clear();

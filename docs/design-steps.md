@@ -1031,4 +1031,5 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - OsRegistry.resolve 统一主机系统解析（手动指定 > SSH 探测 > 名称推断），HostEntry.resolvedOsId 供系统图标和 RDP 会话共用。
   - RdpScancode.mapMetaToCtrl：本地 macOS 且远程不是 macOS 时才映射；远程为 macOS 时 ⌘ 保持 Win 键，由远程 RDP 服务当作 Command。拖放上传后的自动粘贴按远程系统使用 ⌘V / Ctrl+V（pasteModifier）。
   - 远程系统需能识别：主机编辑中指定系统为 macOS、SSH 探测为 macOS，或主机名包含 mac / macos。
-  - 测试：P-05 增加按远程系统决定映射与粘贴修饰键的用例；macOS make test-platform 150 项通过、3 项跳过。Windows / Linux 本机按键逻辑未变，仍需在对应系统执行 make test-platform 与 M-05。
+  - Windows / Linux 本机连接远程 macOS 时原先不改写，复制需按 Win+C/V（常被本机系统截走）；改为 Ctrl 与 Win 互换，Ctrl+C/V 即远程 ⌘C/⌘V，Win 键发送 Control。映射方式统一为 RdpModifierMap（none / metaAsCtrl / swapCtrlMeta），由 RdpScancode.modifierMap 按本机与远程系统选择。
+  - 测试：P-05 覆盖三种映射方式与四种本机 / 远程组合及粘贴修饰键；macOS make test-platform 通过。Windows / Linux 本机连接 Mac 的映射为新增行为，需在对应系统执行 make test-platform 与 M-05。
