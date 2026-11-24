@@ -66,7 +66,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | 应用数据目录 | `path_provider` | `~/Library/Application Support/<bundle id>` | `%APPDATA%\<公司>\<产品>` | `~/.local/share/<应用 id>` | — | M-01 |
 | VNC 延迟文件剪贴板 | [lazy_file_clipboard.dart](../lib/modules/remote_desktop/vnc/lazy_file_clipboard.dart) + [MainFlutterWindow.swift](../macos/Runner/MainFlutterWindow.swift) | 原生 NSPasteboard，粘贴时才下载 | 不支持，复制时立即下载 | 不支持，复制时立即下载 | P-05 | M-06 |
 | 系统免密登录快捷指令 | [install_system_key_action.dart](../lib/modules/snippets/actions/install_system_key_action.dart) | 可用 | 不可用，列表中隐藏 | 可用 | P-05 | M-11 |
-| RDP Command 键映射 | [rdp_scancode.dart](../lib/modules/remote_desktop/rdp/rdp_scancode.dart)、[rdp_session.dart](../lib/modules/remote_desktop/rdp/rdp_session.dart) | ⌘ 映射为 Ctrl | Win 键保持 Win | Win 键保持 Win | P-05 | M-05 |
+| RDP Command 键映射 | [rdp_scancode.dart](../lib/modules/remote_desktop/rdp/rdp_scancode.dart)、[rdp_session.dart](../lib/modules/remote_desktop/rdp/rdp_session.dart) | 远程非 macOS 时 ⌘ 映射为 Ctrl；远程 macOS 时保持 Win 键（远程 Command），拖放后自动粘贴用 ⌘V | Win 键保持 Win | Win 键保持 Win | P-05 | M-05 |
 | 聊天发送快捷键 | [chat_panel.dart](../lib/modules/ai/ui/chat_panel.dart) | ⌘Enter | Ctrl+Enter | Ctrl+Enter | [chat_send_key_test.dart](../test/chat_send_key_test.dart) | M-07 |
 | 终端复制粘贴快捷键、字体 | [terminal_pane.dart](../lib/modules/terminal/ui/terminal_pane.dart) | ⌘C / ⌘V / ⌘A，Menlo | Ctrl+Shift+C / V，Ctrl+Insert，monospace | 同 Windows | — | M-03 |
 | SFTP 多选 | [file_pane.dart](../lib/modules/sftp/ui/file_pane.dart) | ⌘ 或 Ctrl 点击 | Ctrl 点击 | Ctrl 点击 | — | M-04 |
@@ -116,7 +116,7 @@ Remlark 是 Flutter 桌面应用，支持 macOS、Windows、Linux 三个平台�
 | P-02 | [dsh_platform_test.dart](../test/platform/dsh_platform_test.dart) | Node.js 安装包名称；`node` / `npm-cli.js` / PATH 目录的位置；PATH 分隔符；子进程环境只有一个 PATH 键（Windows 下键名为 `Path`），且私有 node 目录在最前面 | dsh 私有 Node.js |
 | P-03 | [archive_extractor_test.dart](../test/platform/archive_extractor_test.dart) | `current()` 选中对应的解压实现；按平台实现解压 `.tar.gz` 和 `.zip`（Windows 的 Dart 解码同时在三个系统测试），中文文件名不乱码，POSIX 下保留可执行权限；压缩包损坏时抛出 `ProcessException` | 压缩包解压 |
 | P-04 | [platform_utils_test.dart](../test/platform/platform_utils_test.dart) | 主目录是存在的绝对路径；`which` 能找到 `sh`（Windows 下为 `cmd.exe`），找不到时返回 null；`isUnixDesktop` 的值；权限实现按平台选择，icacls 参数正确；主密钥文件权限为 600、目录为 700，Windows 下 `icacls` 输出中有当前用户且没有继承的权限；`SecretStore` 加解密能往返 | 主目录、PATH、密钥权限 |
-| P-05 | [platform_features_test.dart](../test/platform/platform_features_test.dart) | 延迟文件剪贴板只在 macOS 上可用；系统免密登录在 Windows 上不可用；RDP 中 ⌘ 映射为 Ctrl，Windows / Linux 下保持 Win 键 | 只在部分平台提供的功能、按键映射 |
+| P-05 | [platform_features_test.dart](../test/platform/platform_features_test.dart) | 延迟文件剪贴板只在 macOS 上可用；系统免密登录在 Windows 上不可用；RDP 中 ⌘ 映射为 Ctrl（远程为 macOS 时保持 Win 键），Windows / Linux 下保持 Win 键 | 只在部分平台提供的功能、按键映射 |
 | P-06 | [window_config_sync_test.dart](../test/platform/window_config_sync_test.dart) | 三个平台 runner 中的窗口尺寸与 `window_config.dart` 一致；构建钩子覆盖三个平台；每个原生库都有 `build.sh` 和 `build.ps1`，`build.ps1` 支持 x86_64 / arm64，输出目录与构建钩子一致；Makefile 有 mac / linux / windows / run 目标 | 窗口尺寸、原生库、打包 |
 | P-07 | [runtime_lifecycle_test.dart](../test/platform/runtime_lifecycle_test.dart) | 实际启动 Dart 子进程；重新初始化后写入新日志目录，关闭后目录可删除 | 同步测试启动、日志句柄生命周期 |
 | P-08 | [windows_packaging_test.dart](../test/platform/windows_packaging_test.dart) | 三平台打包与启动入口；Windows VS 2022 / 2026 CRT 查找、按架构运行库、当前用户安装、数据保留与 BOM；实际暂存应用和 VC++ 运行库，覆盖中文空格路径、缺少原生库 / CRT 时终止；无 Make 启动参数与 PowerShell 解析 | Windows 安装器、开发启动与分发完整性 |
@@ -215,7 +215,7 @@ P-06 还检查 macOS / Linux 测试服务端与应用使用同一 OpenSSL 前缀
 | M-02 | 窗口 | 默认 1280×820 并居中；不能缩小到 960×640 以下；Windows 上在 125% / 150% 缩放下最小尺寸正确；最小尺寸下各页面不溢出、不被截断；中英文切换后同样不溢出 |
 | M-03 | 终端 | SSH 连接后可以输入；中文显示正常、字体等宽；复制 / 粘贴快捷键与右键菜单中显示的一致（macOS ⌘C/⌘V，其他平台 Ctrl+Shift+C/V、Ctrl+Insert）；在资源管理器 / 文件管理器中复制文件后，在终端里粘贴 → 显示“粘贴并上传”并上传成功；把文件拖进终端 → 上传成功；“选中即复制”有效 |
 | M-04 | SFTP | 本地栏起始目录为用户主目录（Windows 为 `C:\Users\<用户名>`）；进入上级目录直到盘符根目录不出错；Ctrl 点击多选、Shift 连续选择；新建、重命名、删除本地文件；带中文和空格的文件名上传、下载正常；从系统文件管理器拖入文件即上传 |
-| M-05 | RDP | 连接 Windows 服务器：画面、鼠标、键盘正常；macOS 上 ⌘C/⌘V 在远程中生效，Windows / Linux 上 Win 键打开远程开始菜单；剪贴板文本双向同步；本地复制文件后在远程粘贴、远程复制文件后在本地粘贴；拖放上传 |
+| M-05 | RDP | 连接 Windows 服务器：画面、鼠标、键盘正常；macOS 上 ⌘C/⌘V 在远程中生效，Windows / Linux 上 Win 键打开远程开始菜单；连接 macOS 的 RDP 服务（服务端不开启 Ctrl 映射为 Command、主机系统为 macOS）：本机 ⌘C/⌘V 在远程中生效，Windows / Linux 本机用 Win+C/V 生效；剪贴板文本双向同步；本地复制文件后在远程粘贴、远程复制文件后在本地粘贴；拖放上传 |
 | M-06 | VNC | 连接 macOS 屏幕共享与普通 VNC 服务器；远程复制文件后在本地粘贴：macOS 上粘贴时才下载，Windows / Linux 上复制时就下载，粘贴得到的是完整文件；修饰键不会卡住 |
 | M-07 | AI 聊天 | 输入框提示的发送快捷键与平台一致；⌘Enter / Ctrl+Enter 发送，单独 Enter 换行 |
 | M-08 | Codex 安装 | 设置中安装 Codex → 下载、校验、解压成功，显示版本号；登录、提问都正常；升级时正在运行的 Codex 被结束后完成替换（Windows 上文件被占用时，下次启动会清理旧目录）；卸载后登录信息保留 |

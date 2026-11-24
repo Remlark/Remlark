@@ -28,4 +28,20 @@ void main() {
     expect(RdpScancode.fromKey(PhysicalKeyboardKey.keyV, metaAsCtrl: true), RdpScancode.keyV);
     expect(RdpScancode.fromKey(PhysicalKeyboardKey.controlLeft), RdpScancode.ctrlLeft);
   });
+
+  test('RDP Command 映射按远程系统决定：远程 macOS 保持 Win 键（远程 Command）', () {
+    // 本地 macOS 连接 Windows / Linux / 未知系统：⌘ 映射为 Ctrl
+    expect(RdpScancode.mapMetaToCtrl(localIsMac: true, remoteOsId: 'windows'), isTrue);
+    expect(RdpScancode.mapMetaToCtrl(localIsMac: true, remoteOsId: 'ubuntu'), isTrue);
+    expect(RdpScancode.mapMetaToCtrl(localIsMac: true), isTrue);
+    // 本地 macOS 连接远程 macOS：不映射，⌘C 以 Win+C 发出，由远程映射为 Command+C
+    expect(RdpScancode.mapMetaToCtrl(localIsMac: true, remoteOsId: 'macos'), isFalse);
+    // Windows / Linux 本地始终保持 Win 键
+    expect(RdpScancode.mapMetaToCtrl(localIsMac: false, remoteOsId: 'windows'), isFalse);
+    expect(RdpScancode.mapMetaToCtrl(localIsMac: false, remoteOsId: 'macos'), isFalse);
+    // 拖放上传后的自动粘贴使用远程系统的修饰键
+    expect(RdpScancode.pasteModifier('macos'), RdpScancode.winLeft);
+    expect(RdpScancode.pasteModifier('windows'), RdpScancode.ctrlLeft);
+    expect(RdpScancode.pasteModifier(null), RdpScancode.ctrlLeft);
+  });
 }

@@ -1,3 +1,5 @@
+import '../../utils/os_registry.dart';
+
 /// 主机协议
 enum HostProtocol {
   ssh(22),
@@ -146,6 +148,14 @@ class HostEntry {
     final portPart = port == protocol.defaultPort ? '' : ':$port';
     return '$user$address$portPart';
   }
+
+  /// 主机的系统标识（手动指定 > SSH 探测 > 名称推断），无法确认时为 null
+  String? get resolvedOsId => OsRegistry.resolve(
+    override: extra['osOverride'],
+    detectedId: osId,
+    detectedName: osName,
+    name: name,
+  );
 
   /// 同步状态
   SyncState get syncState {

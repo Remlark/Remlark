@@ -1024,3 +1024,11 @@ server/                     同步服务端（Dart shelf + drift/sqlite）
   - AppInfo.xcconfig 设置默认 `CODE_SIGN_STYLE = Automatic` 并 `#include?` 本地配置；Runner 目标三个配置从工程文件移除 CODE_SIGN_STYLE，否则工程设置覆盖 xcconfig、Xcode 要求 Team。
   - Makefile 新增 mac-signing，make mac 与 macOS 上的 make run 先执行；GitHub Actions 发布流程不变。
   - 测试：P-15 增加本地身份匹配、xcconfig 生成 / 自动生成身份 / CI 与失败回退、真实生成本地身份并签名，以及 Makefile / xcconfig / 工程文件结构检查；详见多平台测试文档本轮记录。
+
+
+- [已完成] Step 149：RDP 连接远程 macOS 时复制 / 粘贴快捷键无效（2026-11-24）
+  - 问题：本地 macOS 上 RDP 会话一律把 ⌘ 映射为 Ctrl，连远程 Mac 时 ⌘C / Ctrl+C 都以 Ctrl+C 发出，远程 Mac 不响应（只有服务端开启「Ctrl 映射为 Command」才生效）。
+  - OsRegistry.resolve 统一主机系统解析（手动指定 > SSH 探测 > 名称推断），HostEntry.resolvedOsId 供系统图标和 RDP 会话共用。
+  - RdpScancode.mapMetaToCtrl：本地 macOS 且远程不是 macOS 时才映射；远程为 macOS 时 ⌘ 保持 Win 键，由远程 RDP 服务当作 Command。拖放上传后的自动粘贴按远程系统使用 ⌘V / Ctrl+V（pasteModifier）。
+  - 远程系统需能识别：主机编辑中指定系统为 macOS、SSH 探测为 macOS，或主机名包含 mac / macos。
+  - 测试：P-05 增加按远程系统决定映射与粘贴修饰键的用例；macOS make test-platform 150 项通过、3 项跳过。Windows / Linux 本机按键逻辑未变，仍需在对应系统执行 make test-platform 与 M-05。

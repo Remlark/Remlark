@@ -65,8 +65,11 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
   /// 提示回调（UI 显示 SnackBar）：类型与数量
   void Function(RdpNotice notice, int count)? onNotice;
 
-  /// macOS 上把 Command 映射为 Ctrl
-  bool metaAsCtrl = Platform.isMacOS;
+  /// 本地 macOS 连接非 macOS 远程时把 Command 映射为 Ctrl；远程是 macOS 时保持 Win 键（远程 Command）
+  late final bool metaAsCtrl = RdpScancode.mapMetaToCtrl(
+    localIsMac: Platform.isMacOS,
+    remoteOsId: host.resolvedOsId,
+  );
 
   /// 是否允许 H.264 硬件解码（来自设置，由会话启动器传入）
   bool hardwareDecode = true;
@@ -404,7 +407,7 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
     return paths.length;
   }
 
-  /// 在远程 (x, y) 处单击激活窗口，再发送 Ctrl+V
+  /// 在远程 (x, y) 处单击激活窗口，再发送粘贴快捷键（远程 macOS 为 ⌘V，其余为 Ctrl+V）
   Future<void> _pasteAt(int x, int y) async {
     final c = _client;
     if (c == null) return;
@@ -415,7 +418,7 @@ class RdpSession extends WorkspaceTab implements RemoteDisplay {
     c.sendMouse(RdpPointer.button1, x, y);
     // 等窗口激活后再粘贴
     await Future.delayed(const Duration(milliseconds: 150));
-    sendCombo([RdpScancode.ctrlLeft, RdpScancode.keyV]);
+    sendCombo([RdpScancode.pasteModifier(host.resolvedOsId), RdpScancode.keyV]);
   }
 
   Future<void> _copyDir(Directory src, Directory dst) async {

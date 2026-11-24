@@ -38,6 +38,17 @@ class RdpScancode {
   static const delete = _ext | 0x53;
   static const keyV = 0x2F;
 
+  /// 本地 Command 键是否应映射为 Ctrl。
+  /// 本地为 macOS 且远程不是 macOS 时映射，让 ⌘C / ⌘V 在 Windows / Linux 远程中生效；
+  /// 远程是 macOS 时保持 Win 键，远程 Mac 的 RDP 服务会把 Win 键当作 Command，
+  /// 无需在服务端开启「Ctrl 映射为 Command」。
+  static bool mapMetaToCtrl({required bool localIsMac, String? remoteOsId}) =>
+      localIsMac && remoteOsId != 'macos';
+
+  /// 远程系统的「粘贴」快捷键修饰键：远程为 macOS 时用 Command（Win 键），否则用 Ctrl
+  static int pasteModifier(String? remoteOsId) =>
+      remoteOsId == 'macos' ? winLeft : ctrlLeft;
+
   /// 由物理按键得到扫描码，无法映射返回 null。
   /// [metaAsCtrl] 为 true 时（macOS 习惯）Command 键映射为 Ctrl，使 ⌘C / ⌘V 在远程中生效
   static int? fromKey(PhysicalKeyboardKey key, {bool metaAsCtrl = false}) {

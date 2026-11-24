@@ -16,11 +16,7 @@ class OsIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final override = host.extra['osOverride'];
-    final id = override is String && OsRegistry.ids.contains(override)
-        ? override
-        : host.osId ??
-              OsRegistry.inferFromLabel(host.osName ?? '') ??
-              OsRegistry.inferFromLabel(host.name);
+    final id = host.resolvedOsId;
     final asset = id == null ? null : OsRegistry.assetFor(id);
     final label = override is String && OsRegistry.ids.contains(override)
         ? OsRegistry.displayName(override)

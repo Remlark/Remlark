@@ -88,6 +88,20 @@ class OsRegistry {
     return ids.contains(canonical) ? 'assets/os_icons/$canonical.png' : null;
   }
 
+  /// 解析主机的系统标识：手动指定优先，其次是 SSH 探测结果，最后从系统名称或主机名推断。
+  /// 图标显示与按远程系统区分的行为（如 RDP 按键映射）共用这一套判断。
+  static String? resolve({
+    Object? override,
+    String? detectedId,
+    String? detectedName,
+    String name = '',
+  }) {
+    if (override is String && ids.contains(override)) return override;
+    return detectedId ??
+        inferFromLabel(detectedName ?? '') ??
+        inferFromLabel(name);
+  }
+
   /// 仅当主机名称中恰好出现一种完整系统标识时推断图标，避免按协议猜测系统。
   static String? inferFromLabel(String label) {
     final matches = <String>{};
